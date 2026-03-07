@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Murder Mansion</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="play-area">
+      <section class="stage-shell">
+        <div class="stage-shell__glow stage-shell__glow--left" aria-hidden="true"></div>
+        <div class="stage-shell__glow stage-shell__glow--right" aria-hidden="true"></div>
+        <header class="stage-top">
+          <div class="title-cluster">
+            <p class="eyebrow">Noir Deduction Simulation</p>
+            <h1>Murder Mansion</h1>
+            <p class="tagline">Stormlight on brass railings. Velvet rooms full of witnesses. One lie holding the mansion together.</p>
+          </div>
+          <div class="live-readout">
+            <div class="chip">
+              <p class="chip-label">Clock</p>
+              <div id="clock"></div>
+            </div>
+            <div class="chip">
+              <p class="chip-label">Case Status</p>
+              <div id="status"></div>
+            </div>
+            <div class="chip">
+              <p class="chip-label">Room Brief</p>
+              <div id="room-brief"></div>
+            </div>
+          </div>
+        </header>
+
+        <section class="stage-canvas-wrap" aria-label="Gameplay viewport">
+          <canvas id="game" width="480" height="288" aria-label="Murder Mansion game canvas"></canvas>
+        </section>
+
+        <aside class="stage-side" aria-label="Roster panel">
+          <p class="panel-head">Guest Roster</p>
+          <div id="roster"></div>
+        </aside>
+
+        <section class="stage-bottom">
+          <div class="dock-card">
+            <p class="panel-head">Dialogue Log</p>
+            <div id="dialogue"></div>
+          </div>
+          <div class="dock-card">
+            <p class="panel-head">Question Prompts</p>
+            <div id="questions"></div>
+          </div>
+          <div class="dock-card">
+            <p class="panel-head">Case Notes</p>
+            <div id="case-notes"></div>
+          </div>
+          <div class="control-strip" aria-label="Controls">
+            WASD/Arrows move · Enter/Space begin · E talk · 1-4 ask · Esc end · C accuse · F fullscreen · R restart
+          </div>
+        </section>
+      </section>
+    </main>
+    <script src="pixel_art.js"></script>
+    <script src="game.js"></script>
+  </body>
+</html>

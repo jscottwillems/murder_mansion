@@ -1,0 +1,172 @@
+Original prompt: I want you to focus on vastly improving the appearance and style of our game, take it from a simple pixel art game to something visually stunning
+
+- Initialized visual-overhaul task.
+- Read current HTML/CSS/JS and loaded develop-web-game skill workflow.
+- Confirmed Playwright client and action payload references exist and npx is available.
+- TODO: implement a high-impact art direction update (UI chrome + in-canvas lighting/FX + sprite polish) while preserving gameplay.
+
+- Implemented major visual overhaul:
+  - Reworked HTML layout and complete CSS art direction (cinematic palette, glass panels, dramatic typography, responsive play-grid).
+  - Rebuilt canvas presentation with atmospheric backdrop, per-room glow, soft lighting, particle motes, vignette/scanline post-process, richer tile detail, furniture shadows, and enhanced game-over card.
+  - Added character animation polish (idle/walk bob, sway, shadowing) and improved corpse rendering.
+- Added deterministic integration hooks and controls:
+  - `window.render_game_to_text` for concise machine-readable state.
+  - `window.advanceTime(ms)` for deterministic fixed-step simulation.
+  - Fullscreen toggle on `F`, with resize handling.
+- TODO: run Playwright loop, inspect screenshots + state output + console errors, then tune visuals if needed.
+- Completed Playwright verification with escalated execution:
+  - Initial short movement loop (`output/web-game`) produced screenshots and state snapshots with no console/page errors.
+  - Longer movement loop (`output/web-game-full`) also produced stable screenshots/state with no errors.
+  - Captured full-page UI screenshot (`output/full-page.png`) to validate HUD/panel styling and layout.
+- Validation notes:
+  - `render_game_to_text` returns expected concise JSON including coordinate note, mode, player data, visible entities, and objective.
+  - New visuals are rendering in canvas and the CSS shell as intended.
+- Remaining suggestion:
+  - If more dramatic scene coverage is desired in automation, add action bursts that guarantee corridor/room traversal and conversation/accusation interactions.
+
+- Movement/collision tuning pass (player snag/clip fix):
+  - Replaced point-sampled movement collision with radius-based occupancy checks against walls and blocker tiles.
+  - Added shared blocked-tile helper and reused it in `isWalkableTile`/neighbor checks for consistency.
+  - Added per-entity collision radii (`player: 0.34`, `guests: 0.30`) so sprite bodies no longer phase into furniture/wall corners.
+  - Updated `attemptMove` to resolve motion in small substeps with axis sliding + partial advance when a direct step collides, reducing corner hang-ups.
+- Movement validation (Playwright, escalated browser run):
+  - `output/movement-tune`: 4-iteration baseline movement loop, screenshots + text state reviewed, no wall/furniture clipping observed.
+  - `output/movement-stress`: 5-iteration diagonal/corner pressure loop, player remained outside blocked tiles and motion slid along edges without sticking.
+  - `output/movement-traverse`: 2-iteration room traversal loop, player successfully transitioned into adjacent rooms/hallway while honoring blockers.
+- Notes:
+  - No new runtime/page errors surfaced during these verification runs.
+  - If you want even tighter or looser spacing around props, adjust `PLAYER_COLLISION_RADIUS` in small increments (±0.02).
+
+- UI fullscreen refactor (play-area containment):
+  - Rebuilt `index.html` layout into a single full-height `.stage-shell` where all support UI (`clock`, `status`, `dialogue`, `questions`, `roster`, controls) lives inside the gameplay container.
+  - Replaced detached page HUD/panel structure with integrated top readout + side roster + bottom dock so the canvas remains the central focus.
+  - Reworked `style.css` grid to allocate most space to `.stage-canvas-wrap` while keeping utility panels embedded and responsive.
+- Canvas scaling update:
+  - Updated `resizeCanvasForPixelPerfect()` in `game.js` to size from `.stage-canvas-wrap` dimensions instead of using fixed `reservedUiHeight`, allowing the gameplay screen to use available display area.
+  - Added fractional fallback scaling for narrow viewports to avoid overflow on small screens.
+- Validation attempts:
+  - Tried running the skill-default client (`$CODEX_HOME/skills/develop-web-game/scripts/web_game_playwright_client.js`) but module resolution failed for `playwright` from that path.
+  - Retried with local client (`./web_game_playwright_client.js`). Browser launch needed elevated execution and then failed due local server connectivity / permission context mismatch (`ERR_CONNECTION_REFUSED`), followed by user rejection on elevated server-start request.
+  - Result: layout change implemented, but Playwright screenshot/state verification for this specific refactor is currently blocked by permission constraints.
+- Suggested next agent step:
+  - Re-run Playwright in a single approved elevated command that starts a local server and test client in the same context, then inspect fresh screenshots under `output/ui-refactor`.
+
+- NPC social-behavior and interrogation depth pass:
+  - Added guest activity states (`roaming`, `resting`, `chatting`) with timers/cooldowns so NPCs now pause and rest instead of continuously moving.
+  - Added spontaneous NPC-to-NPC conversations with rumor/intel exchange and occasional on-screen speech bubbles when visible.
+  - Added social destination routing so roaming guests sometimes seek out another guest to talk.
+  - Replaced direct memory writes with `rememberGuestIntel(...)` so new observations increment an `infoRevision` counter and maintain recent hearsay.
+  - Updated interrogation logic: repeated questions are only blocked until the NPC learns new information; after new intel, the detective can ask the same question again for an updated answer.
+  - Updated answers to incorporate recent social interactions/intel (who they talked to, what rumor they heard, who can corroborate).
+  - Extended `render_game_to_text` with per-guest `activity`/`goal` for visible guests and global `guestActivityCounts` for deterministic verification.
+- Validation:
+  - Syntax check passed: `node --check game.js`.
+  - Playwright runs completed with elevated execution and fresh artifacts:
+    - `output/npc-social`
+    - `output/npc-social-verify`
+    - `output/npc-social-verify2`
+  - Verified in captured state output that NPCs now enter rest/chat modes (example: `output/npc-social-verify/state-0.json` shows resting guests; `output/npc-social-verify2/state-2.json` shows `guestActivityCounts.chatting: 2`).
+- Note for follow-up:
+  - If you want even more frequent visible NPC conversations, tune `GUEST_CHAT_CHANCE_PER_SECOND` and `GUEST_SOCIAL_DESTINATION_CHANCE` in `game.js`.
+
+- Map scale + traversal-space tuning pass (user-reported bottom cutoff / cramped rooms):
+  - Increased effective interior play space by replacing hard-coded room rectangles with dynamic 3x3 room packing derived from current world dimensions.
+  - Reduced inter-room wall gap to 1 tile so walls read thinner and rooms/corridors feel more open.
+  - Updated player collision radius from `0.42` to `0.38` to reduce snagging in furnished rooms after movement/collision constraints.
+  - Fixed canvas sizing in `resizeCanvasForPixelPerfect()` to account for `.stage-canvas-wrap` padding before computing scale; this removes bottom clipping from over-sized CSS canvas height.
+  - Switched scaling to quarter-step increments (`0.25`) above 1x so the canvas fills available viewport space better than integer-only scaling.
+- Validation (Playwright, elevated browser run):
+  - `node --check game.js` passed.
+  - `output/layout-expansion`: 3-iteration run confirmed map now fills full canvas height with no bottom cutoff.
+  - `output/layout-expansion-move`: 4-iteration movement run confirmed room/corridor traversal still works and crowding impact is reduced.
+  - No `errors-*.json` files were emitted in either run (no new console/page errors captured).
+
+- Follow-up clipping fix (top/bottom still visually cut in user screenshot):
+  - Increased canvas height from `264` to `288` to give the world more vertical render headroom inside the stage frame.
+  - Added a true vertical room inset by changing `insetY` from `0` to `1` in dynamic room packing, so rooms no longer touch world top/bottom bounds.
+- Validation (Playwright, elevated browser run):
+  - `node --check game.js` passed.
+  - `output/layout-vertical-fix` run (3 iterations) shows visible top and bottom world margins with no vertical clipping.
+  - No `errors-*.json` emitted in this run.
+
+- Room-by-room mansion furnishing overhaul (clarity + navigation):
+  - Rebuilt `createFurnishings()` layouts for all 9 room types so each now reads as a distinct themed space with recognizable set pieces and wall decor.
+  - Study: fireplace, desk cluster, bookshelf wall, portrait wall pieces, globe accent.
+  - Gallery: full wall art bands, side portraits, dual pedestals, center viewing bench.
+  - Conservatory: perimeter planters, side greenery, central fountain, trellis accents.
+  - Kitchen: long prep counter, sink + stove stations, pantry wall, central island, extra prep counter.
+  - Dining Hall: sideboard, central banquet table, candelabra and surrounding chairs, wall portraits.
+  - Ballroom: dance rug, stage edge, piano corner, chandelier centerpiece, side benches.
+  - Cellar: wine rack wall, crate/barrel clusters, workbench, hanging lamp.
+  - Library: wrapped bookshelves (top/sides/lower), dual reading tables, central lamp.
+  - Master Suite: enlarged bed setup, nightstand, wardrobe, vanity, fireplace, wall paintings.
+  - Added optional furniture metadata (`wallMounted`) to prevent floating shadows on wall art and fixtures.
+- Furniture rendering pass (`drawFurniture`):
+  - Expanded from simple blocks into kind-specific pixel treatment for new furnishings (portrait, pedestal, fountain, fireplace, sink, pantry, wine rack, stage, chandelier/lamps, bench/chair variants, vanity/nightstand, candelabra, globe, trellis, workbench).
+  - Improved existing kinds (rug/piano/bookshelf/table families) with richer detail, highlights, and visual differentiation.
+- Validation runs:
+  - `node --check game.js` passed after edits.
+  - Playwright run: `output/room-revamp-pass1` (movement + state snapshots), no `errors-*.json` emitted.
+  - Playwright run: `output/room-revamp-sweep` (long traversal), no `errors-*.json` emitted.
+  - Full room-by-room visual capture script: `output/room-revamp-rooms` with per-room PNG + JSON state for Study/Gallery/Conservatory/Kitchen/Dining Hall/Ballroom/Cellar/Library/Master Suite.
+- Notes:
+  - Added test action payload `test_actions_room_sweep.json` for broad traversal verification.
+  - Local workspace is not a git repo, so change tracking here relies on file artifacts and `progress.md` notes.
+- Follow-up fix after pathing validation:
+  - Conservatory was over-blocked and prevented route connectivity to/from multiple rooms.
+  - Adjusted conservatory furniture blocking layout to leave clear center cross-lanes while keeping decorative perimeter planters and side greenery.
+- Re-validation:
+  - `node --check game.js` passed.
+  - Browser connectivity test across all room anchors now reports `failures: []` (all rooms mutually reachable).
+  - Captured updated visual artifact: `output/room-revamp-rooms/2-Conservatory-updated.png`.
+
+- Investigation UX + Playwright harness improvement pass:
+  - Added a true intro state before the case starts; the clock and NPC simulation stay paused until the player presses `Enter`, `Space`, or clicks the canvas.
+  - Fixed the clock meridiem bug so the game now correctly starts at `12:00 AM` instead of mislabeled `12:00 PM`.
+  - Added richer shell UI:
+    - New `Room Brief` chip in the top readout.
+    - New `Case Notes` panel with objective, lead summary, progress, and latest event.
+    - Rebuilt roster output into per-guest cards with alive/dead state, interview status, visibility/focus tags, last known location, and current observable activity.
+  - Added in-canvas HUD overlays:
+    - Room label plate.
+    - Dynamic footer prompt for intro, nearby guest interaction, questioning, and restart flow.
+    - Centered intro card (`CASE FILE OPEN`) to make the opening state legible in screenshots and for first-time players.
+  - Expanded the local Playwright action client key map to support `WASD`, `E`, `C`, `F`, `R`, `Escape`, and digits `1-4`, so future automated test bursts can cover interrogation and more controls instead of movement only.
+  - Added new action payloads:
+    - `test_actions_intro.json`
+    - `test_actions_improvement.json`
+- Validation:
+  - `node --check game.js` passed.
+  - `node --check web_game_playwright_client.js` passed.
+  - Playwright intro pass: `output/improvement-intro`
+  - Playwright gameplay pass: `output/improvement-pass`
+  - No `errors-*.json` files were emitted in either new run.
+- Layout compression pass: moved bottom utility panels into a compact right rail, shrank header chrome, narrowed the roster column, reduced dock heights, and converted the controls to a single compact line to prioritize gameplay area.
+
+- March 7, 2026 visual overhaul pass:
+  - Added local pixel-art helper library (`pixel_art.js`) to provide reusable panel, checker, dither, shadow, and sprite primitives for the renderer.
+  - Rebuilt the outer shell art direction in `style.css` and `index.html` toward a more ornate case-board / cabinet presentation with stronger framing, lighting, and typography.
+  - Reworked the canvas visual pipeline in `game.js`:
+    - Added room-specific visual themes and pre-rendered room backdrop caches.
+    - Replaced flat floor rendering with themed wallpaper/floor motifs and richer corridor treatment.
+    - Upgraded character and corpse rendering to sprite-based pixel art with facing.
+    - Refined intro and HUD plates to use the shared pixel-art panel system.
+  - Validation status: `node --check game.js`, `node --check pixel_art.js`, and `node --check web_game_playwright_client.js` all passed.
+  - Playwright validation completed:
+    - Intro capture: `output/art-pass-intro`
+    - Gameplay movement capture: `output/art-pass-move`
+    - Full-page UI screenshot: `output/layout-space-full.png`
+    - No `errors-*.json` artifacts were emitted in the new intro or gameplay runs.
+  - Visual review notes:
+    - The new room backdrops, sprite-based characters, and cabinet-style shell are rendering correctly in captured screenshots.
+    - `render_game_to_text` remained consistent with the captured gameplay states during the new runs.
+  - Follow-up option:
+    - If another pass is requested, focus on adding even more per-room prop clutter or room-specific animated set dressing rather than further shell changes.
+
+- Character readability/walk-cycle refinement:
+  - Replaced whole-sprite sway/bob movement with frame-based idle/step sprites for both guests and the detective.
+  - Tightened the body proportions and reduced shadow/overlay drift so characters no longer look like they slide sideways while walking.
+  - Validation:
+    - `node --check game.js` passed.
+    - Playwright capture: `output/character-pass`
+    - No `errors-*.json` artifacts were emitted in this pass.
