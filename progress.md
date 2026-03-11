@@ -369,3 +369,13 @@ Original prompt: I want you to focus on vastly improving the appearance and styl
     - `output/layout-space-full.png` confirms the roster labels and the in-world cast presentation remain aligned after the redesign.
   - Harness note:
     - The local Playwright client still returns through the wrapper unevenly on longer sweeps, but the screenshots/state files written during the run were valid and were inspected directly.
+
+- March 11, 2026 GitHub Pages startup fix:
+  - Confirmed the production failure mode from the browser console: GitHub Pages was requesting `/src/main.js`, which means the site was serving the raw source `index.html` instead of the Vite-built output.
+  - Added `.github/workflows/deploy-pages.yml` so GitHub can build the app and publish `dist/` as the Pages artifact instead of exposing the source tree directly.
+  - Updated the production build command to `vite build --base ./` in `package.json`, and mirrored the same build-time base behavior in `vite.config.ts`, so generated asset URLs are relative (`./assets/...`) and work on GitHub Pages project URLs.
+  - Validation:
+    - `npm run build`
+    - Verified `dist/index.html` now references `./assets/index-*.js` and `./assets/index-*.css` instead of root `/assets/...`.
+  - Required GitHub-side follow-up:
+    - In the repository Pages settings, switch the source to `GitHub Actions` so the new workflow deploys `dist/`; if Pages is left on `Deploy from a branch`, GitHub will continue serving the raw source `index.html`.
