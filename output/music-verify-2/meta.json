@@ -1,0 +1,7 @@
+{
+  "before": "Click anywhere or press any key to start",
+  "afterClick": "Standby cue | B-flat major 7",
+  "afterStart": "Investigation loop | B-flat major 7",
+  "consoleErrors": [],
+  "pageErrors": []
+}

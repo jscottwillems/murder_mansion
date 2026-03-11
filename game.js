@@ -6,10 +6,26 @@ const canvasFrame = document.querySelector(".stage-canvas-wrap");
 const uiClock = document.getElementById("clock");
 const uiStatus = document.getElementById("status");
 const uiRoomBrief = document.getElementById("room-brief");
+const uiAudioStatus = document.getElementById("audio-status");
+const uiAudioToggle = document.getElementById("audio-toggle");
 const uiDialogue = document.getElementById("dialogue");
 const uiQuestions = document.getElementById("questions");
 const uiCaseNotes = document.getElementById("case-notes");
 const uiRoster = document.getElementById("roster");
+const music = window.MansionMusic ? window.MansionMusic.createAmbientScore() : null;
+
+if (uiAudioToggle) {
+  uiAudioToggle.addEventListener("click", () => {
+    if (!music) return;
+    const snapshot = music.getSnapshot();
+    if (!snapshot.unlocked) {
+      music.activate();
+    } else {
+      music.toggleMute();
+    }
+    updateUI();
+  });
+}
 
 const W = canvas.width;
 const H = canvas.height;
@@ -74,7 +90,7 @@ const ROOM_BRIEFS = {
   Cellar: "Stacks of barrels swallow sound. A perfect place for half-heard rumors.",
   Library: "Quiet aisles and reading lamps reward patience and careful observation.",
   "Master Suite": "Private comforts, heavy drapery, and the strongest temptation to isolate.",
-  Hallway: "Corridors connect every secret. Crossings here can confirm or ruin a story.",
+  Hallway: "A short passage between rooms. Keep moving and watch the doorways.",
 };
 
 const SKIN_TONES = ["#f4d2b2", "#ddb08a", "#b88764", "#8a5a3c", "#f0c8a0"];
@@ -87,11 +103,396 @@ const NAMES = [
 ];
 
 const COLORS = ["#7ad3ff", "#9eff9a", "#fba0ff", "#ffd985", "#ffa68a", "#b3ffef", "#f9f7b0", "#a6b0ff", "#e8bcff", "#ffb3cb"];
-const QUESTION_SET = [
-  { id: "where_were_you", label: "Where were you recently?" },
-  { id: "who_suspicious", label: "Who seems suspicious?" },
-  { id: "what_heard", label: "What did you hear or see?" },
-  { id: "who_can_confirm", label: "Who can confirm your story?" },
+const QUESTION_TOPICS = ["timeline", "suspicion", "intel", "alibi", "room", "pressure", "social", "victim"];
+const QUESTION_LABEL_TEMPLATES = {
+  timeline: [
+    "Walk me through {noun}.",
+    "Start with {noun}.",
+    "Give me the clean version of {noun}.",
+  ],
+  suspicion: [
+    "Who fits {noun} tonight?",
+    "Whose name keeps surfacing in {noun}?",
+    "Point me toward {noun}.",
+  ],
+  intel: [
+    "What was {noun}?",
+    "Tell me {noun}.",
+    "What detail are you holding onto from tonight?",
+  ],
+  alibi: [
+    "Who gives you {noun}?",
+    "Who can support {noun}?",
+    "Name the person behind {noun}.",
+  ],
+  room: [
+    "Why were you in the {roomName}?",
+    "What held you in the {roomName}?",
+    "What mattered to you in the {roomName}?",
+  ],
+  pressure: [
+    "What part of this story are you trimming out?",
+    "What changes when I push harder?",
+    "What are you still not saying plainly?",
+  ],
+  social: [
+    "What were you and {partnerName} really discussing?",
+    "What did that conversation with {partnerName} buy you?",
+    "What shifted after you spoke with {partnerName}?",
+  ],
+  victim: [
+    "What changed after {victimName} was found?",
+    "How did {victimName}'s death alter the room?",
+    "What are people doing differently since {victimName} died?",
+  ],
+};
+const DEFAULT_QUESTION_NOUNS = {
+  timeline: "your last few minutes",
+  suspicion: "the strongest lead in the room",
+  intel: "the detail everyone else missed",
+  alibi: "your alibi",
+};
+const GUEST_ARCHETYPES = [
+  {
+    role: "Society Columnist",
+    personality: "incisive",
+    openings: [
+      "If you want gossip, call it evidence and ask properly.",
+      "I notice everything. Whether I share it depends on the question.",
+    ],
+    returnOpenings: [
+      "Back again? Good. The room has ripened since last time.",
+      "You returned before the ink dried. Ask something sharper.",
+    ],
+    repeat: [
+      "You already have that quote. Bring me a fresher angle.",
+      "I do not rerun old copy without a new fact.",
+    ],
+    questionNouns: {
+      timeline: "your last few glittering minutes",
+      suspicion: "the rumor with the best bones",
+      intel: "the detail everyone else stepped over",
+      alibi: "the witness protecting your reputation",
+    },
+    answerLeads: {
+      default: ["Write this down:", "For the record:"],
+      suspicion: ["The name with traction is", "If I were printing tomorrow, I would lead with"],
+      pressure: ["Fine. The unpolished version is this:", "Since you insist, here is the line I nearly kept:"],
+    },
+    answerTags: {
+      default: ["That is the cleanest version of it.", "That is where my attention landed."],
+      social: ["People barter in whispers long before they barter in facts."],
+    },
+    roomReason: "the sightlines are excellent and vanity makes people careless there",
+    socialAngle: "We traded names, half-alibis, and the sort of smiles people use as shields.",
+    pressureTell: "Someone is managing their timing too carefully, and careful timing always stains the cuffs.",
+  },
+  {
+    role: "Retired Surgeon",
+    personality: "clinical",
+    openings: [
+      "Ask clean questions and I will give clean answers.",
+      "If you need precision, do not waste it on theatrics.",
+    ],
+    returnOpenings: [
+      "You are back. Good. I have revised the timeline.",
+      "Proceed. I dislike repeating myself, but I dislike sloppy reasoning more.",
+    ],
+    repeat: [
+      "My answer has not changed. The evidence might, but the answer has not.",
+      "You have already taken my statement on that point.",
+    ],
+    questionNouns: {
+      timeline: "your exact sequence of rooms",
+      suspicion: "the behavior that looks least natural",
+      intel: "the observation worth isolating",
+      alibi: "the witness behind your timeline",
+    },
+    answerLeads: {
+      default: ["Precisely:", "Clinically speaking,"],
+      alibi: ["On corroboration:", "For verification:"],
+      victim: ["After the body was found,", "Once the death was confirmed,"],
+    },
+    answerTags: {
+      default: ["That is the accurate version.", "That is the sequence as I observed it."],
+      pressure: ["There. Discomfort is not the same thing as inaccuracy."],
+    },
+    roomReason: "it offered enough quiet to separate panic from useful detail",
+    socialAngle: "We compared timing, posture, and who looked too ready with an excuse.",
+    pressureTell: "The room changed before anyone admitted it. Someone recognized the danger early.",
+  },
+  {
+    role: "Greenhouse Curator",
+    personality: "dreamy",
+    openings: [
+      "People think I only notice plants. They are wrong.",
+      "There is a rhythm to rooms like this. Ask, and I will tell you where it broke.",
+    ],
+    returnOpenings: [
+      "The air shifted since we last spoke. So did a few stories.",
+      "You came back at the right moment. Conversations have been blooming all over the mansion.",
+    ],
+    repeat: [
+      "The answer is the same flower turned in the same light.",
+      "I have already given you that stem. Bring me a new root to trace.",
+    ],
+    questionNouns: {
+      timeline: "the path your evening took through the house",
+      suspicion: "the person throwing the room out of balance",
+      intel: "the smallest sign that now feels important",
+      alibi: "the person who can place you with certainty",
+    },
+    answerLeads: {
+      default: ["Listen for the pattern:", "If you follow the rhythm,"],
+      room: ["That room drew me in because", "I stayed there because"],
+      social: ["With them?", "That conversation?"],
+    },
+    answerTags: {
+      default: ["That is where the evening bent.", "Something in it still feels bruised."],
+      victim: ["After that, nobody moved naturally."],
+    },
+    roomReason: "moonlight and echo make restless people easy to read",
+    socialAngle: "We talked the way people prune roses, trimming away what might cut them later.",
+    pressureTell: "Someone keeps transplanting their story from room to room and hoping it still looks rooted.",
+  },
+  {
+    role: "Stage Magician",
+    personality: "theatrical",
+    openings: [
+      "A mystery loves an audience. Go on, detective.",
+      "Ask your question, and I will try not to make a performance of it.",
+    ],
+    returnOpenings: [
+      "An encore already? Then give me better material.",
+      "Back for the second act. Fine. Let us keep the misdirection intentional.",
+    ],
+    repeat: [
+      "I do not repeat tricks for free.",
+      "Same answer, same stage, less applause.",
+    ],
+    questionNouns: {
+      timeline: "the last act before the panic",
+      suspicion: "the most suspicious entrance in the room",
+      intel: "the reveal hidden in plain sight",
+      alibi: "the witness willing to stay on stage for you",
+    },
+    answerLeads: {
+      default: ["Watch closely:", "No smoke, no mirrors:"],
+      suspicion: ["If someone is overplaying innocence, it is", "The loudest misdirection belongs to"],
+      pressure: ["Very well. Behind the curtain:", "If you insist on the hidden compartment:"],
+    },
+    answerTags: {
+      default: ["That is the trick without the flourish.", "You can keep the applause."],
+      social: ["People tell the truth most clearly while pretending they are joking."],
+    },
+    roomReason: "every doorway there behaves like a spotlight",
+    socialAngle: "We fenced with jokes until one of us accidentally showed a real concern.",
+    pressureTell: "Someone is performing innocence too deliberately. Real innocence never hits its marks so cleanly.",
+  },
+  {
+    role: "War Correspondent",
+    personality: "blunt",
+    openings: [
+      "Ask it straight. I answer faster that way.",
+      "I have no patience for varnish tonight, detective.",
+    ],
+    returnOpenings: [
+      "You are back. Good. A few people slipped since we last talked.",
+      "Ask again, but make it count.",
+    ],
+    repeat: [
+      "I already told you. Either use it or move on.",
+      "You have that answer. Find the next weak spot.",
+    ],
+    questionNouns: {
+      timeline: "where you were when the mood turned",
+      suspicion: "the person most worth watching",
+      intel: "the one detail that cuts through the noise",
+      alibi: "the only witness worth naming",
+    },
+    answerLeads: {
+      default: ["Plainly:", "Here it is:"],
+      victim: ["After the body dropped,", "Once the death was obvious,"],
+      social: ["That talk?", "The short version?"],
+    },
+    answerTags: {
+      default: ["That is enough to work with.", "Use that before the trail cools."],
+      pressure: ["There. No polish, no excuses."],
+    },
+    roomReason: "tight choke points force people to show intent instead of style",
+    socialAngle: "We compared notes and both pretended we were less concerned than we were.",
+    pressureTell: "Somebody is moving like they already know where the next accusation will land.",
+  },
+  {
+    role: "Estate Accountant",
+    personality: "guarded",
+    openings: [
+      "I prefer numbers to people, but here we are.",
+      "Ask carefully. Loose words become liabilities.",
+    ],
+    returnOpenings: [
+      "Again? Fine. The ledger has a few new entries.",
+      "I kept watching after we spoke. Some balances are shifting.",
+    ],
+    repeat: [
+      "That answer is already on the books.",
+      "I have accounted for that point once already.",
+    ],
+    questionNouns: {
+      timeline: "the sequence you can account for",
+      suspicion: "the person whose story does not balance",
+      intel: "the discrepancy you noticed tonight",
+      alibi: "the account backing your movements",
+    },
+    answerLeads: {
+      default: ["To be exact:", "If we are balancing accounts,"],
+      alibi: ["For the record:", "In terms of corroboration,"],
+      pressure: ["The unfiled concern is this:", "What I did not volunteer is simple:"],
+    },
+    answerTags: {
+      default: ["That is the version I can justify.", "It is the cleanest account I have."],
+      social: ["People treat gossip like petty cash until it goes missing."],
+    },
+    roomReason: "it was easier to keep track of entrances and exits from there",
+    socialAngle: "We compared movements like receipts, each of us checking whether the numbers aligned.",
+    pressureTell: "One person's story closes too neatly. Clean books can hide dirty work.",
+  },
+  {
+    role: "Jazz Vocalist",
+    personality: "velvet",
+    openings: [
+      "Ask softly if you want the sharp answer.",
+      "Everybody is improvising tonight. I can tell you who is off-key.",
+    ],
+    returnOpenings: [
+      "Back for another chorus? Fine. The melody changed a little.",
+      "I still have a few notes left if you know where to listen.",
+    ],
+    repeat: [
+      "Same tune, detective. Different room, same tune.",
+      "I already sang that verse for you.",
+    ],
+    questionNouns: {
+      timeline: "the rhythm of your last few minutes",
+      suspicion: "the voice that sounds wrong in this house",
+      intel: "the note that has stayed with you",
+      alibi: "the duet partner backing your story",
+    },
+    answerLeads: {
+      default: ["Here is how it played:", "If you want the melody of it,"],
+      suspicion: ["The sour note belongs to", "The name that keeps landing off-beat is"],
+      social: ["We were not flirting, if that is what you are asking.", "That little duet?"],
+    },
+    answerTags: {
+      default: ["That is the tempo I trust.", "That is the note I keep circling back to."],
+      victim: ["After the body, the whole house lost its rhythm."],
+    },
+    roomReason: "the acoustics there carry every false laugh",
+    socialAngle: "We traded charm for information until the charm ran out first.",
+    pressureTell: "Somebody keeps changing key whenever the conversation gets close to the truth.",
+  },
+  {
+    role: "Antiquarian",
+    personality: "fussy",
+    openings: [
+      "Please do not rush me. Good detail deserves proper handling.",
+      "Careless questions ruin delicate evidence, just so you know.",
+    ],
+    returnOpenings: [
+      "You are back. Excellent. I have sorted my impressions more carefully.",
+      "Very well. I have reexamined a few details since we last spoke.",
+    ],
+    repeat: [
+      "I have already cataloged that answer for you.",
+      "That item has been inspected and noted.",
+    ],
+    questionNouns: {
+      timeline: "the last sequence worth preserving",
+      suspicion: "the person whose behavior feels counterfeit",
+      intel: "the overlooked detail with real provenance",
+      alibi: "the witness authenticating your account",
+    },
+    answerLeads: {
+      default: ["Handled carefully:", "With proper attention,"],
+      room: ["I lingered there because", "The reason I stayed is that"],
+      pressure: ["Since you insist on prying,", "The detail I kept under glass is this:"],
+    },
+    answerTags: {
+      default: ["That detail deserves preserving.", "Do not let anyone smudge that version."],
+      social: ["People reveal themselves the moment they think they are merely browsing."],
+    },
+    roomReason: "the objects there make people reveal what they value and what they envy",
+    socialAngle: "We circled each other politely, each waiting for the other to mishandle a detail.",
+    pressureTell: "Someone's story feels restored rather than original. Too smooth, too recently repaired.",
+  },
+  {
+    role: "Off-Duty Chauffeur",
+    personality: "grounded",
+    openings: [
+      "You want something useful, ask for something useful.",
+      "I watched the traffic in this place. Start there if you have sense.",
+    ],
+    returnOpenings: [
+      "Back again? Fine. I have a clearer read on the traffic now.",
+      "You came back at the right time. A few people just crossed where they should not have.",
+    ],
+    repeat: [
+      "Same route, same answer.",
+      "I already mapped that out for you.",
+    ],
+    questionNouns: {
+      timeline: "where your route took you last",
+      suspicion: "the person taking the worst route through the house",
+      intel: "the practical detail that matters most",
+      alibi: "the person who can place your route",
+    },
+    answerLeads: {
+      default: ["Simple:", "As I saw it,"],
+      alibi: ["If you need confirmation:", "For someone to back me:"],
+      social: ["That talk was not complicated.", "Nothing fancy about it:"],
+    },
+    answerTags: {
+      default: ["That is the road I trust.", "That is the only route that makes sense."],
+      pressure: ["That is me being plainer than I like."],
+    },
+    roomReason: "it let me watch the doorways and see who doubled back",
+    socialAngle: "We swapped routes, not pleasantries. I wanted to know who crossed where.",
+    pressureTell: "Somebody keeps doubling back with no good reason. That is habit or guilt.",
+  },
+  {
+    role: "Debutante",
+    personality: "eager",
+    openings: [
+      "I have been trying very hard not to panic. Ask quickly.",
+      "I want to help. I just wish helping felt less terrifying.",
+    ],
+    returnOpenings: [
+      "You came back. Good. I remembered a little more.",
+      "I have been replaying everything since we talked. Ask me again, properly.",
+    ],
+    repeat: [
+      "I already told you that. I think so, anyway.",
+      "That part has not changed, even if the rest of tonight keeps moving.",
+    ],
+    questionNouns: {
+      timeline: "what happened right before you felt uneasy",
+      suspicion: "the person making your nerves flare up",
+      intel: "the thing you cannot stop thinking about",
+      alibi: "the person who can calm your story down",
+    },
+    answerLeads: {
+      default: ["Alright:", "I think it went like this:"],
+      suspicion: ["The person who unsettles me most is", "If you want honesty, I keep watching"],
+      victim: ["After the body was found,", "Everything changed once the body was there,"],
+    },
+    answerTags: {
+      default: ["I know that sounds small, but it matters.", "That is the part I keep replaying."],
+      social: ["People have been smiling too hard all night."],
+    },
+    roomReason: "it felt like the safest place to catch my breath and watch people instead of joining them",
+    socialAngle: "We were trying to sound calm for each other, and neither of us quite managed it.",
+    pressureTell: "Someone acts calm the way people pose for portraits. Too still, too ready.",
+  },
 ];
 const PIXEL_FONT = {
   "A": ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
@@ -376,7 +777,7 @@ const PERSON_SPRITES = {
 
 const keys = new Set();
 const FIXED_DT = 1 / 60;
-const PLAYER_COLLISION_RADIUS = 0.38;
+const PLAYER_COLLISION_RADIUS = 0.36;
 const GUEST_COLLISION_RADIUS = 0.4;
 const MOVE_SUBSTEP_MAX = 0.06;
 const COLLISION_EPSILON = 1e-4;
@@ -388,6 +789,8 @@ const GUEST_CHAT_CHANCE_PER_SECOND = 0.86;
 const GUEST_CHAT_MIN_SEC = 4.2;
 const GUEST_CHAT_MAX_SEC = 8.2;
 const GUEST_SOCIAL_DESTINATION_CHANCE = 0.26;
+const CAMERA_SMOOTHING_PER_SECOND = 10;
+const CAMERA_ROOM_RELEASE_DISTANCE = 3.1;
 
 let game;
 let manualStepMode = false;
@@ -397,6 +800,17 @@ window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
   const isBeginKey = key === "enter" || key === " ";
 
+  if (music && !e.repeat) {
+    music.activate();
+  }
+
+  if (key === "m") {
+    if (music) {
+      music.toggleMute();
+      updateUI();
+    }
+    return;
+  }
   if (key === "r") {
     startGame();
     return;
@@ -438,19 +852,34 @@ window.addEventListener("keyup", (e) => {
 });
 
 canvas.addEventListener("click", () => {
+  if (music) {
+    music.activate();
+  }
   if (game && !game.started) {
     beginGame();
   }
 });
 
+window.addEventListener("pointerdown", (event) => {
+  if (uiAudioToggle && event.target === uiAudioToggle) {
+    return;
+  }
+  if (music) {
+    music.activate();
+    updateUI();
+  }
+}, { passive: true });
+
 function startGame() {
   const rooms = createRooms();
   const walls = createWalls(rooms);
   const { furnishings, blockers } = createFurnishings(rooms);
+  const personaDeck = shuffleArray(GUEST_ARCHETYPES).map((archetype) => createGuestPersona(archetype));
 
   const guests = NAMES.map((name, i) => {
     const room = rooms[(i + 1) % rooms.length];
     const spawn = findSpawnInRoom(room, walls, blockers);
+    const persona = personaDeck[i % personaDeck.length];
     return {
       id: i,
       name,
@@ -462,7 +891,8 @@ function startGame() {
       alive: true,
       memory: "I have nothing useful yet.",
       suspicion: 0,
-      personality: ["nervous", "cold", "friendly", "guarded", "precise"][randInt(0, 4)],
+      personality: persona.personality,
+      persona,
       knowsMurderer: false,
       homeRoomId: (i + 1) % rooms.length,
       targetRoomId: (i + 1) % rooms.length,
@@ -484,6 +914,7 @@ function startGame() {
       goalLabel: "standing by",
       model: createGuestModel(i, COLORS[i]),
       discoveredDead: false,
+      interviewCount: 0,
       askedQuestions: {},
     };
   });
@@ -529,9 +960,20 @@ function startGame() {
     atmosphericParticles: createAtmosphericParticles(78, walls, rooms),
     activeBubble: null,
     roomBackdrops: createRoomBackdropCache(rooms),
+    camera: {
+      focusRoomId: rooms[0].id,
+      worldX: null,
+      worldY: null,
+      scale: null,
+      viewW: null,
+      viewH: null,
+      offsetX: null,
+      offsetY: null,
+    },
     conversation: {
       active: false,
       guestId: null,
+      questions: [],
     },
   };
 
@@ -601,6 +1043,36 @@ function splitSpan(total, parts) {
   });
 }
 
+function pickRandom(list, fallback = "") {
+  if (!Array.isArray(list) || list.length === 0) return fallback;
+  return list[randInt(0, list.length - 1)];
+}
+
+function shuffleArray(list) {
+  const copy = [...list];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = randInt(0, i);
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function createGuestPersona(archetype) {
+  return {
+    ...archetype,
+    questionNouns: { ...(archetype.questionNouns || {}) },
+    answerLeads: Object.fromEntries(
+      Object.entries(archetype.answerLeads || {}).map(([key, value]) => [key, [...value]])
+    ),
+    answerTags: Object.fromEntries(
+      Object.entries(archetype.answerTags || {}).map(([key, value]) => [key, [...value]])
+    ),
+    openings: [...(archetype.openings || [])],
+    returnOpenings: [...(archetype.returnOpenings || [])],
+    repeat: [...(archetype.repeat || [])],
+  };
+}
+
 function createGuestModel(index, baseOutfit) {
   return {
     skin: SKIN_TONES[index % SKIN_TONES.length],
@@ -618,6 +1090,108 @@ function directionFromVector(dx, dy, fallback = "down") {
     return dx > 0 ? "right" : "left";
   }
   return dy > 0 ? "down" : "up";
+}
+
+function latestDiscoveredCorpse() {
+  for (let i = game.corpses.length - 1; i >= 0; i--) {
+    if (game.corpses[i].discovered) return game.corpses[i];
+  }
+  return null;
+}
+
+function fillTemplate(template, values) {
+  return String(template).replace(/\{(\w+)\}/g, (_, key) => {
+    const value = values[key];
+    return value == null || value === "" ? "" : String(value);
+  });
+}
+
+function capitalizeSentence(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function getGuestDialogueContext(guest) {
+  const room = roomAt(guest.x, guest.y) || game.rooms[guest.homeRoomId] || null;
+  const recentPartner = Number.isInteger(guest.lastTalkPartnerId)
+    ? game.guests[guest.lastTalkPartnerId]
+    : null;
+  const discoveredCorpse = latestDiscoveredCorpse();
+  return {
+    roomName: guest.lastTalkRoomName || (room ? room.name : "Hallway"),
+    partnerName: recentPartner && recentPartner.alive ? recentPartner.name : "someone nearby",
+    victimName: discoveredCorpse ? discoveredCorpse.name : "the victim",
+  };
+}
+
+function buildQuestionLabel(guest, topicId) {
+  const templates = QUESTION_LABEL_TEMPLATES[topicId] || ["{noun}"];
+  const context = getGuestDialogueContext(guest);
+  const noun = guest.persona.questionNouns[topicId] || DEFAULT_QUESTION_NOUNS[topicId] || topicId;
+  return fillTemplate(pickRandom(templates, templates[0]), {
+    noun,
+    roomName: context.roomName,
+    partnerName: context.partnerName,
+    victimName: context.victimName,
+  });
+}
+
+function conversationTopicScore(topicId, guest) {
+  const recentIntel = latestGuestIntel(guest);
+  const discoveredBody = latestDiscoveredCorpse();
+  let score = 0;
+
+  if (topicId === "timeline") score += 6;
+  if (topicId === "suspicion") score += guest.knowsMurderer ? 5 : (guest.suspicion > 0 ? 3 : 1);
+  if (topicId === "intel") score += recentIntel ? 4 : 1;
+  if (topicId === "alibi") score += Number.isInteger(guest.lastTalkPartnerId) ? 4 : 2;
+  if (topicId === "room") score += 2;
+  if (topicId === "pressure") score += guest.interviewCount > 0 ? 4 : 1;
+  if (topicId === "social") score += Number.isInteger(guest.lastTalkPartnerId) ? 5 : 0;
+  if (topicId === "victim") score += discoveredBody ? 5 : -99;
+
+  return score + Math.random() * 0.35;
+}
+
+function buildConversationQuestions(guest) {
+  const chosen = [];
+  const rankedTopics = QUESTION_TOPICS
+    .map((topicId) => ({ topicId, score: conversationTopicScore(topicId, guest) }))
+    .sort((a, b) => b.score - a.score);
+
+  for (const { topicId, score } of rankedTopics) {
+    if (score < -50) continue;
+    chosen.push(topicId);
+    if (chosen.length === 4) break;
+  }
+
+  for (const fallback of ["timeline", "suspicion", "intel", "alibi"]) {
+    if (chosen.length >= 4) break;
+    if (!chosen.includes(fallback)) chosen.push(fallback);
+  }
+
+  return chosen.slice(0, 4).map((topicId) => ({
+    id: topicId,
+    label: buildQuestionLabel(guest, topicId),
+  }));
+}
+
+function pickConversationOpening(guest) {
+  const pool = guest.interviewCount > 0 ? guest.persona.returnOpenings : guest.persona.openings;
+  return pickRandom(pool, "Ask what you need.");
+}
+
+function pickRepeatLine(guest) {
+  return pickRandom(guest.persona.repeat, "I already answered that. Ask something else.");
+}
+
+function decorateGuestAnswer(guest, topicId, core) {
+  const leads = guest.persona.answerLeads[topicId] || guest.persona.answerLeads.default || [""];
+  const tags = guest.persona.answerTags[topicId] || guest.persona.answerTags.default || [""];
+  const lead = pickRandom(leads, "").trim();
+  const tag = pickRandom(tags, "").trim();
+  return [lead, core, tag].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 }
 
 function getRoomVisualTheme(type) {
@@ -813,83 +1387,76 @@ function createFurnishings(rooms) {
     const interiorW = Math.max(2, room.w - 2);
     const interiorH = Math.max(2, room.h - 2);
     const spanWide = Math.max(2, room.w - 4);
-    const spanTall = Math.max(2, room.h - 4);
 
     if (room.type === "study") {
       placeFurniture(furnishings, blockers, room, left + 1, top, Math.max(3, room.w - 5), 1, "bookshelf", true, "#7a5a44");
-      placeFurniture(furnishings, blockers, room, left, top + 1, 2, spanTall, "fireplace", true, "#6a4d3b");
-      placeFurniture(furnishings, blockers, room, right - 3, bottom - 1, 3, 2, "desk", true, "#7a5540");
-      placeFurniture(furnishings, blockers, room, right - 2, bottom - 2, 1, 1, "chair", false, "#8f725d");
+      placeFurniture(furnishings, blockers, room, left, top + 1, 1, 2, "fireplace", true, "#6a4d3b");
+      placeFurniture(furnishings, blockers, room, right - 1, top + 1, 2, 1, "desk", true, "#7a5540");
+      placeFurniture(furnishings, blockers, room, right - 1, top + 2, 1, 1, "chair", false, "#8f725d");
       placeFurniture(furnishings, blockers, room, centerX - 1, top + 1, 2, 1, "portrait", false, "#8a7262", { wallMounted: true });
-      placeFurniture(furnishings, blockers, room, right, top, 1, 1, "globe", false, "#7485a7");
+      placeFurniture(furnishings, blockers, room, left + 1, bottom, 1, 1, "globe", false, "#7485a7");
     } else if (room.type === "gallery") {
       placeFurniture(furnishings, blockers, room, left, top, interiorW, 1, "paintings", false, "#8d7b68", { wallMounted: true });
       placeFurniture(furnishings, blockers, room, left, bottom, interiorW, 1, "paintings", false, "#7f6d5a", { wallMounted: true });
-      placeFurniture(furnishings, blockers, room, left, top + 1, 1, spanTall, "portrait", false, "#78685b", { wallMounted: true });
-      placeFurniture(furnishings, blockers, room, right, top + 1, 1, spanTall, "portrait", false, "#78685b", { wallMounted: true });
-      placeFurniture(furnishings, blockers, room, centerX - 4, centerY - 1, 2, 2, "pedestal", true, "#9ca3a8");
-      placeFurniture(furnishings, blockers, room, centerX + 2, centerY - 1, 2, 2, "pedestal", true, "#9ca3a8");
-      placeFurniture(furnishings, blockers, room, centerX - 1, bottom, 2, 1, "bench", false, "#6f5849");
+      placeFurniture(furnishings, blockers, room, left, top + 1, 1, 2, "portrait", false, "#78685b", { wallMounted: true });
+      placeFurniture(furnishings, blockers, room, right, top + 1, 1, 2, "portrait", false, "#78685b", { wallMounted: true });
+      placeFurniture(furnishings, blockers, room, left + 1, bottom - 1, 1, 1, "pedestal", true, "#9ca3a8");
+      placeFurniture(furnishings, blockers, room, right - 1, bottom - 1, 1, 1, "pedestal", true, "#9ca3a8");
+      placeFurniture(furnishings, blockers, room, centerX - 1, centerY + 1, 2, 1, "bench", false, "#6f5849");
     } else if (room.type === "conservatory") {
-      const topPlanterHalf = Math.max(2, Math.floor((interiorW - 2) / 2));
-      placeFurniture(furnishings, blockers, room, left, top, topPlanterHalf, 1, "planter_box", true, "#597b58");
-      placeFurniture(furnishings, blockers, room, right - topPlanterHalf + 1, top, topPlanterHalf, 1, "planter_box", true, "#597b58");
-      placeFurniture(furnishings, blockers, room, left, bottom, topPlanterHalf, 1, "planter_box", true, "#597b58");
-      placeFurniture(furnishings, blockers, room, right - topPlanterHalf + 1, bottom, topPlanterHalf, 1, "planter_box", true, "#597b58");
-      placeFurniture(furnishings, blockers, room, left, top + 1, 1, Math.max(1, centerY - top - 1), "plants", true, "#4c8b60");
-      placeFurniture(furnishings, blockers, room, left, centerY + 1, 1, Math.max(1, bottom - centerY - 1), "plants", true, "#4c8b60");
-      placeFurniture(furnishings, blockers, room, right, top + 1, 1, Math.max(1, centerY - top - 1), "plants", true, "#4c8b60");
-      placeFurniture(furnishings, blockers, room, right, centerY + 1, 1, Math.max(1, bottom - centerY - 1), "plants", true, "#4c8b60");
-      placeFurniture(furnishings, blockers, room, centerX - 1, centerY - 1, 2, 2, "fountain", true, "#6fa7b2");
-      placeFurniture(furnishings, blockers, room, centerX - 2, top + 1, 1, 1, "trellis", false, "#7ca98b", { wallMounted: true });
-      placeFurniture(furnishings, blockers, room, centerX + 1, top + 1, 1, 1, "trellis", false, "#7ca98b", { wallMounted: true });
+      placeFurniture(furnishings, blockers, room, left, top, 2, 1, "planter_box", true, "#597b58");
+      placeFurniture(furnishings, blockers, room, right - 1, top, 2, 1, "planter_box", true, "#597b58");
+      placeFurniture(furnishings, blockers, room, left, bottom, 2, 1, "planter_box", true, "#597b58");
+      placeFurniture(furnishings, blockers, room, right - 1, bottom, 2, 1, "planter_box", true, "#597b58");
+      placeFurniture(furnishings, blockers, room, left, top + 1, 1, 2, "plants", true, "#4c8b60");
+      placeFurniture(furnishings, blockers, room, right, bottom - 2, 1, 2, "plants", true, "#4c8b60");
+      placeFurniture(furnishings, blockers, room, left + 1, top + 1, 2, 2, "fountain", true, "#6fa7b2");
+      placeFurniture(furnishings, blockers, room, centerX - 1, top + 1, 2, 1, "trellis", false, "#7ca98b", { wallMounted: true });
     } else if (room.type === "kitchen") {
       placeFurniture(furnishings, blockers, room, left, top, interiorW, 1, "counter", true, "#78808a");
-      placeFurniture(furnishings, blockers, room, left, top + 1, 2, 1, "sink", true, "#647186");
+      placeFurniture(furnishings, blockers, room, left + 1, top + 1, 2, 1, "sink", true, "#647186");
       placeFurniture(furnishings, blockers, room, right - 1, top + 1, 2, 1, "stove", true, "#5f676f");
-      placeFurniture(furnishings, blockers, room, right, top + 2, 1, Math.max(2, room.h - 5), "pantry", true, "#6f7783");
-      placeFurniture(furnishings, blockers, room, centerX - 1, centerY, 3, 2, "island", true, "#8a929b");
-      placeFurniture(furnishings, blockers, room, left + 2, bottom, 3, 1, "counter", false, "#848d95");
+      placeFurniture(furnishings, blockers, room, right, bottom - 2, 1, 2, "pantry", true, "#6f7783");
+      placeFurniture(furnishings, blockers, room, left + 1, bottom - 1, 2, 1, "island", true, "#8a929b");
+      placeFurniture(furnishings, blockers, room, left + 4, bottom, 2, 1, "counter", false, "#848d95");
     } else if (room.type === "dining") {
-      const tableW = Math.max(5, room.w - 6);
       placeFurniture(furnishings, blockers, room, left + 1, top, spanWide, 1, "sideboard", true, "#7c5640");
-      placeFurniture(furnishings, blockers, room, centerX - Math.floor(tableW / 2), centerY - 1, tableW, 2, "table", true, "#714e3a");
-      placeFurniture(furnishings, blockers, room, centerX - 1, centerY - 1, 2, 1, "candelabra", false, "#cbb78a");
+      placeFurniture(furnishings, blockers, room, left + 1, bottom - 1, Math.max(3, room.w - 6), 1, "table", true, "#714e3a");
+      placeFurniture(furnishings, blockers, room, left + 2, bottom - 1, 1, 1, "candelabra", false, "#cbb78a");
       placeFurniture(furnishings, blockers, room, left + 1, centerY - 1, 1, 1, "chair", false, "#8d705a");
       placeFurniture(furnishings, blockers, room, right - 1, centerY - 1, 1, 1, "chair", false, "#8d705a");
-      placeFurniture(furnishings, blockers, room, left + 1, centerY + 1, 1, 1, "chair", false, "#8d705a");
-      placeFurniture(furnishings, blockers, room, right - 1, centerY + 1, 1, 1, "chair", false, "#8d705a");
+      placeFurniture(furnishings, blockers, room, left + 1, bottom, 1, 1, "chair", false, "#8d705a");
+      placeFurniture(furnishings, blockers, room, right - 1, bottom, 1, 1, "chair", false, "#8d705a");
       placeFurniture(furnishings, blockers, room, left, top + 1, 1, 2, "portrait", false, "#7e6a59", { wallMounted: true });
       placeFurniture(furnishings, blockers, room, right, top + 1, 1, 2, "portrait", false, "#7e6a59", { wallMounted: true });
     } else if (room.type === "ballroom") {
       placeFurniture(furnishings, blockers, room, left, top, interiorW, interiorH, "rug", false, "#5b4768");
       placeFurniture(furnishings, blockers, room, left + 1, top + 1, 3, 1, "stage", true, "#6f577d");
-      placeFurniture(furnishings, blockers, room, right - 3, top + 1, 3, 2, "piano", true, "#2b2b31");
+      placeFurniture(furnishings, blockers, room, right - 2, top + 1, 2, 2, "piano", true, "#2b2b31");
       placeFurniture(furnishings, blockers, room, centerX - 1, centerY - 1, 2, 2, "chandelier", false, "#d9c1a2");
       placeFurniture(furnishings, blockers, room, left + 1, bottom, 3, 1, "bench", false, "#6d5878");
       placeFurniture(furnishings, blockers, room, right - 3, bottom, 3, 1, "bench", false, "#6d5878");
     } else if (room.type === "cellar") {
       placeFurniture(furnishings, blockers, room, left, top, interiorW, 1, "wine_rack", true, "#69563f");
-      placeFurniture(furnishings, blockers, room, left, top + 1, 2, 2, "crate", true, "#6a573f");
-      placeFurniture(furnishings, blockers, room, right - 1, top + 1, 2, 2, "crate", true, "#6a573f");
-      placeFurniture(furnishings, blockers, room, left, bottom - 1, 2, 2, "barrel", true, "#5c4936");
-      placeFurniture(furnishings, blockers, room, right - 1, bottom - 1, 2, 2, "barrel", true, "#5c4936");
-      placeFurniture(furnishings, blockers, room, centerX - 1, centerY, 2, 1, "workbench", true, "#735e44");
+      placeFurniture(furnishings, blockers, room, left, bottom - 1, 2, 1, "crate", true, "#6a573f");
+      placeFurniture(furnishings, blockers, room, right - 1, bottom - 1, 2, 1, "barrel", true, "#5c4936");
+      placeFurniture(furnishings, blockers, room, left + 1, top + 1, 2, 1, "workbench", true, "#735e44");
       placeFurniture(furnishings, blockers, room, centerX - 1, top + 1, 2, 1, "hanging_lamp", false, "#c7a882", { wallMounted: true });
     } else if (room.type === "library") {
-      const lowerShelfSpan = Math.max(2, Math.floor((room.w - 4) / 2));
       placeFurniture(furnishings, blockers, room, left, top, interiorW, 1, "bookshelf", true, "#715138");
-      placeFurniture(furnishings, blockers, room, left, top + 1, 1, spanTall, "bookshelf", true, "#715138");
-      placeFurniture(furnishings, blockers, room, right, top + 1, 1, spanTall, "bookshelf", true, "#715138");
-      placeFurniture(furnishings, blockers, room, left, bottom, lowerShelfSpan, 1, "bookshelf", true, "#715138");
-      placeFurniture(furnishings, blockers, room, right - lowerShelfSpan + 1, bottom, lowerShelfSpan, 1, "bookshelf", true, "#715138");
-      placeFurniture(furnishings, blockers, room, centerX - 3, centerY - 1, 2, 1, "reading_table", true, "#846447");
-      placeFurniture(furnishings, blockers, room, centerX + 1, centerY - 1, 2, 1, "reading_table", true, "#846447");
+      placeFurniture(furnishings, blockers, room, left, top + 1, 1, Math.max(1, centerY - top - 1), "bookshelf", true, "#715138");
+      placeFurniture(furnishings, blockers, room, left, centerY + 1, 1, Math.max(1, bottom - centerY - 1), "bookshelf", true, "#715138");
+      placeFurniture(furnishings, blockers, room, right, top + 1, 1, Math.max(1, centerY - top - 1), "bookshelf", true, "#715138");
+      placeFurniture(furnishings, blockers, room, right, centerY + 1, 1, Math.max(1, bottom - centerY - 1), "bookshelf", true, "#715138");
+      placeFurniture(furnishings, blockers, room, left, bottom, 2, 1, "bookshelf", true, "#715138");
+      placeFurniture(furnishings, blockers, room, right - 1, bottom, 2, 1, "bookshelf", true, "#715138");
+      placeFurniture(furnishings, blockers, room, left + 1, bottom - 1, 2, 1, "reading_table", true, "#846447");
+      placeFurniture(furnishings, blockers, room, right - 2, bottom - 1, 2, 1, "reading_table", true, "#846447");
       placeFurniture(furnishings, blockers, room, centerX - 1, top + 1, 2, 1, "lamp", false, "#d2b98c");
     } else if (room.type === "suite") {
-      placeFurniture(furnishings, blockers, room, left, top + 1, 4, 2, "bed", true, "#8792b2");
-      placeFurniture(furnishings, blockers, room, left + 4, top + 1, 1, 1, "nightstand", true, "#8f7b6c");
-      placeFurniture(furnishings, blockers, room, right - 1, top + 1, 2, 3, "wardrobe", true, "#6e6561");
+      placeFurniture(furnishings, blockers, room, left, top + 1, 3, 2, "bed", true, "#8792b2");
+      placeFurniture(furnishings, blockers, room, left + 3, top + 1, 1, 1, "nightstand", true, "#8f7b6c");
+      placeFurniture(furnishings, blockers, room, right - 1, top + 1, 2, 2, "wardrobe", true, "#6e6561");
       placeFurniture(furnishings, blockers, room, centerX - 2, centerY, 4, 2, "rug", false, "#6e617f");
       placeFurniture(furnishings, blockers, room, right - 2, bottom, 2, 1, "vanity", true, "#a08f86");
       placeFurniture(furnishings, blockers, room, left, bottom, 2, 1, "fireplace", true, "#65574d");
@@ -924,13 +1491,34 @@ function placeFurniture(furnishings, blockers, room, x, y, w, h, kind, blocking,
       // Keep corridor strips traversable so room-to-room navigation remains possible.
       const onVerticalCorridor = tx === Math.floor(WORLD_W / 2) || tx === Math.floor(WORLD_W / 2) + 1;
       const onHorizontalCorridor = ty === Math.floor(WORLD_H / 2) || ty === Math.floor(WORLD_H / 2) + 1;
-      if (onVerticalCorridor || onHorizontalCorridor) continue;
+      const onRoomCross = tx === room.cx || ty === room.cy;
+      if (onVerticalCorridor || onHorizontalCorridor || onRoomCross) continue;
       blockers[ty][tx] = 1;
     }
   }
 }
 
 function findSpawnInRoom(room, walls, blockers) {
+  const candidates = [
+    { x: room.cx, y: room.cy },
+    { x: room.cx, y: room.cy - 1 },
+    { x: room.cx, y: room.cy + 1 },
+    { x: room.cx - 1, y: room.cy },
+    { x: room.cx + 1, y: room.cy },
+    { x: room.cx, y: room.y + 1 },
+    { x: room.cx, y: room.y + room.h - 2 },
+    { x: room.x + 1, y: room.cy },
+    { x: room.x + room.w - 2, y: room.cy },
+  ];
+
+  for (const candidate of candidates) {
+    const x = clampTileX(candidate.x);
+    const y = clampTileY(candidate.y);
+    if (walls[y] && walls[y][x] === 1 && blockers[y] && blockers[y][x] !== 1) {
+      return { x: x + 0.5, y: y + 0.5 };
+    }
+  }
+
   for (let i = 0; i < 30; i++) {
     const x = randInt(room.x + 1, room.x + room.w - 2);
     const y = randInt(room.y + 1, room.y + room.h - 2);
@@ -1512,7 +2100,8 @@ function nearestVictimForMurderer() {
 }
 
 function canPlayerSee(x, y) {
-  const playerRoom = roomAt(game.player.x, game.player.y);
+  const areaContext = getPlayerAreaContext();
+  const playerRoom = areaContext.currentRoom;
   const targetRoom = roomAt(x, y);
 
   if (playerRoom) {
@@ -1520,10 +2109,10 @@ function canPlayerSee(x, y) {
   }
 
   if (!targetRoom) {
-    return distance(game.player, { x, y }) <= 2.6;
+    return distance(game.player, { x, y }) <= 2.8;
   }
 
-  return false;
+  return areaContext.nearbyRooms.some((room) => room.id === targetRoom.id);
 }
 
 function tryMurder(dt) {
@@ -1666,10 +2255,10 @@ function tryTalk() {
 function startConversation(guest) {
   game.conversation.active = true;
   game.conversation.guestId = guest.id;
+  guest.interviewCount += 1;
+  game.conversation.questions = buildConversationQuestions(guest);
 
-  const opening = guest.id === game.murderer
-    ? "I can spare a moment. Ask what you need."
-    : "Alright detective. Ask me what you need.";
+  const opening = pickConversationOpening(guest);
 
   uiDialogue.textContent = `${guest.name}: ${opening}`;
   game.activeBubble = {
@@ -1683,6 +2272,7 @@ function endConversation() {
   if (!game.conversation.active) return;
   game.conversation.active = false;
   game.conversation.guestId = null;
+  game.conversation.questions = [];
   game.activeBubble = null;
   uiDialogue.textContent = "Conversation ended.";
 }
@@ -1690,7 +2280,7 @@ function endConversation() {
 function askQuestion(questionIndex) {
   if (!game.conversation.active) return;
 
-  const question = QUESTION_SET[questionIndex];
+  const question = game.conversation.questions[questionIndex];
   if (!question) return;
 
   const guest = game.guests[game.conversation.guestId];
@@ -1705,7 +2295,7 @@ function askQuestion(questionIndex) {
     : -1;
   const askedBefore = lastAskedRevision >= currentRevision;
   const answer = askedBefore
-    ? "I already answered that. Ask something else."
+    ? pickRepeatLine(guest)
     : answerQuestion(guest, question.id);
   if (!askedBefore) {
     guest.askedQuestions[question.id] = currentRevision;
@@ -1775,74 +2365,113 @@ function answerQuestion(guest, questionId) {
     ? game.guests[guest.lastTalkPartnerId]
     : null;
   const recentRoomName = guest.lastTalkRoomName || roomName;
+  const latestCorpse = latestDiscoveredCorpse();
 
-  if (questionId === "where_were_you") {
+  if (questionId === "timeline") {
     if (isMurderer) {
       const bluffRoom = game.rooms[randInt(0, game.rooms.length - 1)];
-      return `Mostly in the ${bluffRoom.name}. I kept to myself.`;
+      return decorateGuestAnswer(guest, questionId, `Mostly the ${bluffRoom.name}. I kept to the edges and let louder people draw the eye.`);
     }
     if (guest.activity === "resting") {
-      return `I took a breather in the ${roomName}.`;
+      return decorateGuestAnswer(guest, questionId, `I paused in the ${roomName} to settle myself before moving again.`);
     }
     if (guest.activity === "chatting" && recentPartner && recentPartner.alive) {
-      return `I was talking with ${recentPartner.name} in the ${roomName}.`;
+      return decorateGuestAnswer(guest, questionId, `I was with ${recentPartner.name} in the ${roomName}, and we stayed there long enough for the conversation to stick.`);
     }
     if (recentPartner && recentPartner.alive && recentRoomName) {
-      return `A moment ago I was speaking with ${recentPartner.name} in the ${recentRoomName}.`;
+      return decorateGuestAnswer(guest, questionId, `A moment ago I was with ${recentPartner.name} in the ${recentRoomName}. After that, I have been ${guest.goalLabel}.`);
     }
-    return `I was in the ${roomName}. I have been ${guest.goalLabel}.`;
+    return decorateGuestAnswer(guest, questionId, `I was in the ${roomName}, mostly ${guest.goalLabel}.`);
   }
 
-  if (questionId === "who_suspicious") {
+  if (questionId === "suspicion") {
     if (isMurderer) {
       const scapegoat = randomAliveGuestName([guest.id]);
-      return scapegoat
-        ? `${scapegoat} has been acting strange.`
-        : "Everyone seems suspicious tonight.";
+      const core = scapegoat
+        ? `${scapegoat} keeps landing where they should not. That is where I would look first.`
+        : "Everyone looks a little too rehearsed tonight.";
+      return decorateGuestAnswer(guest, questionId, core);
     }
     if (guest.knowsMurderer) {
-      return `${killer.name}. I do not trust them at all.`;
+      return decorateGuestAnswer(guest, questionId, `${killer.name}. The more I watch them, the less their calm feels honest.`);
     }
     if (recentIntel && recentIntel.suspectName && recentIntel.suspectName !== guest.name) {
-      return `From what I just heard, ${recentIntel.suspectName} stands out.`;
+      return decorateGuestAnswer(guest, questionId, `${recentIntel.suspectName} stands out because that name keeps returning with the same unease around it.`);
     }
     const suspect = mostSuspiciousGuest(guest.id);
     if (suspect) {
-      return `Maybe ${suspect.name}. I cannot prove it yet.`;
+      return decorateGuestAnswer(guest, questionId, `${suspect.name} keeps tugging at my attention, even if I cannot lock down the reason yet.`);
     }
-    return "I cannot point to anyone yet.";
+    return decorateGuestAnswer(guest, questionId, "Nobody has crossed the line from strange to certain for me yet.");
   }
 
-  if (questionId === "what_heard") {
+  if (questionId === "intel") {
     if (isMurderer) {
       const lines = [
-        "Just doors creaking and people pacing.",
-        "Footsteps in the corridor, nothing clear.",
-        "Voices carrying through the hall, no names.",
+        "Just doors creaking, footsteps shifting, and everyone pretending not to listen.",
+        "Footsteps in the corridor, voices through the walls, nothing clean enough to pin down.",
+        "A lot of motion, very little of it worth trusting at first glance.",
       ];
-      return lines[randInt(0, lines.length - 1)];
+      return decorateGuestAnswer(guest, questionId, pickRandom(lines, lines[0]));
     }
     if (recentIntel && recentIntel.text) {
-      return recentIntel.text;
+      return decorateGuestAnswer(guest, questionId, recentIntel.text);
     }
-    return guest.memory || "Nothing useful. Only distant footsteps.";
+    return decorateGuestAnswer(guest, questionId, guest.memory || "Nothing useful yet. Just the house settling and people trying to sound casual.");
   }
 
-  if (questionId === "who_can_confirm") {
+  if (questionId === "alibi") {
     if (isMurderer) {
-      return "No one stayed with me for long.";
+      return decorateGuestAnswer(guest, questionId, "No one stayed with me long enough to make that easy.");
     }
     if (recentPartner && recentPartner.alive) {
-      return `${recentPartner.name} can confirm we talked in the ${recentRoomName}.`;
+      return decorateGuestAnswer(guest, questionId, `${recentPartner.name} can place me in the ${recentRoomName}. We spoke long enough to remember each other.`);
     }
     const witness = nearbyPotentialWitness(guest);
     if (witness) {
-      return `${witness.name} saw me near the ${roomName}.`;
+      return decorateGuestAnswer(guest, questionId, `${witness.name} saw me near the ${roomName}, even if only in passing.`);
     }
-    return "No one stayed near me long enough to confirm.";
+    return decorateGuestAnswer(guest, questionId, "No one lingered near me long enough for a strong confirmation.");
   }
 
-  return "I do not have an answer for that.";
+  if (questionId === "room") {
+    return decorateGuestAnswer(guest, questionId, `${capitalizeSentence(guest.persona.roomReason)}.`);
+  }
+
+  if (questionId === "pressure") {
+    if (isMurderer) {
+      return decorateGuestAnswer(guest, questionId, "You are hoping pressure will change my story. It will not.");
+    }
+    if (guest.knowsMurderer) {
+      return decorateGuestAnswer(guest, questionId, `${guest.persona.pressureTell} If you want the name, I keep circling back to ${killer.name}.`);
+    }
+    if (recentIntel && recentIntel.suspectName) {
+      return decorateGuestAnswer(guest, questionId, `${guest.persona.pressureTell} The newest thread still points toward ${recentIntel.suspectName}.`);
+    }
+    return decorateGuestAnswer(guest, questionId, guest.persona.pressureTell);
+  }
+
+  if (questionId === "social") {
+    if (recentPartner && recentPartner.alive) {
+      return decorateGuestAnswer(guest, questionId, `${guest.persona.socialAngle} ${recentPartner.name} was listening harder than they let on.`);
+    }
+    return decorateGuestAnswer(guest, questionId, "I have not had a conversation worth building a case on yet.");
+  }
+
+  if (questionId === "victim") {
+    if (!latestCorpse) {
+      return decorateGuestAnswer(guest, questionId, "No body has been found yet, only tension and bad instincts.");
+    }
+    if (isMurderer) {
+      return decorateGuestAnswer(guest, questionId, `After ${latestCorpse.name} was found, everyone started watching one another instead of the room.`);
+    }
+    if (recentIntel && recentIntel.text) {
+      return decorateGuestAnswer(guest, questionId, `After ${latestCorpse.name} was found, one detail kept echoing: ${recentIntel.text}`);
+    }
+    return decorateGuestAnswer(guest, questionId, `After ${latestCorpse.name} was found, the mansion stopped sounding social and started sounding strategic.`);
+  }
+
+  return decorateGuestAnswer(guest, questionId, "I do not have anything sharper than that.");
 }
 
 function randomAliveGuestName(excludedIds) {
@@ -1941,12 +2570,30 @@ function getCurrentObjective() {
   return "Interview guests, watch traffic between rooms, and accuse the murderer before sunrise.";
 }
 
+function syncMusicState() {
+  if (!music) return;
+  if (!game.started) {
+    music.setScene("intro");
+    return;
+  }
+  if (game.over) {
+    music.setScene("coda");
+    return;
+  }
+  if (game.conversation.active) {
+    music.setScene("focus");
+    return;
+  }
+  music.setScene("investigation");
+}
+
 function updateUI() {
+  syncMusicState();
   const aliveGuests = game.guests.filter((g) => g.alive).length;
   const livingInnocents = game.guests.filter((g) => g.alive && g.id !== game.murderer).length;
-  const currentRoom = roomAt(game.player.x, game.player.y);
-  const roomLabel = currentRoom ? currentRoom.name : "Hallway";
-  const roomBrief = ROOM_BRIEFS[roomLabel] || ROOM_BRIEFS.Hallway;
+  const areaContext = getPlayerAreaContext();
+  const roomLabel = areaContext.locationLabel;
+  const roomBrief = areaContext.roomBrief;
   const inConversation = game.conversation.active;
   const actionableGuest = game.started && !game.over ? getNearestActionableGuest() : null;
   const discoveredBodies = game.corpses.filter((corpse) => corpse.discovered).length;
@@ -1963,16 +2610,33 @@ function updateUI() {
     uiStatus.textContent = game.ending;
   } else if (inConversation) {
     const guest = game.guests[game.conversation.guestId];
-    const guestName = guest ? guest.name : "Guest";
+    const guestName = guest ? `${guest.name}, ${guest.persona.role}` : "Guest";
     uiStatus.textContent = `Interviewing ${guestName} | Time paused | Ask with 1-4 | Esc to end`;
   } else if (actionableGuest) {
-    uiStatus.textContent = `${actionableGuest.name} is within reach | Press E to talk | Press C to accuse`;
+    uiStatus.textContent = `${actionableGuest.name}, ${actionableGuest.persona.role}, is within reach | Press E to talk | Press C to accuse`;
   } else {
     uiStatus.textContent = `Guests alive: ${aliveGuests}/10 | Innocents remaining: ${livingInnocents} | Press C near a guest to accuse`;
   }
   uiRoomBrief.textContent = !game.started
     ? "The case file is open. Enter or Space starts the clock and releases every guest into the mansion."
     : roomBrief;
+  if (uiAudioStatus) {
+    uiAudioStatus.textContent = music
+      ? music.describeStatus()
+      : "Unavailable in this build";
+  }
+  if (uiAudioToggle) {
+    if (!music) {
+      uiAudioToggle.textContent = "Unavailable";
+      uiAudioToggle.disabled = true;
+    } else {
+      const audioState = music.getSnapshot();
+      uiAudioToggle.disabled = false;
+      uiAudioToggle.textContent = !audioState.unlocked
+        ? "Start Music"
+        : (audioState.muted ? "Unmute" : "Mute Music");
+    }
+  }
 
   const lines = [];
   for (const entry of game.log) {
@@ -1998,9 +2662,10 @@ function updateUI() {
       return `<div class="${classes}">
         <div class="roster-row">
           <span class="roster-name">${escapeHtml(g.name)}</span>
+          <span class="roster-role">${escapeHtml(g.persona.role)}</span>
         </div>
         <div class="roster-tags">${tags.join("")}</div>
-        <div class="roster-meta">${escapeHtml(guestLocationLabel(g))} | ${escapeHtml(guestActivityLabel(g))}</div>
+        <div class="roster-meta">${escapeHtml(g.personality)} | ${escapeHtml(guestLocationLabel(g))} | ${escapeHtml(guestActivityLabel(g))}</div>
       </div>`;
     })
     .join("");
@@ -2015,7 +2680,8 @@ function updateUI() {
     uiQuestions.textContent = "When the case begins, approach a guest with E and use 1-4 to question them.";
   } else if (inConversation) {
     const guest = game.guests[game.conversation.guestId];
-    uiQuestions.innerHTML = QUESTION_SET.map((q, idx) => {
+    const questionList = game.conversation.questions || [];
+    uiQuestions.innerHTML = questionList.map((q, idx) => {
       const askedRevision = guest ? guest.askedQuestions[q.id] : -1;
       const asked = !!guest && Number.isFinite(askedRevision) && askedRevision >= guest.infoRevision;
       const className = asked ? "question-option question-used" : "question-option";
@@ -2024,14 +2690,14 @@ function updateUI() {
     }).join("");
   } else {
     uiQuestions.textContent = actionableGuest
-      ? `${actionableGuest.name} is close enough to interview. Press E to question them.`
+      ? `${actionableGuest.name}, the ${actionableGuest.persona.role.toLowerCase()}, is close enough to interview. Press E to question them.`
       : "Talk to a guest to open questioning.";
   }
 
   const leadText = !game.started
     ? "Ten guests are waiting in place. Start the case, then track who speaks with whom before the first body drops."
     : actionableGuest
-      ? `${actionableGuest.name} is nearby in the ${guestLocationLabel(actionableGuest)}.`
+      ? `${actionableGuest.name}, the ${actionableGuest.persona.role.toLowerCase()}, is nearby in the ${guestLocationLabel(actionableGuest)}.`
       : discoveredBodies > 0
         ? `${discoveredBodies} body${discoveredBodies === 1 ? "" : "ies"} discovered. Revisit witnesses after each new rumor.`
         : "No one is close enough to question right now. Move room to room and look for a conversation cluster.";
@@ -2074,23 +2740,182 @@ function hexToRgb(hex) {
   };
 }
 
+function snapCameraScale(scale) {
+  return Math.max(1, Math.floor(scale * 4) / 4);
+}
+
+function clampRange(value, min, max) {
+  if (max <= min) return min;
+  return Math.max(min, Math.min(max, value));
+}
+
+function distanceToRoom(x, y, room) {
+  const nearestX = Math.max(room.x, Math.min(x, room.x + room.w));
+  const nearestY = Math.max(room.y, Math.min(y, room.y + room.h));
+  return Math.hypot(x - nearestX, y - nearestY);
+}
+
+function getPassageRoomsForPosition(x, y) {
+  const ranked = game.rooms
+    .map((room) => ({ room, distance: distanceToRoom(x, y, room) }))
+    .sort((a, b) => a.distance - b.distance);
+  const nearby = ranked.filter((entry) => entry.distance <= 2.35).slice(0, 2);
+  if (nearby.length > 0) return nearby.map((entry) => entry.room);
+  return ranked.length > 0 ? [ranked[0].room] : [];
+}
+
+function getPlayerAreaContext() {
+  const currentRoom = roomAt(game.player.x, game.player.y);
+  const nearbyRooms = currentRoom ? [currentRoom] : getPassageRoomsForPosition(game.player.x, game.player.y);
+  const primaryRoom = currentRoom || nearbyRooms[0] || null;
+  return {
+    currentRoom,
+    nearbyRooms,
+    primaryRoom,
+    locationLabel: currentRoom ? currentRoom.name : "Passageway",
+    roomBrief: currentRoom
+      ? (ROOM_BRIEFS[currentRoom.name] || ROOM_BRIEFS.Hallway)
+      : ROOM_BRIEFS.Hallway,
+  };
+}
+
+function getCameraFocusRoom(areaContext) {
+  const currentFocus = Number.isInteger(game.camera.focusRoomId)
+    ? game.rooms.find((room) => room.id === game.camera.focusRoomId) || null
+    : null;
+
+  if (areaContext.currentRoom) {
+    game.camera.focusRoomId = areaContext.currentRoom.id;
+    return areaContext.currentRoom;
+  }
+
+  if (currentFocus && distanceToRoom(game.player.x, game.player.y, currentFocus) <= CAMERA_ROOM_RELEASE_DISTANCE) {
+    return currentFocus;
+  }
+
+  const fallback = areaContext.nearbyRooms[0] || null;
+  if (fallback) {
+    game.camera.focusRoomId = fallback.id;
+  }
+  return fallback;
+}
+
+function getWorldCameraTarget(areaContext) {
+  const focusRoom = getCameraFocusRoom(areaContext);
+  let focusX;
+  let focusY;
+  let focusW;
+  let focusH;
+
+  if (focusRoom) {
+    const focusPaddingX = 2.2;
+    const focusPaddingY = 2.1;
+    focusX = focusRoom.x - focusPaddingX;
+    focusY = focusRoom.y - focusPaddingY;
+    focusW = focusRoom.w + focusPaddingX * 2;
+    focusH = focusRoom.h + focusPaddingY * 2;
+  } else {
+    const focusPaddingX = 4.8;
+    const focusPaddingY = 4.2;
+    focusX = game.player.x - focusPaddingX;
+    focusY = game.player.y - focusPaddingY;
+    focusW = focusPaddingX * 2 + 1.2;
+    focusH = focusPaddingY * 2 + 1.2;
+  }
+
+  const maxWorldW = WORLD_W * TILE;
+  const maxWorldH = WORLD_H * TILE;
+  const viewW = Math.min(maxWorldW, focusW * TILE);
+  const viewH = Math.min(maxWorldH, focusH * TILE);
+  const worldX = clampRange(focusX * TILE, 0, maxWorldW - viewW);
+  const worldY = clampRange(focusY * TILE, 0, maxWorldH - viewH);
+  const scale = snapCameraScale(Math.min((W - 18) / viewW, (H - 18) / viewH));
+  const screenW = viewW * scale;
+  const screenH = viewH * scale;
+
+  return {
+    worldX,
+    worldY,
+    viewW,
+    viewH,
+    scale,
+    offsetX: Math.floor((W - screenW) / 2),
+    offsetY: Math.floor((H - screenH) / 2),
+    focusRoomId: focusRoom ? focusRoom.id : null,
+  };
+}
+
+function updateCamera(areaContext, dt) {
+  const target = getWorldCameraTarget(areaContext);
+  const cameraState = game.camera;
+  const immediate =
+    cameraState.worldX === null ||
+    cameraState.worldY === null ||
+    cameraState.scale === null ||
+    cameraState.viewW === null ||
+    cameraState.viewH === null;
+
+  if (immediate) {
+    Object.assign(cameraState, target);
+    return cameraState;
+  }
+
+  const alpha = 1 - Math.exp(-Math.max(0.0001, dt) * CAMERA_SMOOTHING_PER_SECOND);
+  cameraState.worldX += (target.worldX - cameraState.worldX) * alpha;
+  cameraState.worldY += (target.worldY - cameraState.worldY) * alpha;
+  cameraState.viewW += (target.viewW - cameraState.viewW) * alpha;
+  cameraState.viewH += (target.viewH - cameraState.viewH) * alpha;
+  cameraState.scale += (target.scale - cameraState.scale) * alpha;
+  cameraState.offsetX += (target.offsetX - cameraState.offsetX) * alpha;
+  cameraState.offsetY += (target.offsetY - cameraState.offsetY) * alpha;
+  cameraState.focusRoomId = target.focusRoomId;
+
+  return {
+    worldX: cameraState.worldX,
+    worldY: cameraState.worldY,
+    viewW: cameraState.viewW,
+    viewH: cameraState.viewH,
+    scale: cameraState.scale,
+    offsetX: Math.round(cameraState.offsetX),
+    offsetY: Math.round(cameraState.offsetY),
+  };
+}
+
+function applyWorldCamera(camera) {
+  ctx.translate(camera.offsetX, camera.offsetY);
+  ctx.scale(camera.scale, camera.scale);
+  ctx.translate(-camera.worldX, -camera.worldY);
+}
+
+function worldToScreen(camera, worldX, worldY) {
+  return {
+    x: camera.offsetX + (worldX * TILE - camera.worldX) * camera.scale,
+    y: camera.offsetY + (worldY * TILE - camera.worldY) * camera.scale,
+  };
+}
+
 function drawWorld() {
   drawSceneBackdrop();
-  const playerRoom = roomAt(game.player.x, game.player.y);
-  drawRoomLighting(playerRoom);
-  drawMansionLayout();
-  drawNavigationHints(playerRoom);
-  drawFurnishings(playerRoom);
-  drawAtmosphericParticles(playerRoom);
+  const areaContext = getPlayerAreaContext();
+  const camera = game.camera.worldX === null
+    ? updateCamera(areaContext, FIXED_DT)
+    : {
+      worldX: game.camera.worldX,
+      worldY: game.camera.worldY,
+      viewW: game.camera.viewW,
+      viewH: game.camera.viewH,
+      scale: game.camera.scale,
+      offsetX: Math.round(game.camera.offsetX),
+      offsetY: Math.round(game.camera.offsetY),
+    };
 
-  // Shade rooms the player is not currently in, while preserving the mansion layout.
-  for (const room of game.rooms) {
-    if (playerRoom && room.id === playerRoom.id) continue;
-    ctx.fillStyle = "rgba(5, 7, 13, 0.52)";
-    ctx.fillRect(room.x * TILE, room.y * TILE, room.w * TILE, room.h * TILE);
-    ctx.fillStyle = "rgba(136, 167, 226, 0.07)";
-    ctx.fillRect(room.x * TILE, room.y * TILE, room.w * TILE, px(1));
-  }
+  ctx.save();
+  applyWorldCamera(camera);
+  drawRoomLighting(areaContext.primaryRoom);
+  drawMansionLayout();
+  drawNavigationHints(areaContext);
+  drawFurnishings(areaContext);
+  drawAtmosphericParticles(areaContext);
 
   for (const corpse of game.corpses) {
     if (!canPlayerSee(corpse.x, corpse.y)) continue;
@@ -2102,16 +2927,25 @@ function drawWorld() {
     if (!g.alive) continue;
     if (!canPlayerSee(g.x, g.y)) continue;
     drawPerson(g.x, g.y, g.model, { moving: g.moving, seed: g.animSeed, isPlayer: false, facing: g.facing });
-    if (game.started && distance(game.player, g) < 1.8) {
-      drawName(g.name, g.x, g.y - 1);
-    }
   }
 
   drawPerson(game.player.x, game.player.y, game.player.model, { moving: game.player.moving, seed: game.player.animSeed, isPlayer: true, facing: game.player.facing });
   drawSoftLight(game.player.x, game.player.y, TILE * 4.4, "#f3d6a9", 0.42);
-  drawActiveBubble();
+  ctx.restore();
+
+  drawWorldFrame(camera, areaContext);
+  drawMiniMap(areaContext);
+  for (const g of game.guests) {
+    if (!g.alive) continue;
+    if (!canPlayerSee(g.x, g.y)) continue;
+    if (game.started && distance(game.player, g) < 1.8) {
+      const labelPos = worldToScreen(camera, g.x, g.y - 1);
+      drawName(g.name, labelPos.x / TILE, labelPos.y / TILE);
+    }
+  }
+  drawActiveBubble(camera);
   drawPostProcessOverlay();
-  drawCanvasHud(playerRoom);
+  drawCanvasHud(areaContext);
 
   if (!game.started) {
     drawIntroOverlay();
@@ -2139,12 +2973,75 @@ function drawWorld() {
       4,
     );
     ctx.fillStyle = "#f8f2df";
+    const endingLineHeight = pixelTextLineHeight(1, 1);
     for (let i = 0; i < endingLines.length; i++) {
-      drawPixelText(endingLines[i], panelX + 10, panelY + 11 + i * 9, 1);
+      drawPixelText(endingLines[i], panelX + 10, panelY + 11 + i * endingLineHeight, 1);
     }
     ctx.fillStyle = "#f0d08e";
     drawPixelText("PRESS R TO RESTART", panelX + 10, panelY + panelH - 14, 1);
   }
+}
+
+function drawWorldFrame(camera, areaContext) {
+  const panelX = Math.max(4, camera.offsetX - 6);
+  const panelY = Math.max(4, camera.offsetY - 6);
+  const panelW = Math.min(W - panelX * 2, Math.ceil(camera.viewW * camera.scale) + 12);
+  const panelH = Math.min(H - panelY * 2, Math.ceil(camera.viewH * camera.scale) + 12);
+  const atmos = ROOM_ATMOSPHERE[areaContext.primaryRoom ? areaContext.primaryRoom.type : "study"] || ROOM_ATMOSPHERE.study;
+  const glow = hexToRgb(atmos.glow);
+
+  if (glow) {
+    const frameGlow = ctx.createLinearGradient(panelX, panelY, panelX + panelW, panelY + panelH);
+    frameGlow.addColorStop(0, `rgba(${glow.r}, ${glow.g}, ${glow.b}, 0.16)`);
+    frameGlow.addColorStop(1, "rgba(15, 18, 29, 0.04)");
+    ctx.fillStyle = frameGlow;
+    ctx.fillRect(panelX - 2, panelY - 2, panelW + 4, panelH + 4);
+  }
+
+  ctx.strokeStyle = "rgba(244, 223, 176, 0.34)";
+  ctx.strokeRect(panelX - 0.5, panelY - 0.5, panelW + 1, panelH + 1);
+  ctx.strokeStyle = "rgba(207, 223, 255, 0.18)";
+  ctx.strokeRect(panelX + 2.5, panelY + 2.5, panelW - 5, panelH - 5);
+}
+
+function drawMiniMap(areaContext) {
+  const plateW = 112;
+  const plateH = 78;
+  const plateX = W - plateW - 8;
+  const plateY = 8;
+  const mapX = plateX + 8;
+  const mapY = plateY + 14;
+  const mapW = plateW - 16;
+  const mapH = plateH - 22;
+  const scale = Math.min(mapW / (WORLD_W * TILE), mapH / (WORLD_H * TILE));
+
+  drawHudPlate(plateX, plateY, plateW, plateH, "rgba(7, 10, 20, 0.76)", "rgba(214, 188, 131, 0.26)");
+  ctx.fillStyle = "#f4dfb0";
+  drawPixelText("PLAN", plateX + 8, plateY + 5, 1);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(mapX, mapY, mapW, mapH);
+  ctx.clip();
+  ctx.translate(mapX, mapY);
+  ctx.scale(scale, scale);
+  drawMansionLayout();
+
+  ctx.fillStyle = "rgba(5, 8, 14, 0.52)";
+  for (const room of game.rooms) {
+    if (areaContext.currentRoom && room.id === areaContext.currentRoom.id) continue;
+    ctx.fillRect(room.x * TILE, room.y * TILE, room.w * TILE, room.h * TILE);
+  }
+
+  if (areaContext.currentRoom) {
+    ctx.strokeStyle = "rgba(244, 223, 176, 0.92)";
+    ctx.lineWidth = Math.max(1 / scale, 1.2);
+    ctx.strokeRect(areaContext.currentRoom.x * TILE + 1, areaContext.currentRoom.y * TILE + 1, areaContext.currentRoom.w * TILE - 2, areaContext.currentRoom.h * TILE - 2);
+  }
+
+  ctx.fillStyle = "#f7ebc2";
+  ctx.fillRect(game.player.x * TILE - 2, game.player.y * TILE - 2, 4, 4);
+  ctx.restore();
 }
 
 function drawSceneBackdrop() {
@@ -2275,9 +3172,11 @@ function drawSoftLight(worldX, worldY, radius, colorHex, alpha) {
   ctx.restore();
 }
 
-function drawAtmosphericParticles(playerRoom) {
+function drawAtmosphericParticles(areaContext) {
+  const allowedRoomIds = new Set(areaContext.nearbyRooms.map((room) => room.id));
   for (const p of game.atmosphericParticles) {
-    if (playerRoom && p.roomId !== -1 && p.roomId !== playerRoom.id) continue;
+    if (areaContext.currentRoom && p.roomId !== -1 && p.roomId !== areaContext.currentRoom.id) continue;
+    if (!areaContext.currentRoom && p.roomId !== -1 && !allowedRoomIds.has(p.roomId)) continue;
     if (!canPlayerSee(p.x, p.y)) continue;
     const px0 = Math.floor(p.x * TILE);
     const py0 = Math.floor(p.y * TILE);
@@ -2320,8 +3219,8 @@ function drawHudPlate(x, y, w, h, fill = "rgba(7, 10, 20, 0.78)", stroke = "rgba
   ctx.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5);
 }
 
-function drawCanvasHud(playerRoom) {
-  const roomName = sanitizePixelText((playerRoom ? playerRoom.name : "Hallway").toUpperCase());
+function drawCanvasHud(areaContext) {
+  const roomName = sanitizePixelText(areaContext.locationLabel.toUpperCase());
   const actionableGuest = game.started && !game.over ? getNearestActionableGuest() : null;
   const roomPlateWidth = Math.min(W - 16, pixelTextWidth(roomName, 1) + 18);
   drawHudPlate(8, 8, roomPlateWidth, 16, "rgba(7, 10, 20, 0.72)", "rgba(214, 188, 131, 0.38)");
@@ -2347,12 +3246,13 @@ function drawCanvasHud(playerRoom) {
     W - 28,
     2,
   );
-  const footerHeight = 12 + footerLines.length * 8;
+  const footerLineHeight = pixelTextLineHeight(1);
+  const footerHeight = 12 + footerLines.length * footerLineHeight;
   const footerY = H - footerHeight - 8;
   drawHudPlate(8, footerY, W - 16, footerHeight, "rgba(7, 10, 20, 0.78)", "rgba(207, 223, 255, 0.24)");
   ctx.fillStyle = game.started ? "#dfe7f7" : "#f4dfb0";
   for (let i = 0; i < footerLines.length; i++) {
-    drawPixelText(footerLines[i], 14, footerY + 8 + i * 8, 1);
+    drawPixelText(footerLines[i], 14, footerY + 8 + i * footerLineHeight, 1);
   }
 }
 
@@ -2387,7 +3287,7 @@ function drawIntroOverlay() {
   drawPixelText("PRESS E TO INTERROGATE. PRESS C TO ACCUSE.", panelX + 18, panelY + panelH - 18, 1);
 }
 
-function drawActiveBubble() {
+function drawActiveBubble(camera) {
   if (!game.activeBubble) return;
   const bubble = game.activeBubble;
   if (bubble.ttl <= 0) return;
@@ -2395,6 +3295,9 @@ function drawActiveBubble() {
   const speaker = game.guests.find((g) => g.id === bubble.speakerId);
   if (!speaker || !speaker.alive) return;
   if (!canPlayerSee(speaker.x, speaker.y)) return;
+  if (!camera) return;
+
+  const anchor = worldToScreen(camera, speaker.x, speaker.y);
 
   const textScale = 2;
   const padX = px(3);
@@ -2403,16 +3306,16 @@ function drawActiveBubble() {
   const maxTextWidth = Math.floor(W * 0.62);
   const lines = wrapBubbleTextPixels(bubble.text.toUpperCase(), textScale, maxTextWidth, 6);
   const textWidth = Math.max(20, ...lines.map((line) => pixelTextWidth(line, textScale)));
-  const lineHeight = 7 * textScale + lineGap;
+  const lineHeight = pixelTextLineHeight(textScale, lineGap);
   const textHeight = lines.length * lineHeight - lineGap;
   const bw = textWidth + padX * 2;
   const bh = textHeight + padY * 2;
 
-  let bx = Math.floor(speaker.x * TILE - bw / 2);
-  let by = Math.floor(speaker.y * TILE - bh - px(10));
+  let bx = Math.floor(anchor.x - bw / 2);
+  let by = Math.floor(anchor.y - bh - px(10));
   let bubbleBelow = false;
   if (by < 2) {
-    by = Math.floor(speaker.y * TILE + px(7));
+    by = Math.floor(anchor.y + px(7));
     bubbleBelow = true;
   }
   bx = Math.max(2, Math.min(W - bw - 2, bx));
@@ -2423,8 +3326,8 @@ function drawActiveBubble() {
     by,
     bw,
     bh,
-    Math.floor(speaker.x * TILE),
-    Math.floor(speaker.y * TILE),
+    Math.floor(anchor.x),
+    Math.floor(anchor.y),
     bubbleBelow,
   );
 
@@ -2525,10 +3428,11 @@ function roundedRectPath(x, y, w, h, r) {
   ctx.closePath();
 }
 
-function drawFurnishings(playerRoom) {
-  if (!playerRoom) return;
+function drawFurnishings(areaContext) {
+  const detailRoomIds = new Set(areaContext.nearbyRooms.map((room) => room.id));
+  if (detailRoomIds.size === 0) return;
   for (const item of game.furnishings) {
-    if (item.roomId !== playerRoom.id) continue;
+    if (!detailRoomIds.has(item.roomId)) continue;
     if (!item.wallMounted) {
       const offset = px(1);
       ctx.fillStyle = "rgba(0,0,0,0.28)";
@@ -2538,20 +3442,44 @@ function drawFurnishings(playerRoom) {
   }
 }
 
-function drawNavigationHints(playerRoom) {
+function drawNavigationHints(areaContext) {
   const midX = Math.floor(WORLD_W / 2);
   const midY = Math.floor(WORLD_H / 2);
   const u = pxUnit();
+  const detailRoomIds = new Set(areaContext.nearbyRooms.map((room) => room.id));
 
   for (let y = 0; y < WORLD_H; y++) {
     for (let x = 0; x < WORLD_W; x++) {
       if (!isWalkableTile(x, y)) continue;
       const tileRoom = roomAt(x + 0.5, y + 0.5);
-      if (tileRoom && (!playerRoom || tileRoom.id !== playerRoom.id)) continue;
+      if (tileRoom && !detailRoomIds.has(tileRoom.id)) continue;
 
       const px0 = x * TILE;
       const py0 = y * TILE;
       const onMainCorridor = x === midX || x === midX + 1 || y === midY || y === midY + 1;
+      const focusRoom = areaContext.currentRoom && tileRoom && tileRoom.id === areaContext.currentRoom.id ? areaContext.currentRoom : null;
+      const onRoomSpine = focusRoom && (x === focusRoom.cx || y === focusRoom.cy);
+      const onThreshold = focusRoom && (
+        (x === focusRoom.cx && (y === focusRoom.y || y === focusRoom.y + focusRoom.h - 1)) ||
+        (y === focusRoom.cy && (x === focusRoom.x || x === focusRoom.x + focusRoom.w - 1))
+      );
+
+      if (onThreshold) {
+        ctx.fillStyle = "rgba(245, 228, 175, 0.34)";
+        ctx.fillRect(px0 + u, py0 + u, TILE - 2 * u, TILE - 2 * u);
+        ctx.fillStyle = "rgba(255,255,255,0.22)";
+        ctx.fillRect(px0 + 2 * u, py0 + 2 * u, TILE - 4 * u, u);
+        continue;
+      }
+
+      if (onRoomSpine) {
+        ctx.fillStyle = "rgba(238, 208, 145, 0.18)";
+        ctx.fillRect(px0 + u, py0 + u, TILE - 2 * u, TILE - 2 * u);
+        ctx.fillStyle = "rgba(255,243,212,0.1)";
+        ctx.fillRect(px0 + TILE / 2 - u / 2, py0 + u, u, TILE - 2 * u);
+        ctx.fillRect(px0 + u, py0 + TILE / 2 - u / 2, TILE - 2 * u, u);
+        continue;
+      }
 
       if (onMainCorridor) {
         ctx.fillStyle = "rgba(160,205,255,0.20)";
@@ -2697,6 +3625,10 @@ function drawFurniture(item) {
     drawCasedBlock(item.color, "#213728", "rgba(255,255,255,0.08)");
     ctx.fillStyle = item.kind === "planter_box" ? "#4f3c29" : "#30553c";
     ctx.fillRect(px + u, py + ph - 2 * u, innerW, u);
+    if (item.kind === "planter_box") {
+      ctx.fillStyle = "#826346";
+      ctx.fillRect(px + u, py + ph - 3 * u, innerW, u);
+    }
     for (let x = px + u; x < px + pw - u; x += 2 * u) {
       const n = tileNoise(Math.floor(x / u), item.y, item.roomId);
       ctx.fillStyle = n & 1 ? "#5aa873" : "#4f8b5e";
@@ -2784,9 +3716,14 @@ function drawFurniture(item) {
     ctx.fillStyle = "#c79b70";
     ctx.fillRect(px + u, py + ph - 2 * u, innerW, u);
     if (item.kind === "chair") {
-      ctx.fillRect(px + u, py + u, innerW, u);
+      ctx.fillRect(px + 2 * u, py + u, Math.max(u, pw - 4 * u), u);
+      ctx.fillStyle = "#7d5d45";
+      ctx.fillRect(px + 2 * u, py + 2 * u, u, Math.max(u, ph - 4 * u));
+      ctx.fillRect(px + pw - 3 * u, py + 2 * u, u, Math.max(u, ph - 4 * u));
     } else {
       ctx.fillRect(px + u, py + 2 * u, innerW, u);
+      ctx.fillStyle = "#7d5d45";
+      ctx.fillRect(px + 2 * u, py + 3 * u, Math.max(u, pw - 4 * u), u);
     }
     return;
   }
@@ -2806,6 +3743,8 @@ function drawFurniture(item) {
     drawCasedBlock(item.color, "#3b2b22", "rgba(255,255,255,0.09)");
     ctx.fillStyle = "#d6c3aa";
     ctx.fillRect(px + u, py + u, innerW, u);
+    ctx.fillStyle = "#765d4b";
+    ctx.fillRect(px + 2 * u, py + 2 * u, Math.max(u, pw - 4 * u), Math.max(u, ph - 4 * u));
     if (item.kind === "vanity") {
       ctx.fillStyle = "#86a3b8";
       ctx.fillRect(px + pw / 2 - 2 * u, py - u, 4 * u, 2 * u);
@@ -2829,6 +3768,8 @@ function drawFurniture(item) {
 
   if (item.kind === "pedestal" || item.kind === "statue") {
     drawCasedBlock("#8a9196", "#4f555c", "rgba(255,255,255,0.1)");
+    ctx.fillStyle = "#dce3e8";
+    ctx.fillRect(px + u, py + u, innerW, u);
     ctx.fillStyle = "#b6bec4";
     ctx.fillRect(px + 2 * u, py + u, Math.max(u, pw - 4 * u), Math.max(u, ph - 3 * u));
     ctx.fillStyle = "#d2d9df";
@@ -2976,7 +3917,7 @@ function drawName(text, x, y) {
   const paddingX = 2;
   const paddingY = 2;
   const boxW = textWidth + paddingX * 2;
-  const boxH = 7 * scale + paddingY * 2;
+  const boxH = pixelTextGlyphHeight(scale) + paddingY * 2;
   const px = Math.floor(x * TILE - boxW / 2);
   const py = Math.floor(y * TILE - boxH - 1);
 
@@ -2990,7 +3931,7 @@ function drawName(text, x, y) {
 }
 
 function pixelTextWidth(text, scale = 1) {
-  const letterSpacing = Math.max(0, scale - 1);
+  const letterSpacing = pixelTextLetterSpacing(scale);
   let width = 0;
   for (let i = 0; i < text.length; i++) {
     const glyph = PIXEL_FONT[text[i]] || PIXEL_FONT["?"];
@@ -3004,7 +3945,7 @@ function pixelTextWidth(text, scale = 1) {
 }
 
 function drawPixelText(text, x, y, scale = 1) {
-  const letterSpacing = Math.max(0, scale - 1);
+  const letterSpacing = pixelTextLetterSpacing(scale);
   let cursorX = Math.floor(x);
   const baseY = Math.floor(y);
 
@@ -3024,6 +3965,18 @@ function drawPixelText(text, x, y, scale = 1) {
     }
     cursorX += glyph[0].length * scale + letterSpacing;
   }
+}
+
+function pixelTextGlyphHeight(scale = 1) {
+  return PIXEL_FONT["A"].length * scale;
+}
+
+function pixelTextLetterSpacing(scale = 1) {
+  return Math.max(1, Math.round(scale * 0.75));
+}
+
+function pixelTextLineHeight(scale = 1, extraGap = 0) {
+  return pixelTextGlyphHeight(scale) + Math.max(1, Math.floor(scale / 2)) + extraGap;
 }
 
 function sanitizePixelText(text) {
@@ -3121,6 +4074,7 @@ function frame(now) {
     stepGame(dt);
   }
 
+  updateCamera(getPlayerAreaContext(), dt);
   drawWorld();
   updateUI();
   requestAnimationFrame(frame);
@@ -3202,7 +4156,8 @@ function randRange(min, max) {
 }
 
 function renderGameToText() {
-  const currentRoom = roomAt(game.player.x, game.player.y);
+  const areaContext = getPlayerAreaContext();
+  const currentRoom = areaContext.currentRoom;
   const actionableGuest = game.started && !game.over ? getNearestActionableGuest() : null;
   const guestActivityCounts = game.guests.reduce((acc, g) => {
     const key = g.activity || "roaming";
@@ -3215,6 +4170,8 @@ function renderGameToText() {
     .map((g) => ({
       id: g.id,
       name: g.name,
+      role: g.persona.role,
+      personality: g.personality,
       x: Number(g.x.toFixed(2)),
       y: Number(g.y.toFixed(2)),
       moving: g.moving,
@@ -3234,17 +4191,20 @@ function renderGameToText() {
     mode: !game.started ? "intro" : (game.over ? "game_over" : (game.conversation.active ? "conversation" : "investigation")),
     time: formatClock(game.minutes),
     started: game.started,
+    audio: music ? music.getSnapshot() : { supported: false, state: "missing" },
     player: {
       x: Number(game.player.x.toFixed(2)),
       y: Number(game.player.y.toFixed(2)),
       moving: game.player.moving,
-      room: currentRoom ? currentRoom.name : "Hallway",
+      room: areaContext.locationLabel,
     },
-    roomBrief: ROOM_BRIEFS[currentRoom ? currentRoom.name : "Hallway"] || ROOM_BRIEFS.Hallway,
+    roomBrief: areaContext.roomBrief,
     conversation: game.conversation.active
       ? {
         guestId: game.conversation.guestId,
         guestName: game.guests[game.conversation.guestId] ? game.guests[game.conversation.guestId].name : null,
+        guestRole: game.guests[game.conversation.guestId] ? game.guests[game.conversation.guestId].persona.role : null,
+        questions: (game.conversation.questions || []).map((question) => question.label),
       }
       : null,
     nearbyGuest: actionableGuest
@@ -3273,6 +4233,7 @@ async function advanceTime(ms) {
   const steps = Math.max(1, Math.round(ms / frameMs));
   for (let i = 0; i < steps; i++) {
     stepGame(FIXED_DT);
+    updateCamera(getPlayerAreaContext(), FIXED_DT);
   }
   drawWorld();
   updateUI();

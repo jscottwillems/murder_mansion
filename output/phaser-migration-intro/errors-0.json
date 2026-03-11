@@ -1,0 +1,6 @@
+[
+  {
+    "type": "pageerror",
+    "text": "SyntaxError: The requested module '/node_modules/phaser/dist/phaser.esm.js' does not provide an export named 'default'"
+  }
+]

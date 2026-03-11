@@ -170,3 +170,202 @@ Original prompt: I want you to focus on vastly improving the appearance and styl
     - `node --check game.js` passed.
     - Playwright capture: `output/character-pass`
     - No `errors-*.json` artifacts were emitted in this pass.
+
+- March 7, 2026 room legibility + navigation pass (in progress):
+  - Reworked the main canvas from an always-full-mansion view to a room-focused camera with a `PLAN` minimap, so current-room decor and walking space read at a much larger scale.
+  - Rebuilt room furnishing layouts around perimeter blockers and preserved center cross-lanes aligned to each room's door thresholds.
+  - Added stronger in-room route highlighting for thresholds and main room spines so traversable paths are visually obvious.
+  - Tweaked prop rendering contrast for small furniture/decor pieces and reduced `PLAYER_COLLISION_RADIUS` from `0.38` to `0.36` for smoother maneuvering.
+  - Updated spawn preference to favor the room center/doorway spine, and moved the Study desk off the initial eastbound route to reduce immediate snagging.
+  - Validation so far:
+    - `node --check game.js`
+    - `node --check web_game_playwright_client.js`
+    - `node --check pixel_art.js`
+    - Playwright capture: `output/room-focus-check`
+    - Playwright traversal capture: `output/room-traverse-camera`
+    - No `errors-*.json` or `page-errors-*.json` artifacts were emitted in those validated runs.
+  - Visual verification notes:
+    - `output/room-focus-check/shot-0.png` confirms the room camera makes Study furnishings legible and the minimap preserves overall orientation.
+    - `output/room-traverse-camera/shot-0.png` and `shot-1.png` confirm the player reaches the Gallery cleanly and room routes remain readable while guests move through the space.
+  - Harness note:
+    - Longer multi-iteration traversal jobs wrote partial/usable artifacts but did not return promptly through the session wrapper, so the shorter validated traversal run is the reliable reference artifact for this pass.
+
+- March 8, 2026 conversation-system overhaul:
+  - Replaced the single global question list with profile-driven interview topics and per-conversation prompt generation.
+  - Added ten distinct guest archetypes (role + tone + opening/repeat language + room/social/pressure voice), shuffled per run so the same named guest can feel different across playthroughs.
+  - Added dynamic interview question selection from broader topic coverage (`timeline`, `suspicion`, `intel`, `alibi`, `room`, `pressure`, `social`, `victim`) while preserving the `1-4` control scheme.
+  - Reworked answers so guests now respond in their own voice, with personality-aware openings/deflections and context-sensitive content rather than one flat template set.
+  - Updated investigation UI/state output to expose guest role/personality and active conversation prompts.
+  - Validation:
+    - `node --check game.js` passed.
+    - Playwright intro/state capture: `output/dialogue-refresh-intro`
+    - Playwright conversation capture: `output/dialogue-refresh`
+    - Multi-run freshness capture: `output/dialogue-refresh-2`
+    - No `errors-*.json` or `page-errors-*.json` artifacts were emitted in the new conversation validation runs.
+  - Follow-up option:
+    - If another pass is requested, add relationship-specific grudges/alliances so accusations and room gossip reflect who each guest actually likes, fears, or envies.
+
+- March 8, 2026 passageway de-emphasis pass:
+  - Hallways no longer behave like miniature featured rooms in the camera/UI layer.
+  - Added player-area context helpers so when the detective is in a corridor, the camera widens to include the connected nearby rooms instead of collapsing onto a tiny hallway-only view.
+  - Corridor visibility now inherits the nearest connected rooms, so the player can still read the adjoining spaces while passing through.
+  - In hallway context, the HUD/render text now uses `Passageway` with a short transit-oriented brief instead of treating the corridor like a named featured location.
+  - Room detail rendering in corridor context now includes the adjacent rooms' furnishings/particles, while corridor hints remain the main emphasis.
+  - Validation:
+    - `node --check game.js`
+    - `node --check web_game_playwright_client.js`
+    - Playwright corridor capture: `output/passageway-center-2`
+    - Playwright room follow-up capture: `output/passageway-room-pass`
+    - No `errors-*.json` or `page-errors-*.json` artifacts were emitted in these runs.
+  - Visual verification notes:
+ 
+- March 8, 2026 Phaser/Vite/TypeScript migration (in progress):
+  - Installed `phaser`, `vite`, `typescript`, and `@types/node`; updated `package.json` scripts to use Vite on port `4173`.
+  - Added `tsconfig.json`, `vite.config.ts`, and a new `src/` app entry with Phaser scene/config scaffolding.
+  - Replaced the hand-authored root `<canvas>` mount in `index.html` with a Phaser host container while preserving the existing UI shell and CSS treatment.
+  - Copied legacy runtime assets into `src/game/legacy/` and began converting `music.js`, `pixel_art.js`, and `game.js` into importable modules that Phaser can host.
+  - Added a debug bridge so `window.render_game_to_text` and `window.advanceTime(ms)` can survive the framework migration.
+  - Stabilized the legacy-runtime wrapper and added a browser-native ES module entrypoint (`src/main.js`) that loads Phaser directly from `/node_modules/phaser/dist/phaser.esm.js` for static-server verification.
+  - Switched Phaser to the canvas renderer and fixed canvas sizing so Playwright captures the actual game viewport instead of a black/oversized resize canvas.
+  - Validation:
+    - `node --check src/main.js`
+    - `node --check src/game/config.js`
+    - `node --check src/game/debug/debugBridge.js`
+    - `node --check src/game/scenes/InvestigationScene.js`
+    - `npx tsc --noEmit`
+    - Playwright intro capture: `output/phaser-migration-intro-4`
+    - Playwright gameplay capture: `output/phaser-migration-move`
+    - No `errors-*.json` or `page-errors-*.json` artifacts were emitted in the successful gameplay capture.
+  - Caveat:
+    - `vite build` and `vite dev` both stalled in the sandbox, so the verified runtime path currently uses the static server scripts (`npm run dev` / `npm start`) with browser-native ES modules. The Vite config remains in-repo for follow-up investigation outside this sandbox.
+
+- March 8, 2026 movement regression fix after framework update:
+  - Identified the cause of slow movement in the Phaser migration: the legacy runtime was still running its own `requestAnimationFrame` loop while `InvestigationScene.update()` also called `runtime.tick(...)`, effectively splitting frame deltas across two clocks.
+  - Added `autoStartLoop` to `createLegacyGameRuntime(...)`, disabled the internal loop for the Phaser-hosted runtime, and kept the legacy self-driven mode available for non-Phaser use.
+  - Updated the Phaser scene to pass `autoStartLoop: false` and use Phaser's provided frame timestamp for `runtime.tick(time)`.
+  - Validation:
+    - `node --check src/game/legacy/runtime.js`
+    - `node --check src/game/scenes/InvestigationScene.js`
+    - `npx tsc --noEmit`
+    - Playwright live capture: `output/movement-speed-regression`
+    - Playwright baseline capture: `output/movement-speed-baseline`
+    - Playwright 60-frame movement metric: `output/movement-speed-metric`
+  - Verification notes:
+    - No `errors-*.json` or `page-errors-*.json` artifacts were emitted in the new movement validation runs.
+    - Baseline state after starting the game placed the detective at `x: 7.5`, `y: 4.5` in the Study.
+    - After a focused 60-frame right-move burst, the detective reached `x: 13.5`, `y: 4.5`, which is a 6-tile traversal and matches the intended `speed * dt * 6` movement model.
+    - `output/passageway-center-2/shot-0.png` shows the new passageway framing: the corridor is generic while the rooms above/below provide the visual focus.
+    - `output/passageway-room-pass/shot-0.png` confirms room framing still behaves correctly once the player exits the corridor.
+
+- March 8, 2026 smooth room-to-room camera follow-up:
+  - Replaced corridor-targeted camera logic with a sticky room anchor (`game.camera.focusRoomId`) so passageways do not become their own camera focus.
+  - Added camera interpolation (`updateCamera(...)`) so when the focus changes from one room to the next, the pan/scale transition is smoothed instead of snapping.
+  - Corridors now keep the last focused room framing until the detective properly enters the next room, which preserves motion continuity while walking through thresholds.
+  - Validation:
+    - `node --check game.js`
+    - `node --check web_game_playwright_client.js`
+    - Playwright passageway capture: `output/camera-smooth-passage`
+    - Playwright destination room capture: `output/camera-smooth-room`
+    - No `errors-*.json` or `page-errors-*.json` artifacts were emitted in these runs.
+  - Visual verification notes:
+    - `output/camera-smooth-passage/shot-0.png` shows the detective in a `Passageway` while the camera still holds the Study frame instead of zooming onto the corridor.
+    - `output/camera-smooth-room/shot-0.png` confirms the camera hands off cleanly once the player reaches the Gallery.
+
+- March 8, 2026 typography readability pass (in progress):
+  - Increased DOM UI tracking/line-height for the most compressed small-copy regions: dialogue, prompts, case notes, roster metadata, roster tags, and the bottom control strip.
+  - Updated pixel-font metrics in `game.js` so scale-1 canvas text now renders with a real inter-letter gap instead of zero spacing.
+  - Adjusted HUD/game-over/bubble line-height calculations to match the wider pixel text and prevent overlap after the spacing change.
+  - Added an inline favicon in `index.html` to eliminate the new `/favicon.ico` 404 reported during Playwright validation.
+  - Validation:
+    - `node --check game.js`
+    - `node --check pixel_art.js`
+    - `node --check web_game_playwright_client.js`
+    - Playwright intro capture: `output/typography-intro`
+    - Playwright gameplay capture: `output/typography-live`
+    - Clean follow-up gameplay capture after favicon fix: `output/typography-live-clean`
+    - Full-page shell screenshot: `output/layout-space-full.png`
+    - Final clean run emitted no `errors-*.json` artifact.
+  - Visual verification notes:
+    - The intro overlay and canvas footer now have visible inter-letter breathing room at scale-1, which materially improves readability.
+    - The dialogue/questions/case-notes/roster text in the shell reads less cramped after the DOM tracking and line-height adjustments.
+
+- March 8, 2026 ambient music pass:
+  - Added a new browser-side procedural soundtrack engine in `music.js` using the Web Audio API. The score layers soft pad chords, restrained bass pulses, and sparse bell motifs to keep the mood mysterious without becoming fatiguing over long play sessions.
+  - Wired the music engine into `game.js` so it:
+    - unlocks on the first key press or canvas click (autoplay-safe),
+    - shifts between `intro`, `investigation`, `focus`, and `coda` moods based on game state,
+    - supports mute/unmute on `M`,
+    - exposes audio state through both the top-shell `Audio` chip and `render_game_to_text`.
+  - Updated `index.html` and `style.css` to surface the new audio status readout and document the `M` control in the control strip.
+  - Validation:
+    - `node --check game.js`
+    - `node --check music.js`
+    - `node --check web_game_playwright_client.js`
+    - Elevated Playwright verification capture: `output/music-verify`
+    - `output/music-verify/meta.json` reports `audioStatus: "Investigation loop | B-flat major 7"` with empty `consoleErrors` and `pageErrors`.
+  - Verification notes:
+    - `output/music-verify/state-0.json` confirms the soundtrack is `supported`, `unlocked`, `muted: false`, and `state: "running"` during live gameplay.
+    - `output/music-verify/shot-0.png` confirms gameplay visuals remained intact after the audio integration.
+  - Harness note:
+    - The local `web_game_playwright_client.js` still exhibits the previously observed wrapper-hang behavior in this workspace, so the direct elevated Playwright probe is the reliable artifact for this pass.
+
+- March 8, 2026 ambient music audibility fix:
+  - Raised the overall soundtrack gain staging in `music.js`; the previous mix was running, but it was too quiet to be reliable in normal desktop playback.
+  - Added a short unlock confirmation cue so the first successful audio activation is immediately audible.
+  - Expanded the unlock gesture handling in `game.js` from canvas-only click to any `pointerdown`, so clicking anywhere in the shell now starts audio.
+  - Updated the idle audio prompt text to explicitly say `Click anywhere or press any key to start`.
+  - Validation:
+    - `node --check music.js`
+    - `node --check game.js`
+    - Elevated browser verification: `output/music-verify-2`
+    - `output/music-verify-2/meta.json` confirms the sequence:
+      - before interaction: `Click anywhere or press any key to start`
+    - after a normal click: `Standby cue | B-flat major 7`
+    - after starting the game: `Investigation loop | B-flat major 7`
+    - No console or page errors were reported in that run.
+
+- March 8, 2026 ambient music missing-file fix:
+  - Root cause for the latest `still no music` report: `index.html` was still loading `music.js`, but `music.js` itself was no longer present in the workspace, so the page had no music engine to activate.
+  - Restored `music.js` with a simpler playback architecture:
+    - pre-rendered looping ambient buffer instead of a live note scheduler,
+    - same public API (`activate`, `setScene`, `toggleMute`, status snapshot helpers) so `game.js` integration stayed intact,
+    - explicit unlock cue and scene-based filtering/volume changes preserved.
+  - Validation:
+    - `node --check music.js`
+    - `node --check game.js`
+    - Elevated browser verification: `output/music-verify-2`
+    - `output/music-verify-2/meta.json` confirms:
+      - before interaction: `Click anywhere or press any key to start`
+      - after click: `Standby cue | B-flat major 7`
+      - after starting the game: `Investigation loop | B-flat major 7`
+    - `output/music-verify-2/state-0.json` confirms `audio.state: "running"` with `supported: true`, `unlocked: true`, and `muted: false`.
+  - Harness note:
+    - The local Playwright action client continues to create empty target directories before hanging in this workspace; direct elevated browser probes remain the reliable validation path for the audio feature.
+
+- March 8, 2026 character-model visual overhaul:
+  - Replaced the single shared guest/detective sprite family in `src/game/legacy/runtime.js` with layered character rendering:
+    - new silhouette families (`tailored`, `dress`, `cloak`, `uniform`, `trench`),
+    - reusable hair, headwear, accessory, glasses, and mustache overlays,
+    - richer per-model palette data (`secondary`, `trim`, `prop`, `metal`, glow, shadow width).
+  - Added role-driven visual profiles for all guest archetypes so their designs now reflect their identity:
+    - columnist: sharp tailored look + fascinator/lapel styling,
+    - surgeon/accountant: cleaner professional silhouettes and eyewear,
+    - curator/debutante/vocalist: softer dress silhouettes with distinct accessories,
+    - magician/antiquarian: broader cloak-based silhouettes,
+    - correspondent/chauffeur: uniform-based silhouettes and practical accessories,
+    - detective: bespoke trench/fedora/notebook profile instead of the old palette-swapped guest body.
+  - Updated guest model generation to derive visuals from each archetype instead of index-only hat/glasses toggles.
+  - Added subtle per-guest glow so different characters separate more clearly from the room backgrounds during gameplay.
+  - Validation:
+    - `node --check src/game/legacy/runtime.js`
+    - `npm run build`
+    - Playwright intro capture: `output/character-overhaul-intro`
+    - Playwright traversal capture: `output/character-overhaul-traverse`
+    - Playwright room sweep: `output/character-overhaul-sweep`
+    - Full-page shell screenshot: `output/layout-space-full.png`
+    - No `errors-*.json` or `page-errors-*.json` artifacts were emitted in the new character-overhaul captures.
+  - Visual verification notes:
+    - `output/character-overhaul-sweep/shot-1.png` shows multiple on-screen characters with clearly different silhouettes/outfit families inside the Master Suite.
+    - `output/layout-space-full.png` confirms the roster labels and the in-world cast presentation remain aligned after the redesign.
+  - Harness note:
+    - The local Playwright client still returns through the wrapper unevenly on longer sweeps, but the screenshots/state files written during the run were valid and were inspected directly.

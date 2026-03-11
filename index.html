@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Murder Mansion</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2305060b'/%3E%3Cpath d='M3 13V3h2l3 4 3-4h2v10h-2V6l-3 4-3-4v7z' fill='%23d7b06b'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -30,11 +31,16 @@
               <p class="chip-label">Room Brief</p>
               <div id="room-brief"></div>
             </div>
+            <div class="chip">
+              <p class="chip-label">Audio</p>
+              <div id="audio-status"></div>
+              <button id="audio-toggle" class="chip-button" type="button">Start Music</button>
+            </div>
           </div>
         </header>
 
         <section class="stage-canvas-wrap" aria-label="Gameplay viewport">
-          <canvas id="game" width="480" height="288" aria-label="Murder Mansion game canvas"></canvas>
+          <div id="phaser-game" class="game-host" aria-label="Murder Mansion game canvas"></div>
         </section>
 
         <aside class="stage-side" aria-label="Roster panel">
@@ -56,12 +62,11 @@
             <div id="case-notes"></div>
           </div>
           <div class="control-strip" aria-label="Controls">
-            WASD/Arrows move · Enter/Space begin · E talk · 1-4 ask · Esc end · C accuse · F fullscreen · R restart
+            WASD/Arrows move · Enter/Space begin · E talk · 1-4 ask · Esc end · C accuse · M mute · F fullscreen · R restart
           </div>
         </section>
       </section>
     </main>
-    <script src="pixel_art.js"></script>
-    <script src="game.js"></script>
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>
