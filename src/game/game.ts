@@ -260,6 +260,8 @@ export class Game {
     const evidence = EVIDENCE_BY_ID[body.evidenceId]
     if (!evidence) return
     body.evidenceInvestigated = true
+    this.world.faceActorAt('player', body.x, body.z)
+    this.world.playActorAction('player', 'investigate')
     this.world.replaceBodyWithOutline(body.id, body.x, body.z)
     const candidates = evidence.archetypeIds
       .map(id => ARCHETYPES.find(a => a.id === id)?.name)

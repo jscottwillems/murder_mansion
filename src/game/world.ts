@@ -23,13 +23,22 @@ interface Actor {
   targetFacingY: number
   outline: THREE.Group
   outlined: boolean
+  spriteRoot: THREE.Group | null
+  spriteMaterial: THREE.MeshBasicMaterial | null
+  spriteFlip: number
+  spriteAtlas: boolean
+  spriteFrame: number
+  action: 'investigate' | null
+  actionUntil: number
 }
 
 const PIXEL_SCALE = 0.58 // render-target resolution fraction
 const WALL_H = 1.85
 const WALL_T = 0.35
-const CAMERA_HEIGHT = 15.5
-const CAMERA_Z_OFFSET = 8.6
+// A lower, more forward isometric view keeps the full-body portrait sprites
+// readable instead of visually foreshortening them against the floor.
+const CAMERA_HEIGHT = 11.7
+const CAMERA_Z_OFFSET = 10.4
 const ROOM_EDGE_FOCUS_START = 0.52
 const ROOM_EDGE_FOCUS_END = 1.1
 const ROOM_EDGE_PLAYER_WEIGHT = 0.72
@@ -52,7 +61,7 @@ export class MansionScene {
   private actors = new Map<string, Actor>()
   private camTarget = new THREE.Vector3(0, 0, 0)
   private camLook = new THREE.Vector3(0, 0, 0)
-  private camPos = new THREE.Vector3(0, 16, 9)
+  private camPos = new THREE.Vector3(0, CAMERA_HEIGHT, CAMERA_Z_OFFSET)
   private ambient: THREE.AmbientLight
   private moon: THREE.DirectionalLight
   private edgeMat = new THREE.LineBasicMaterial({ color: 0x08070a, transparent: true, opacity: 0.42 })
@@ -89,7 +98,7 @@ export class MansionScene {
     this.labelLayer.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;'
     container.appendChild(this.labelLayer)
 
-    this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 200)
+    this.camera = new THREE.PerspectiveCamera(47, 1, 0.1, 200)
     this.scene.fog = new THREE.FogExp2(0x07070c, 0.012)
     this.scene.background = new THREE.Color(0x07070c)
 
@@ -565,6 +574,8 @@ export class MansionScene {
 
   addActor(id: string, colorNum: number, name: string, isDetective: boolean, archetypeId?: string) {
     const group = new THREE.Group()
+    const modelRoot = new THREE.Group()
+    group.add(modelRoot)
     const outline = new THREE.Group()
     const chalkPoints = [
       [-0.2, -0.9], [-0.36, -0.58], [-0.7, -0.32], [-0.82, -0.08], [-0.69, 0.01],
@@ -592,17 +603,17 @@ export class MansionScene {
       mesh.position.set(x, y, z); parent.add(mesh)
       return mesh
     }
-    const panel = (color: number, top: number, bottom: number, h: number, y: number, z = 0) => cyl(group, color, top, bottom, h, 0, y, z, 4)
+    const panel = (color: number, top: number, bottom: number, h: number, y: number, z = 0) => cyl(modelRoot, color, top, bottom, h, 0, y, z, 4)
     const leftLeg = new THREE.Group(), rightLeg = new THREE.Group(), leftArm = new THREE.Group(), rightArm = new THREE.Group(), prop = new THREE.Group()
     leftLeg.position.set(-0.15, 0.48, 0); rightLeg.position.set(0.15, 0.48, 0)
     leftArm.position.set(-0.34, 0.98, 0); rightArm.position.set(0.34, 0.98, 0)
-    group.add(leftLeg, rightLeg, leftArm, rightArm, prop)
+    modelRoot.add(leftLeg, rightLeg, leftArm, rightArm, prop)
     box(leftLeg, 0x252326, 0.2, 0.72, 0.25, 0, -0.36); box(rightLeg, 0x252326, 0.2, 0.72, 0.25, 0, -0.36)
     box(leftLeg, 0x171719, 0.24, 0.12, 0.34, 0, -0.73, -0.04); box(rightLeg, 0x171719, 0.24, 0.12, 0.34, 0, -0.73, -0.04)
     box(leftArm, colorNum, 0.18, 0.62, 0.22, 0, -0.27); box(rightArm, colorNum, 0.18, 0.62, 0.22, 0, -0.27)
     box(leftArm, 0xcba685, 0.2, 0.15, 0.22, 0, -0.62); box(rightArm, 0xcba685, 0.2, 0.15, 0.22, 0, -0.62)
-    const body = box(group, colorNum, 0.6, 0.78, 0.4, 0, 0.78)
-    const head = box(group, 0xcba685, 0.38, 0.37, 0.34, 0, 1.36, -0.01, 0.74)
+    const body = box(modelRoot, colorNum, 0.6, 0.78, 0.4, 0, 0.78)
+    const head = box(modelRoot, 0xcba685, 0.38, 0.37, 0.34, 0, 1.36, -0.01, 0.74)
     let idleKind = archetypeId || 'detective'
     if (isDetective) {
       idleKind = 'detective'; body.material = this.mat(0x2b2d2c, 0.86)
@@ -685,6 +696,47 @@ export class MansionScene {
           cyl(group,colorNum,.34,.34,.05,0,1.56); cyl(group,colorNum,.2,.22,.22,0,1.68)
       }
     }
+    let spriteRoot: THREE.Group | null = null
+    let spriteMaterial: THREE.MeshBasicMaterial | null = null
+    if (isDetective || archetypeId) {
+      // The portrait cutouts are the actual full-body character art used by the
+      // journal. Keep the old geometry assembled (the animation API still
+      // addresses its pivots) but replace its visible result with the art.
+      for (const child of group.children) child.visible = false
+      spriteRoot = new THREE.Group()
+      const isAtlas = isDetective
+      const texture = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}assets/characters/${isAtlas ? 'detective-atlas' : archetypeId}.png`)
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.minFilter = THREE.LinearFilter
+      texture.magFilter = THREE.NearestFilter
+      if (isAtlas) {
+        texture.wrapS = THREE.RepeatWrapping
+        texture.wrapT = THREE.RepeatWrapping
+        texture.repeat.set(0.25, 0.25)
+        texture.offset.set(0, 0.75)
+      }
+      spriteMaterial = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.08,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      })
+      const sprite = new THREE.Mesh(new THREE.PlaneGeometry(isAtlas ? 2.45 : 1.18, isAtlas ? 2.45 : 2.25), spriteMaterial)
+      sprite.position.y = 1.08
+      sprite.renderOrder = 4
+      spriteRoot.add(sprite)
+      const shadow = new THREE.Mesh(
+        new THREE.CircleGeometry(0.43, 16),
+        new THREE.MeshBasicMaterial({ color: 0x050407, transparent: true, opacity: 0.42, depthWrite: false }),
+      )
+      shadow.scale.y = 0.42
+      shadow.rotation.x = -Math.PI / 2
+      shadow.position.y = 0.018
+      spriteRoot.add(shadow)
+      group.add(spriteRoot)
+    }
     this.scene.add(group)
 
     const label = document.createElement('div')
@@ -692,7 +744,7 @@ export class MansionScene {
     label.style.cssText = `position:absolute;transform:translate(-50%,-100%);font:600 11px Georgia,serif;color:${isDetective ? '#e8d8a0' : '#d8d0c0'};text-shadow:0 1px 3px #000,0 0 6px #000;white-space:nowrap;letter-spacing:0.04em;`
     this.labelLayer.appendChild(label)
 
-    this.actors.set(id, { group, body, head, label, walking: false, dead: false, bob: 0, leftArm, rightArm, leftLeg, rightLeg, prop, idleKind, facingY: 0, targetFacingY: 0, outline, outlined: false })
+    this.actors.set(id, { group, body, head, label, walking: false, dead: false, bob: Math.random() * Math.PI * 2, leftArm, rightArm, leftLeg, rightLeg, prop, idleKind, facingY: 0, targetFacingY: 0, outline, outlined: false, spriteRoot, spriteMaterial, spriteFlip: 1, spriteAtlas: isDetective, spriteFrame: 0, action: null, actionUntil: 0 })
   }
 
   removeAllActors() {
@@ -729,6 +781,21 @@ export class MansionScene {
     if (dx * dx + dz * dz > 0.000001) a.targetFacingY = Math.atan2(-dx, -dz)
   }
 
+  playActorAction(id: string, action: 'investigate', duration = 1.15) {
+    const a = this.actors.get(id)
+    if (!a || a.dead) return
+    a.action = action
+    a.actionUntil = this.time + duration
+  }
+
+  private setSpriteFrame(a: Actor, frame: number) {
+    if (!a.spriteAtlas || !a.spriteMaterial?.map || a.spriteFrame === frame) return
+    a.spriteFrame = frame
+    const col = frame % 4
+    const row = Math.floor(frame / 4)
+    a.spriteMaterial.map.offset.set(col * 0.25, 0.75 - row * 0.25)
+  }
+
   setActorDead(id: string, x: number, z: number) {
     const a = this.actors.get(id)
     if (!a) return
@@ -738,6 +805,10 @@ export class MansionScene {
     a.group.rotation.z = Math.PI / 2
     ;(a.body.material as THREE.MeshStandardMaterial).color.multiplyScalar(0.45)
     ;(a.head.material as THREE.MeshStandardMaterial).color.multiplyScalar(0.6)
+    if (a.spriteMaterial) {
+      a.spriteMaterial.color.setHex(0x787878)
+      a.spriteMaterial.opacity = 0.72
+    }
   }
 
   replaceBodyWithOutline(id: string, x: number, z: number) {
@@ -857,6 +928,38 @@ export class MansionScene {
         const turn = Math.atan2(Math.sin(a.targetFacingY - a.facingY), Math.cos(a.targetFacingY - a.facingY))
         a.facingY += turn * Math.min(1, dt * 12)
         a.group.rotation.y = a.facingY
+        if (a.spriteRoot) {
+          // Billboard the portrait toward the isometric camera while retaining
+          // the simulation heading as a left/right silhouette flip.
+          const cameraYaw = Math.atan2(
+            this.camera.position.x - a.group.position.x,
+            this.camera.position.z - a.group.position.z,
+          )
+          a.spriteRoot.rotation.y = cameraYaw - a.facingY
+          const lateralHeading = -Math.sin(a.facingY)
+          if (!a.spriteAtlas && Math.abs(lateralHeading) > 0.22) a.spriteFlip = lateralHeading < 0 ? -1 : 1
+        }
+        if (a.spriteAtlas) {
+          if (a.action && this.time < a.actionUntil) {
+            this.setSpriteFrame(a, 14 + (Math.floor(this.time * 4) % 2))
+          } else {
+            if (a.action) a.action = null
+            const cameraYaw = Math.atan2(
+              this.camera.position.x - a.group.position.x,
+              this.camera.position.z - a.group.position.z,
+            )
+            const relative = Math.atan2(Math.sin(a.facingY - cameraYaw), Math.cos(a.facingY - cameraYaw))
+            // Atlas order is front, right-profile, back, left-profile. The
+            // camera looks from +Z, opposite the model's zero-angle heading,
+            // so shift the world quarter-turn by 180 degrees.
+            const direction = ((Math.round(relative / (Math.PI / 2)) + 2) % 4 + 4) % 4
+            const turning = Math.abs(turn) > 0.28
+            const frame = turning
+              ? 12 + (turn < 0 ? 0 : 1)
+              : a.walking ? (Math.sin(a.bob) >= 0 ? 4 : 8) + direction : direction
+            this.setSpriteFrame(a, frame)
+          }
+        }
       }
       if (a.walking && !a.dead) {
         a.bob += dt * 9
@@ -867,6 +970,11 @@ export class MansionScene {
         const armStride = a.idleKind === 'correspondent' ? 0.04 : stride * 0.55
         a.leftArm.rotation.x = -armStride; a.rightArm.rotation.x = armStride
         a.prop.rotation.y = 0; a.prop.rotation.z = 0
+        if (a.spriteRoot) {
+          const step = Math.sin(a.bob)
+          a.spriteRoot.scale.set(a.spriteFlip * (1 + Math.abs(step) * 0.025), 1 - Math.abs(step) * 0.025, 1)
+          a.spriteRoot.rotation.z = step * 0.025
+        }
       } else if (!a.dead) {
         a.group.position.y = 0
         a.body.rotation.y = 0
@@ -877,6 +985,11 @@ export class MansionScene {
         a.prop.rotation.z = gesture * (a.idleKind === 'columnist' || a.idleKind === 'debutante' ? 1.4 : 0.55)
         a.prop.rotation.y = gesture * (a.idleKind === 'magician' || a.idleKind === 'correspondent' || a.idleKind === 'detective' ? 1.8 : 0.6)
         a.head.rotation.z = Math.sin(phase * 0.62) * (a.idleKind === 'surgeon' || a.idleKind === 'antiquarian' ? 0.035 : 0.015)
+        if (a.spriteRoot) {
+          const breath = Math.sin(phase * 0.72 + a.bob) * 0.008
+          a.spriteRoot.scale.set(a.spriteFlip * (1 - breath * 0.35), 1 + breath, 1)
+          a.spriteRoot.rotation.z = Math.sin(phase * 0.43 + a.bob) * 0.008
+        }
       }
     }
 

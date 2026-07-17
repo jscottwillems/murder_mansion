@@ -1,5 +1,12 @@
 Original prompt: the music for this game is currently horrible and very hard to listen to, please work it to be something that players will want to continue listening to as they play
 
+Detective sprite follow-up (current prompt): create a detective sprite matching the existing NPC art, with directional, walking, turning, and investigating poses, then replace the geometric player model.
+- Generated a consistent 16-pose 4x4 detective atlas against the existing ten NPC portraits, removed the chroma key to alpha, and saved the project assets under `public/assets/characters/`.
+- Replaced the visible detective geometry with an atlas-driven 2.5D cutout. Runtime frame selection now covers four idle directions, two four-direction walk cycles, two turning poses, and two investigating poses.
+- `npm run build` and focused ESLint pass. The mandated browser client started a live case and exercised movement/turning with deterministic steps; `output/detective-sprite-runtime-2/` was visually inspected. The new detective matches the NPC cutout scale and painted style, changes pose with heading/gait, remains grounded, and produced no console/page error artifact.
+- Direction correction follow-up: the camera views the world from +Z while the model's zero heading points toward -Z, so the atlas lookup was half a turn out. Added the required 180-degree offset: north uses the back pose, south the front pose, east the right-looking silhouette, and west the left-looking silhouette.
+- Direction verification: focused ESLint passes. Four isolated mandated browser runs were visually inspected in `output/detective-direction-up/`, `-down/`, `-left/`, and `-right/`; each final pose faces its actual travel direction and no browser error artifact was produced. Full build is currently blocked by unrelated existing unused declarations in `src/game/audio.ts` (`EIGHTH_MS`, `buildSoftDelay`, and `playCompositionStep`).
+
 Murderer aggression follow-up: user reported that the murderer was not eliminating NPCs and asked for fast pursuit subject to no detective and no more than one witness.
 - Root cause: legal kills still required a low-probability roll on infrequent idle ticks, hunting only happened 40% of the time, and cooldowns lasted 55-80 game minutes.
 - Changed legal opportunities to deterministic kills, added an arrival-time opportunity check, made low-occupancy prey hunting the killer's default decision, and shortened repeat cooldowns to 20-30 game minutes. Legal rooms contain the victim plus at most one additional witness, with the detective elsewhere.
@@ -122,3 +129,31 @@ GitHub Pages portrait-path fix (current prompt): character sprites loaded locall
 - Root cause: `GuestPortrait.tsx` used root-absolute `/assets/characters/...` URLs, which bypassed the repository subpath on GitHub Pages.
 - Updated portrait URLs to prepend Vite's `import.meta.env.BASE_URL`, preserving local development while resolving correctly under the deployed base.
 - Verification: `npm run build` passes. The mandated browser client successfully loaded gameplay from the nested `/murder_mansion/dist/` path with no browser error artifact. A targeted journal check loaded all ten sprite images at nonzero natural widths with no console errors; `output/github-pages-sprite-fix-final/journal.png` was visually inspected.
+
+Animated in-world sprite follow-up (current prompt): user found the geometric character models too blocky and asked to turn the actual character sprites into animated models.
+- Replaced the visible geometric guest assemblies with the same transparent full-body artwork used by the journal. The underlying actor/gameplay rig remains intact, while the rendered guest is now a depth-tested 2.5D cutout with a floor shadow.
+- Added procedural walk bounce, compression, lean, idle breathing/sway, camera-facing billboarding, and movement-heading mirroring. The detective remains the authored 3D player model because no detective sprite asset exists.
+- Death state now desaturates/dims the sprite and preserves the existing fallen pose and chalk-outline workflow.
+- `npm run build` and focused ESLint pass. The mandated web-game client completed two runtime scenarios with deterministic frame advancement and no console/page error artifacts. Screenshots and matching state are in `output/animated-sprite-characters/` and `output/animated-sprite-idle-walk/`; both sets were visually inspected. Guests render as crisp, recognizable sprite cutouts with grounded shadows and stable labels at the normal isometric camera scale.
+- Follow-up option: a true multi-frame hand/leg animation would require drawing or generating additional per-character frames; the current source sprites contain one pose each, so this pass uses procedural whole-character motion and mirroring.
+
+Lower camera-angle follow-up (current prompt): user liked the sprite actors but found their viewing angle too steep.
+- Lowered the camera height from 15.5 to 12.6 world units, moved it farther forward from 8.6 to 10.4, and widened FOV slightly from 46° to 47°. This changes the view from a steep floor-dominant angle to a more character-forward composition while keeping approximately the same room coverage.
+- `npm run build` and focused ESLint pass. The mandated browser client verified the normal Dining Hall view and a south-door camera transition; screenshots/state are in `output/lower-camera-sprites/` and `output/lower-camera-transition/`. All captures were visually inspected: sprites read more upright, room coverage remains clear, foreground walls do not obscure the player, labels remain stable, and no browser error artifacts were produced.
+
+Second camera-height follow-up (current prompt): user requested one more subtle downward adjustment.
+- Lowered camera height from 12.6 to 11.7 while preserving the 10.4 forward offset and 47° FOV, producing a modestly more upright character view without changing horizontal framing.
+- `npm run build` and focused ESLint pass. The mandated client traversed Dining Hall to Library at the new height; `output/lower-camera-final/` was visually inspected. Sprites read more upright in both rooms, the detective and doorways remain visible, foreground walls do not interfere, and no browser error artifacts were produced.
+
+Authored MP3 soundtrack follow-up (current prompt): user added `Midnight in the Static.mp3` at the project root and asked to use it as background music.
+- Replaced the procedural musical composition with the authored MP3, bundled through Vite and looped through the existing Web Audio music bus. Procedural rain, thunder, clock tick, and event stingers remain intact.
+- Existing master volume and mute controls continue to govern the full mix; autoplay retry remains tied to subsequent user gestures.
+- Removed the obsolete procedural score code and slightly lowered the music-bus gain so ambience and gameplay cues remain audible beneath the track.
+- Verification: production build and focused ESLint pass. The mandated web-game client started a case and its inspected gameplay capture is in `output/mp3-soundtrack/`. A targeted browser check confirmed one loaded MP3 element, active playback, a 119.96-second duration, looping enabled, advancing play time, working mute UI, and no console/page errors.
+
+Calmer NPC movement follow-up (current prompt): guests felt random and repeatedly darted between rooms.
+- Reduced guest walking speed from 2.4 to 1.55 world units/second and lengthened decision/linger intervals.
+- Replaced mostly random adjacent-room travel with archetype-specific room preferences, purposeful social seeking, two-room travel memory to prevent immediate backtracking, and a much stronger tendency to stay put when there is no reason to move.
+- Guests prioritize people they have not spoken with; repeated conversations are less likely. Murderer hunt/escape behavior remains strategically exempt from ordinary pacing.
+- Updated LLM movement instructions to require an explicit character, person, or information-based reason before changing rooms and to avoid aimless back-and-forth travel.
+- Verification: production build, focused ESLint, and full-night simulation smoke test pass. The mandated live browser run advanced the case to 12:40 AM with stable idle behavior and no browser errors; `output/calm-npc-movement/shot-1.png` and matching state were inspected.

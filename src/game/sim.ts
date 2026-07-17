@@ -21,6 +21,19 @@ interface MovementRecovery { blockedFor: number; detourSign: 1 | -1; lastDistanc
 const ACTOR_RADIUS = 0.42
 const STUCK_RECOVERY_SECONDS = 0.65
 const DETOUR_DISTANCE = ACTOR_RADIUS * 2.5
+const NPC_WALK_SPEED = 1.55
+const ROOM_PREFERENCES: Record<string, RoomId[]> = {
+  columnist: ['ballroom', 'suite', 'dining'],
+  surgeon: ['study', 'library', 'conservatory'],
+  curator: ['conservatory', 'kitchen', 'gallery'],
+  magician: ['ballroom', 'gallery', 'dining'],
+  correspondent: ['study', 'library', 'gallery'],
+  accountant: ['study', 'library', 'cellar'],
+  antiquarian: ['library', 'gallery', 'study'],
+  chauffeur: ['kitchen', 'cellar', 'dining'],
+  debutante: ['ballroom', 'suite', 'conservatory'],
+  vocalist: ['ballroom', 'conservatory', 'suite'],
+}
 
 let uid = 0
 const nid = () => `id${++uid}`
@@ -37,6 +50,7 @@ export class Simulation {
   private histNextMin = 0
   private paths: Record<string, Waypoint[]> = {}
   private movementRecovery: Record<string, MovementRecovery> = {}
+  private recentRooms: Record<string, RoomId[]> = {}
   private ev: SimEvents
   /** When set (LLM director), called instead of the built-in decider; return true if handled. */
   externalDecider?: (g: Guest) => boolean
@@ -146,7 +160,7 @@ export class Simulation {
         const dx = wp.x - g.x
         const dz = wp.z - g.z
         const dist = Math.hypot(dx, dz)
-        const step = 2.4 * dtReal
+        const step = NPC_WALK_SPEED * dtReal
         if (dist <= step) {
           g.x = wp.x; g.z = wp.z
           path.shift()
@@ -211,7 +225,7 @@ export class Simulation {
 
       // decision ticks
       if (g.state === 'idle' && this.clockMin >= g.nextDecisionMin) {
-        g.nextDecisionMin = this.clockMin + 10 + this.rng() * 18
+        g.nextDecisionMin = this.clockMin + 18 + this.rng() * 18
         const handled = this.externalDecider?.(g) ?? false
         if (!handled) this.decide(g)
       }
@@ -265,31 +279,50 @@ export class Simulation {
 
     // --- conversation opportunity
     const others = this.guestsInRoom(g.room).filter(o => o.id !== g.id && o.state === 'idle')
-    if (others.length > 0 && this.rng() < 0.55) {
-      const partner = pick(others, this.rng)
+    const unfamiliar = others.filter(o => !g.talkedWith.includes(o.name))
+    if (others.length > 0 && this.rng() < (unfamiliar.length ? 0.62 : 0.28)) {
+      const partner = pick(unfamiliar.length ? unfamiliar : others, this.rng)
       this.startConversation(g, partner)
       return
     }
 
-    // --- movement
+    // --- purposeful movement. Guests favor spaces that suit their role,
+    // seek company when isolated, and avoid immediately undoing a journey.
     const roll = this.rng()
-    if (roll < 0.62) {
-      this.sendTo(g, pick(adjacentRooms(g.room), this.rng))
-    } else if (roll < 0.87) {
-      // social seek: room with the most other guests
-      let best: RoomId | null = null
-      let bestN = 0
-      for (const r of ROOMS) {
-        if (r.id === g.room) continue
-        const n = this.guestsInRoom(r.id).length
-        if (n > bestN) { bestN = n; best = r.id }
-      }
-      if (best) this.sendTo(g, best)
-      else this.sendTo(g, pick(adjacentRooms(g.room), this.rng))
+    if (roll < 0.38) {
+      const destination = this.choosePurposefulRoom(g)
+      if (destination) this.sendTo(g, destination)
+      else g.nextDecisionMin = this.clockMin + 14 + this.rng() * 12
+    } else if (roll < 0.62 && others.length === 0) {
+      const socialRoom = this.chooseSocialRoom(g)
+      if (socialRoom) this.sendTo(g, socialRoom)
+      else g.nextDecisionMin = this.clockMin + 14 + this.rng() * 12
     } else {
-      // linger in place for a while
-      g.nextDecisionMin = this.clockMin + 8 + this.rng() * 12
+      // Most of the time a guest has a reason to remain: reading, observing,
+      // resting, or waiting for a useful conversation.
+      g.nextDecisionMin = this.clockMin + 18 + this.rng() * 20
     }
+  }
+
+  private choosePurposefulRoom(g: Guest): RoomId | null {
+    const recent = this.recentRooms[g.id] ?? []
+    const preferred = (ROOM_PREFERENCES[g.archetypeId] ?? []).filter(r => r !== g.room && !recent.includes(r))
+    if (preferred.length) return pick(preferred, this.rng)
+    const alternatives = ROOMS.map(r => r.id).filter(r => r !== g.room && !recent.includes(r))
+    return alternatives.length ? pick(alternatives, this.rng) : null
+  }
+
+  private chooseSocialRoom(g: Guest): RoomId | null {
+    const recent = this.recentRooms[g.id] ?? []
+    const candidates = ROOMS.map(r => ({
+      room: r.id,
+      guests: this.guestsInRoom(r.id).filter(o => o.id !== g.id).length,
+      preferred: (ROOM_PREFERENCES[g.archetypeId] ?? []).includes(r.id),
+    })).filter(c => c.room !== g.room && !recent.includes(c.room) && c.guests > 0 && c.guests <= 3)
+    candidates.sort((a, b) => Number(b.preferred) - Number(a.preferred) || b.guests - a.guests)
+    if (!candidates.length) return null
+    const best = candidates.filter(c => c.preferred === candidates[0].preferred && c.guests === candidates[0].guests)
+    return pick(best, this.rng).room
   }
 
   /** Apply an LLM-produced decision (validated). Returns true if consumed. */
@@ -314,7 +347,7 @@ export class Simulation {
       }
       case 'rest':
       case 'idle':
-        g.nextDecisionMin = this.clockMin + 8 + this.rng() * 10
+        g.nextDecisionMin = this.clockMin + 18 + this.rng() * 18
         return true
       default:
         return false
@@ -375,6 +408,9 @@ export class Simulation {
 
   private sendTo(g: Guest, room: RoomId) {
     if (room === g.room) return
+    const recent = (this.recentRooms[g.id] ??= [])
+    recent.unshift(g.room)
+    if (recent.length > 2) recent.length = 2
     const path = this.planPath(g.room, room)
     this.paths[g.id] = path
     delete this.movementRecovery[g.id]

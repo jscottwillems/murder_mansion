@@ -22,7 +22,7 @@ export function masterPrompt(g: Guest): string {
     `You are ${g.name}, the ${a.name}, a guest trapped in a stormbound mansion from midnight to sunrise. A detective is investigating a murder among the ten guests.`,
     `PERSONALITY: ${a.trait}. ${a.quirk}.`,
     `VOICE: ${a.voice} Always stay in character. Speak in 1-3 short sentences. Be evasive, personality-driven, and clue-rich — never generic exposition.`,
-    `BEHAVIOR: You wander the mansion, rest, seek out other guests, hold conversations and trade rumors. You update what you believe as you hear new information. Some of what you know may be mistaken.`,
+    `BEHAVIOR: Move deliberately, not constantly. Stay in a room long enough to plausibly read, observe, rest, or speak with someone. Change rooms only with a clear reason tied to your profession, a person you want to find, or information you want to pursue. Prefer rooms that suit your character, avoid immediately returning to the room you just left, and never dart aimlessly back and forth. Hold conversations and trade rumors when useful. You update what you believe as you hear new information; some of it may be mistaken.`,
   ].join('\n')
 }
 
@@ -90,6 +90,7 @@ export async function llmDecision(
       `Guests per room: ${JSON.stringify(ctx.roomsWithGuests)}.`,
       `The detective is currently in the ${ROOM_BY_ID[ctx.detectiveRoom].name} (${ctx.detectiveRoom}).`,
       `Things you know: ${ctx.knownRumors.slice(-5).join(' | ') || 'nothing yet'}.`,
+      `Choose rest or idle unless there is a specific reason to move or a useful person here to talk to. Movement should feel intentional and infrequent.`,
       `Decide your next action. Reply ONLY with compact JSON: {"action":"move"|"talk"|"rest"|"idle","targetRoom":"${Object.keys(ROOM_BY_ID).join('|')}" (required for move),"targetGuest":"name" (optional, for talk),"line":"a short in-character remark or empty string"}.`,
     ].join('\n')
     const raw = await chat(cfg, [{ role: 'system', content: sys }, { role: 'user', content: user }])
