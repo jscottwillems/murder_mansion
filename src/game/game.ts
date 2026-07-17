@@ -128,7 +128,7 @@ export class Game {
       if (this.phase === 'playing' && this.sim) this.stepPlaying(dt)
       this.syncActors()
       this.world.update(dt)
-      this.audio.onGameMinute(this.sim?.clockMin ?? 0)
+      this.audio.onGameMinute(this.sim?.clockMin ?? 0, this.settings.speed, this.phase === 'playing')
     }
     this.emit()
   }
@@ -383,9 +383,10 @@ export class Game {
     this.interviewsHeld++
     this.interview = {
       guestId,
-      questions: this.buildQuestions(g),
+      questions: this.buildQuestions(),
       lastQuestion: '',
       lastAnswer: `“${this.pickGreet(g)}”`,
+      emotion: 'neutral',
       thinking: false,
     }
     this.phase = 'interview'
@@ -397,23 +398,100 @@ export class Game {
     return a.greet[Math.floor(Math.random() * a.greet.length)]
   }
 
-  private buildQuestions(g: Guest): QuestionOption[] {
+  private buildQuestions(): QuestionOption[] {
     const sim = this.sim!
-    const pool: QuestionOption[] = [
-      { topic: 'timeline', label: 'Where were you earlier tonight?' },
-      { topic: 'suspicion', label: 'Who do you suspect?' },
+    const victims = sim.victims()
+    if (victims.length === 0) {
+      return [
+        { topic: 'timeline', label: 'How have you spent the evening?' },
+        { topic: 'suspicion', label: 'Has anyone here made you uneasy?' },
+        { topic: 'social', label: 'Who have you spent time with tonight?' },
+        { topic: 'room', label: `What brings you to the ${ROOM_BY_ID[this.playerRoom].name}?` },
+      ]
+    }
+
+    const latestVictim = victims[victims.length - 1]
+    if (victims.length === 1) {
+      return [
+        { topic: 'timeline', label: 'Where were you when it happened?' },
+        { topic: 'suspicion', label: 'Who do you suspect?' },
+        { topic: 'victim', label: `How well did you know ${latestVictim.name}?` },
+        { topic: 'last_seen', label: `When did you last see ${latestVictim.name}?` },
+      ]
+    }
+
+    if (victims.length === 2) {
+      return [
+        { topic: 'suspicion', label: 'Who do you suspect now?' },
+        { topic: 'last_seen', label: `When did you last see ${latestVictim.name}?` },
+        { topic: 'connection', label: 'What connects the two victims?' },
+        { topic: 'alibi', label: 'Who can account for your movements?' },
+      ]
+    }
+
+    if (victims.length === 3) {
+      return [
+        { topic: 'suspicion', label: 'Who is capable of all this?' },
+        { topic: 'connection', label: 'Do you see a pattern in the deaths?' },
+        { topic: 'motive', label: 'Who benefits from these deaths?' },
+        { topic: 'last_seen', label: `When did you last see ${latestVictim.name}?` },
+      ]
+    }
+
+    return [
+      { topic: 'connection', label: 'Why were these guests chosen?' },
+      { topic: 'motive', label: 'Who has gained the most from this?' },
+      { topic: 'survival', label: 'Why do you think you’re still alive?' },
+      { topic: 'next_victim', label: 'Who do you think will be next?' },
     ]
-    const extras: QuestionOption[] = []
-    if (g.knowledge.length > 0) extras.push({ topic: 'intel', label: 'Heard anything worth knowing?' })
-    extras.push({ topic: 'alibi', label: 'Can anyone vouch for you?' })
-    if (g.talkedWith.length > 0) extras.push({ topic: 'social', label: 'Who have you spoken with?' })
-    if (sim.victims().length > 0) extras.push({ topic: 'victim', label: 'Did you know the victim?' })
-    extras.push({ topic: 'room', label: `What do you make of the ${ROOM_BY_ID[this.playerRoom].name}?` })
-    extras.push({ topic: 'pressure', label: 'You’re hiding something. Talk.' })
-    // rotate extras for variety, take 2
-    const off = this.interviewsHeld % extras.length
-    const rotated = [...extras.slice(off), ...extras.slice(0, off)]
-    return [...pool, ...rotated.slice(0, 2)]
+  }
+
+  private caseEventsFor(g: Guest): string[] {
+    if (!this.sim) return []
+    const events: string[] = []
+    if (g.talkedWith.length) events.push(`You spoke with ${g.talkedWith.slice(-5).join(', ')}.`)
+    for (const rumor of g.knowledge.slice(-5)) events.push(`You learned: ${rumor.text}.`)
+    for (const victim of this.sim.victims().slice(-3)) {
+      events.push(`${victim.name}'s body was discovered in the ${ROOM_BY_ID[victim.deathRoom!].name}.`)
+    }
+    for (const entry of (this.transcripts[g.id] ?? []).slice(-4)) {
+      events.push(`The detective previously asked "${entry.q}"; you answered: ${entry.a}`)
+    }
+    return events
+  }
+
+  /** Choose an authored portrait expression for offline/built-in answers. */
+  private builtinInterviewEmotion(g: Guest, topic: QuestionTopic, questionLabel: string): InterviewState['emotion'] {
+    const priorUses = (this.transcripts[g.id] ?? []).filter(entry => entry.q === questionLabel).length
+    const quickToAnger = new Set(['columnist', 'surgeon', 'correspondent', 'accountant', 'vocalist', 'antiquarian', 'chauffeur'])
+
+    // Repeated probing escalates every character; sharper personalities lose
+    // patience on the first repeat, while gentler ones become guarded first.
+    if (priorUses >= 2 || topic === 'pressure') return 'angry'
+    if (priorUses === 1) return quickToAnger.has(g.archetypeId) ? 'angry' : 'suspicious'
+
+    switch (topic) {
+      case 'suspicion':
+      case 'intel':
+      case 'motive':
+        return 'suspicious'
+      case 'victim':
+      case 'last_seen':
+      case 'survival':
+        return g.isKiller && topic === 'last_seen' ? 'suspicious' : 'worried'
+      case 'next_victim':
+        return 'surprised'
+      case 'timeline':
+      case 'connection':
+      case 'social':
+        return 'thoughtful'
+      case 'alibi':
+        return g.isKiller ? 'suspicious' : (g.talkedWith.length ? 'thoughtful' : 'worried')
+      case 'room':
+        return ['curator', 'antiquarian', 'surgeon', 'accountant'].includes(g.archetypeId) ? 'thoughtful' : 'neutral'
+      default:
+        return 'neutral'
+    }
   }
 
   ask(topic: QuestionTopic) {
@@ -421,10 +499,11 @@ export class Game {
     const g = this.sim.byId(this.interview.guestId)
     if (!g) return
     const q = this.interview.questions.find(o => o.topic === topic)
+    const builtInEmotion = this.builtinInterviewEmotion(g, topic, q?.label ?? topic)
     this.interview = { ...this.interview, thinking: true, lastQuestion: q?.label ?? '' }
     this.emit()
 
-    const applyAnswer = (answer: string, leadList: { source: string; text: string }[]) => {
+    const applyAnswer = (answer: string, leadList: { source: string; text: string }[], emotion: InterviewState['emotion'] = 'neutral') => {
       if (!this.interview || this.interview.guestId !== g.id) return
       for (const l of leadList) this.pushLead('interview', l.source, l.text, true)
       const entry: TranscriptEntry = { atMin: this.sim!.clockMin, q: q?.label ?? topic, a: answer }
@@ -436,7 +515,8 @@ export class Game {
         ...this.interview,
         thinking: false,
         lastAnswer: answer.startsWith('“') ? answer : `“${answer}”`,
-        questions: this.buildQuestions(g),
+        emotion,
+        questions: this.buildQuestions(),
       }
       this.emit()
     }
@@ -450,31 +530,35 @@ export class Game {
         {
           clockMin: sim.clockMin,
           topic,
+          questionLabel: q?.label ?? topic,
           roomName: ROOM_BY_ID[this.playerRoom].name,
           rumors: g.knowledge.slice(-6).map(r => r.text),
           victims: sim.victims().map(v => v.name),
           suspectNames: sim.aliveGuests().filter(o => o.id !== g.id).map(o => o.name),
           talkedWith: g.talkedWith,
+          caseEvents: this.caseEventsFor(g),
+          questionsAsked: (this.transcripts[g.id] ?? []).length,
+          timesAskedTopic: (this.transcripts[g.id] ?? []).filter(entry => entry.q === (q?.label ?? topic)).length,
         },
-      ).then(text => {
-        if (text) {
+      ).then(result => {
+        if (result) {
           this.llmLive = true
           // LLM gives prose; still mine a lead for factual topics
           const fb = sim.answerQuestion(g, topic, this.playerRoom)
-          applyAnswer(text, topic === 'intel' || topic === 'timeline' || topic === 'suspicion' || topic === 'alibi' ? fb.leads : [])
+          applyAnswer(result.text, topic === 'intel' || topic === 'timeline' || topic === 'suspicion' || topic === 'alibi' ? fb.leads : [], result.emotion)
         } else {
           this.llmLive = false
           const fb = sim.answerQuestion(g, topic, this.playerRoom)
-          applyAnswer(fb.answer, fb.leads)
+          applyAnswer(fb.answer, fb.leads, builtInEmotion)
         }
       }).catch(() => {
         const fb = sim.answerQuestion(g, topic, this.playerRoom)
-        applyAnswer(fb.answer, fb.leads)
+        applyAnswer(fb.answer, fb.leads, builtInEmotion)
       })
     } else {
       // small delay for pacing
       const fb = this.sim.answerQuestion(g, topic, this.playerRoom)
-      setTimeout(() => applyAnswer(fb.answer, fb.leads), 350)
+      setTimeout(() => applyAnswer(fb.answer, fb.leads, builtInEmotion), 350)
     }
   }
 
@@ -534,7 +618,7 @@ export class Game {
     llmDecision(
       { baseUrl: this.settings.llmBaseUrl, apiKey: this.settings.llmApiKey, model: this.settings.llmModel },
       g,
-      sim.decisionContext(g),
+      { ...sim.decisionContext(g), caseEvents: this.caseEventsFor(g) },
     ).then(d => {
       if (d && this.sim === sim) {
         this.llmLive = true
@@ -568,7 +652,7 @@ export class Game {
     this.syncActors()
     this.world.update(dt)
 
-    this.audio.onGameMinute(this.sim?.clockMin ?? 0)
+    this.audio.onGameMinute(this.sim?.clockMin ?? 0, this.settings.speed, this.phase === 'playing')
 
     this.emitTimer += dt
     if (this.emitTimer > 0.15) {
@@ -592,9 +676,10 @@ export class Game {
       const step = (PLAYER_SPEED * dt) / len
       const nx = this.px + mx * step
       const nz = this.pz + mz * step
-      const actorClear = (x: number, z: number) => !sim.aliveGuests().some(g => Math.hypot(g.x - x, g.z - z) < ACTOR_RADIUS * 2)
-      if (canOccupy(nx, this.pz, ACTOR_RADIUS) && actorClear(nx, this.pz)) this.px = nx
-      if (canOccupy(this.px, nz, ACTOR_RADIUS) && actorClear(this.px, nz)) this.pz = nz
+      // Guests remain collision-aware with one another, but they should never
+      // be able to body-block the player in a doorway or against furniture.
+      if (canOccupy(nx, this.pz, ACTOR_RADIUS)) this.px = nx
+      if (canOccupy(this.px, nz, ACTOR_RADIUS)) this.pz = nz
     }
     const r = roomOfPoint(this.px, this.pz)
     if (r && r !== this.playerRoom) {

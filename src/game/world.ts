@@ -27,8 +27,12 @@ interface Actor {
   spriteMaterial: THREE.MeshBasicMaterial | null
   spriteFlip: number
   spriteAtlas: boolean
+  spriteKind: 'detective' | 'npc' | null
+  spriteRows: number
   spriteFrame: number
+  defaultForward: boolean
   action: 'investigate' | null
+  actionStartedAt: number
   actionUntil: number
 }
 
@@ -39,6 +43,7 @@ const WALL_T = 0.35
 // readable instead of visually foreshortening them against the floor.
 const CAMERA_HEIGHT = 11.7
 const CAMERA_Z_OFFSET = 10.4
+const ACTOR_LABEL_HEIGHT = 2.32
 const ROOM_EDGE_FOCUS_START = 0.52
 const ROOM_EDGE_FOCUS_END = 1.1
 const ROOM_EDGE_PLAYER_WEIGHT = 0.72
@@ -67,7 +72,7 @@ export class MansionScene {
   private edgeMat = new THREE.LineBasicMaterial({ color: 0x08070a, transparent: true, opacity: 0.42 })
   private roomLights = new Map<RoomId, THREE.PointLight>()
   private materialCache = new Map<string, THREE.MeshStandardMaterial>()
-  private flatMaterialCache = new Map<number, THREE.MeshBasicMaterial>()
+  private floorTextureCache = new Map<string, THREE.Texture>()
   private rain!: THREE.Points
   private rainVel: Float32Array = new Float32Array(0)
   private dust!: THREE.Points
@@ -156,13 +161,19 @@ export class MansionScene {
     return material
   }
 
-  private flatMat(color: number): THREE.MeshBasicMaterial {
-    let material = this.flatMaterialCache.get(color)
-    if (!material) {
-      material = new THREE.MeshBasicMaterial({ color })
-      this.flatMaterialCache.set(color, material)
+  private floorMat(roomId: RoomId, fallbackColor: number): THREE.MeshBasicMaterial {
+    let texture = this.floorTextureCache.get(roomId)
+    if (!texture) {
+      texture = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}assets/floors/${roomId}.png`)
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.minFilter = THREE.LinearMipmapLinearFilter
+      texture.magFilter = THREE.NearestFilter
+      texture.wrapS = THREE.ClampToEdgeWrapping
+      texture.wrapT = THREE.ClampToEdgeWrapping
+      texture.anisotropy = Math.min(4, this.renderer.capabilities.getMaxAnisotropy())
+      this.floorTextureCache.set(roomId, texture)
     }
-    return material
+    return new THREE.MeshBasicMaterial({ map: texture, color: fallbackColor, toneMapped: false })
   }
 
   private addBoxEdges(mesh: THREE.Mesh) {
@@ -190,9 +201,9 @@ export class MansionScene {
       // Keep floor color stable under the low-resolution render target. Lit
       // floor gradients quantize into concentric rings; room geometry above the
       // floor remains dynamically lit.
-      const floorSurface = new THREE.Mesh(new THREE.PlaneGeometry(9.82, 9.82), this.flatMat(r.floor))
+      const floorSurface = new THREE.Mesh(new THREE.PlaneGeometry(9.82, 9.82), this.floorMat(r.id, 0xffffff))
       floorSurface.rotation.x = -Math.PI / 2
-      floorSurface.position.y = 0.004
+      floorSurface.position.y = 0.008
       g.add(floorSurface)
       const trim = new THREE.Mesh(new THREE.BoxGeometry(ROOM_HALF * 2 + 0.3, 0.1, ROOM_HALF * 2 + 0.3), this.mat(r.accent, 0.6))
       trim.position.y = -0.26
@@ -203,7 +214,6 @@ export class MansionScene {
       this.buildWalls(g, r.col, r.row, r.wall)
 
       // furniture
-      this.buildFloorLanguage(g, r.furniture)
       this.buildFurniture(g, r.furniture, r.accent)
 
       // lamp: visible bulb + point light
@@ -319,15 +329,6 @@ export class MansionScene {
     mesh.position.set(x, y, z); mesh.rotation.z = rz; this.addBoxEdges(mesh); g.add(mesh); return mesh
   }
 
-  private inlay(g: THREE.Group, color: number, w: number, d: number, x: number, z: number, ry = 0, h = 0.025) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), this.flatMat(color))
-    m.position.set(x, h / 2 + 0.005, z); m.rotation.y = ry; g.add(m); return m
-  }
-
-  private rug(g: THREE.Group, w: number, d: number, color: number, border: number, x: number, z: number, ry = 0) {
-    this.inlay(g, border, w, d, x, z, ry, 0.035); this.inlay(g, color, w - 0.22, d - 0.22, x, z, ry, 0.045)
-  }
-
   private table(g: THREE.Group, w: number, d: number, topY: number, color: number, x: number, z: number, ry = 0) {
     this.box(g, color, w, 0.16, d, x, topY, z, ry)
     for (const sx of [-0.32, 0.32]) this.box(g, 0x2b1d15, 0.18, topY - 0.08, d * 0.72, x + Math.cos(ry) * w * sx, (topY - 0.08) / 2, z - Math.sin(ry) * w * sx, ry)
@@ -339,87 +340,18 @@ export class MansionScene {
     this.box(g, 0x241914, 0.34, 0.38, 0.34, x, 0.22, z, ry)
   }
 
-  private shelf(g: THREE.Group, w: number, h: number, x: number, z: number, ry = 0, missing = false) {
+  private shelf(g: THREE.Group, w: number, h: number, x: number, z: number, ry = 0) {
     this.box(g, 0x302018, w, h, 0.42, x, h / 2, z, ry)
     for (let row = 0; row < 3; row++) {
       this.box(g, 0x765137, w - 0.12, 0.09, 0.46, x, 0.42 + row * 0.67, z, ry)
-      for (let i = -2; i <= 2; i++) {
-        if (missing && row === 1 && i === -1) continue
-        const colors = [0x7f342c, 0x355848, 0x47517b, 0x9a7434]
-        const along = i * (w - 0.3) / 5
-        this.box(g, colors[(i + row + 6) % colors.length], (w - 0.35) / 6, 0.38, 0.12,
-          x + Math.cos(ry) * along, 0.68 + row * 0.67, z - Math.sin(ry) * along, ry)
-      }
     }
     this.box(g, 0x8a613b, w + 0.12, 0.12, 0.5, x, h + 0.04, z, ry)
-  }
-
-  private frame(g: THREE.Group, w: number, h: number, x: number, y: number, z: number, side: 'n' | 'e', image = 0x273044) {
-    const ry = side === 'e' ? Math.PI / 2 : 0
-    this.box(g, 0xb08a38, w, h, 0.14, x, y, z, ry); this.box(g, image, w - 0.24, h - 0.24, 0.17, x, y, z + (side === 'n' ? 0.02 : 0), ry)
-  }
-
-  private candles(g: THREE.Group, x: number, y: number, z: number, count = 3) {
-    for (let i = 0; i < count; i++) {
-      const ox = (i - (count - 1) / 2) * 0.22
-      this.cylinder(g, 0xe6d7ae, 0.045, 0.055, 0.38 - Math.abs(ox) * 0.2, x + ox, y, z, 6)
-      const flame = new THREE.Mesh(new THREE.SphereGeometry(0.065, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffc76a }))
-      flame.position.set(x + ox, y + 0.25, z); g.add(flame)
-    }
-  }
-
-  private plant(g: THREE.Group, x: number, z: number, scale = 1, lean = 0) {
-    this.cylinder(g, 0x9a6040, 0.28 * scale, 0.35 * scale, 0.42 * scale, x, 0.21 * scale, z, 8)
-    for (const [ox, oz, s] of [[-0.18, 0, 0.8], [0.12, -0.1, 1], [0.22, 0.16, 0.7]] as const) {
-      const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.28 * scale * s, 0.85 * scale * s, 6), this.mat(0x3f754f))
-      leaf.position.set(x + ox * scale + lean, 0.72 * scale * s, z + oz * scale); leaf.rotation.z = lean * 0.35; g.add(leaf)
-    }
   }
 
   private barrel(g: THREE.Group, x: number, y: number, z: number, horizontal = false) {
     const b = this.cylinder(g, 0x634329, 0.48, 0.54, 1.0, x, y, z, 10, horizontal ? Math.PI / 2 : 0)
     if (horizontal) b.rotation.z = Math.PI / 2
     for (const dy of [-0.32, 0.32]) this.cylinder(g, 0x2a2927, 0.55, 0.55, 0.08, x + (horizontal ? dy : 0), y + (horizontal ? 0 : dy), z, 10, horizontal ? Math.PI / 2 : 0)
-  }
-
-  private buildFloorLanguage(g: THREE.Group, kind: string) {
-    if (kind === 'study') {
-      for (let x = -4.5; x <= 4.5; x += 0.65) this.inlay(g, x % 1.3 ? 0x39271d : 0x533725, 0.52, 9.6, x, 0)
-      this.rug(g, 3.8, 2.1, 0x681f26, 0x9c7540, 0, -2.35, -0.16); this.inlay(g, 0xb08b45, 0.12, 2.2, 0, 3.8)
-    } else if (kind === 'gallery') {
-      for (const x of [-2.5, 0, 2.5]) for (const z of [-2.5, 0, 2.5]) this.inlay(g, (x + z) % 5 ? 0x303847 : 0x465064, 2.35, 2.35, x, z)
-      this.rug(g, 1.55, 8.4, 0x364b68, 0x79849a, 0, 0)
-    } else if (kind === 'conservatory') {
-      for (let x = -4; x <= 4; x += 2) for (let z = -4; z <= 4; z += 2) this.inlay(g, (x + z) % 4 ? 0x34433e : 0x43534b, 1.82, 1.82, x, z)
-      for (let i = 0; i < 5; i++) this.inlay(g, 0x718e72, 0.25, 1.25, -3 + i * 0.7, 3 - i * 0.65, -0.65)
-    } else if (kind === 'kitchen') {
-      // Broad, low-contrast quarry tiles survive the pixel pass without turning
-      // into moire bands. Route strips sit clearly above the tiles; the east/west
-      // strip is split around the north/south strip so no coplanar faces overlap.
-      for (let ix = 0; ix < 8; ix++) for (let iz = 0; iz < 8; iz++) {
-        const x = -4.2 + ix * 1.2
-        const z = -4.2 + iz * 1.2
-        this.inlay(g, ((ix + iz) & 1) ? 0x3d4040 : 0x817d70, 1.12, 1.12, x, z)
-      }
-      this.inlay(g, 0x34373a, 3, 9.7, 0, 0, 0, 0.045)
-      this.inlay(g, 0x34373a, 3.35, 3, -3.175, 0, 0, 0.045)
-      this.inlay(g, 0x34373a, 3.35, 3, 3.175, 0, 0, 0.045)
-    } else if (kind === 'dining') {
-      for (let x = -4.3; x <= 4.3; x += 0.8) for (const z of [-3.7, -2.3, 2.3, 3.7]) this.inlay(g, 0x593927, 1.25, 0.28, x, z, (Math.round(x) & 1 ? 1 : -1) * 0.65)
-      this.rug(g, 6.2, 2.5, 0x681f29, 0xb08b48, 0, 0.65)
-    } else if (kind === 'ballroom') {
-      this.inlay(g, 0xd0c3df, 5.5, 5.5, 0, 0, Math.PI / 4)
-      this.inlay(g, 0x302c3b, 4.25, 4.25, 0, 0, Math.PI / 4, 0.035); this.inlay(g, 0xa99bbb, 2.9, 2.9, 0, 0, Math.PI / 4, 0.045)
-    } else if (kind === 'cellar') {
-      for (const [x,z,w,d] of [[-2.7,-2.6,3.5,3.2],[1.5,-2.8,4.4,2.8],[-2.2,1.4,4.4,4],[2.6,2,3.2,3.6]] as const) this.inlay(g, (x < 0 ? 0x44423d : 0x35383a), w, d, x, z, 0.06)
-      this.inlay(g, 0x355164, 0.55, 9.6, -4.35, 0)
-    } else if (kind === 'library') {
-      for (let x=-4.5;x<=4.5;x+=0.72) this.inlay(g, 0x513425, 0.55, 9.6, x, 0, (Math.round(x*2)&1)*0.16)
-      this.rug(g, 8.8, 1.5, 0x294c37, 0x8b733e, 0, 0); this.rug(g, 1.5, 4.5, 0x294c37, 0x8b733e, 0, -2.25)
-    } else {
-      for (let x=-4.5;x<=4.5;x+=0.75) this.inlay(g, 0x633d40, 0.6, 9.6, x, 0)
-      this.rug(g, 3.7, 4.1, 0x8b5360, 0xc09872, -2.6, -2.2)
-    }
   }
 
   private buildFurniture(g: THREE.Group, kind: string, accent: number) {
@@ -429,18 +361,13 @@ export class MansionScene {
     switch (kind) {
       case 'study': {
         this.table(g, 3.2, 1.25, 0.86, wood, 0, -2.65, -0.16)
-        this.box(g, 0x38472c, 0.65, 0.12, 0.42, 0.45, 1.02, -2.72, -0.16); this.cylinder(g, 0xb88a43, .07, .09, .55, .45, .75, -2.72, 7)
         this.chair(g, 0x55382d, .9, -1.35, 2.95); this.shelf(g, 2.4, 2.25, -3.45, -4.55); this.shelf(g, 2.4, 2.25, 3.45, -4.55)
         this.chair(g, 0x512923, -3.5, 2.75, .5); this.cylinder(g, wood, .35, .35, .42, -2.4, .21, 3.15, 8)
-        this.box(g, 0xe5d7b7, .72, .025, .38, .7, .06, -1.72, -.35); this.cylinder(g, 0x7d1820, .1, .1, .035, 1.03, .07, -1.55, 7)
         break
       }
       case 'gallery': {
-        this.frame(g, 2.1, 2.35, 0, 1.65, -4.72, 'n', 0x4b5263); this.frame(g, 1.15, 1.45, -3.25, 1.55, -4.72, 'n'); this.frame(g, 1.15, 1.45, 3.25, 1.55, -4.72, 'n')
-        this.box(g, 0xe1d7c7, .55, .8, .18, 0, 1.7, -4.56); this.box(g, 0x76202a, .16, .16, .12, .2, 1.68, -4.42)
         for (const x of [-2.8,2.8]) this.box(g, 0x918b80, .68, 1.05, .68, x, .53, -1.85)
-        this.box(g, 0xbac0c8, .65, .55, .5, -2.8, 1.34, -1.85, .5); this.cylinder(g, 0xc8bda9, .18, .28, .72, 2.8, 1.42, -1.85, 8)
-        this.box(g, 0x4b3b50, 2.25, .42, .75, 0, .22, 2.75); this.box(g, 0x9b1f2c, .2, .025, .18, .2, .05, -3.6)
+        this.box(g, 0x4b3b50, 2.25, .42, .75, 0, .22, 2.75)
         break
       }
       case 'conservatory': {
@@ -448,23 +375,18 @@ export class MansionScene {
         for (const x of [-3.5,-1.15,1.15,3.5]) { const p = new THREE.Mesh(new THREE.BoxGeometry(2.05, 1.7, .05), glassMat); p.position.set(x,1.25,-4.62); g.add(p); this.box(g,0x243638,.1,2,.1,x-1,1.1,-4.6) }
         for (const z of [-3.5,-1.15,1.15,3.5]) { const p = new THREE.Mesh(new THREE.BoxGeometry(.05, 1.7, 2.05), glassMat); p.position.set(4.62,1.25,z); g.add(p) }
         this.cylinder(g, 0xa8b8aa, 1.05, 1.15, .32, 1.9, .16, -1.9, 12); this.cylinder(g, 0x4d3930, .16, .24, 1.35, 1.9, .85, -1.9, 7, -.22)
-        this.plant(g, 1.45, -1.75, 1.05, -.15); this.plant(g, 2.35, -2.1, .8, .15); this.plant(g, 3.55, 2.9, .8); this.plant(g, -3.7, -2.7, .65)
-        this.table(g, 2.2, .7, .75, 0x72533a, -3.35, 3.2); this.box(g,0xe2d7b5,.42,.05,.14,-2.8,.08,2.65,.5); this.box(g,0x7b4e94,.25,.12,.25,-2.35,.08,2.4)
+        this.table(g, 2.2, .7, .75, 0x72533a, -3.35, 3.2)
         break
       }
       case 'kitchen': {
-        this.table(g, 2.3, 1.25, .88, 0xb89062, -2.15, 2.25); this.box(g,0xe4d8bc,.55,.5,.06,-1.9,.55,2.9)
+        this.table(g, 2.3, 1.25, .88, 0xb89062, -2.15, 2.25)
         this.box(g,0x343438,2.35,1,.8,-2.8,.5,-4.15); this.box(g,0x1e2023,2,1.2,.9,-2.8,1.45,-4.25); this.box(g,0xe57a2b,1.4,.12,.12,-2.8,.5,-3.7)
         this.box(g,0x777b78,.75,.9,3.6,-4.15,.45,2.4); this.box(g,0x667078,.7,.18,1.2,-3.75,1,2.4); this.box(g,0x6d7476,1.15,2,.85,3.8,1,-3.65)
-        for (let i=0;i<4;i++) { this.cylinder(g,0xb66d37,.2,.2,.06,-3.6+i*.62,1.7,-4.45,8,Math.PI/2); this.box(g,0x9a552d,.1,.45,.1,-3.6+i*.62,1.45,-4.42) }
-        for(let i=0;i<5;i++) if(i!==2) this.box(g,0xd5d3c5,.12,.55,.06,2.5+i*.3,1.65,-4.42); this.box(g,0x741c1e,.7,.08,.05,3.1,1.25,-4.4)
         break
       }
       case 'dining': {
         this.table(g,5.2,1.35,.84,wood,0,.72); for(const x of [-2,-1,0,1,2]) { this.chair(g,dark,x,1.72,0); if(x!==0)this.chair(g,dark,x,-.28,Math.PI) }
-        this.chair(g,0x4b241e,-3.05,.72,-Math.PI/2,true); this.candles(g,-1.35,1.15,.72); this.candles(g,1.35,1.15,.72)
-        for(let i=0;i<10;i++) this.cylinder(g,0xe3dac5,.15,.15,.025,-2.2+(i%5)*1.1,.95,.35+(i>4?.72:0),10)
-        this.cylinder(g,0xe3dac5,.16,.16,.025,-2.55,.95,.72,10,Math.PI/2); this.box(g,0x92232d,.38,.025,.22,-2.25,.97,.72,.2)
+        this.chair(g,0x4b241e,-3.05,.72,-Math.PI/2,true)
         this.box(g,0x533626,2.4,.82,.55,-2.9,.41,-4.25); this.box(g,0x533626,2.4,.82,.55,2.9,.41,-4.25)
         break
       }
@@ -472,23 +394,19 @@ export class MansionScene {
         this.cylinder(g,0x7d6848,.12,.12,1.2,0,2.65,0,8); const ring=new THREE.Mesh(new THREE.TorusGeometry(1,.09,6,16),this.mat(0xb59454)); ring.rotation.x=Math.PI/2; ring.position.y=2.4; g.add(ring); for(let i=0;i<6;i++){const a=i*Math.PI/3;const f=new THREE.Mesh(new THREE.SphereGeometry(.1,6,4),new THREE.MeshBasicMaterial({color:0xffebae}));f.position.set(Math.cos(a),2.4,Math.sin(a));g.add(f)}
         this.box(g,0x18171d,2.2,.72,1.55,-3.25,.62,-3.1,.52); this.box(g,0xe5dfcb,1.55,.09,.4,-2.8,.92,-2.35,.52); this.box(g,0x27232f,2,.1,1.4,-3.4,1.05,-3.2,.52)
         this.box(g,0x593650,.65,2.35,.45,4.35,1.18,-3.25); this.box(g,0x593650,.65,2.35,.45,4.35,1.18,3.25); this.box(g,0x44364c,2.3,.28,1.15,3.35,.14,3.75)
-        this.inlay(g,0xe3ddd0,.25,.55,-.55,.08,.35); this.inlay(g,0xe3ddd0,.25,.55,.05,.6,-.5)
         break
       }
       case 'cellar': {
         this.shelf(g,2.7,1.9,-3.2,-4.48); this.shelf(g,2.7,1.9,3.2,-4.48)
-        for(const [x,y] of [[2.4,.35],[3,.35],[3.6,.35],[2.7,.95],[3.3,.95]] as const)this.box(g,0xb9aa90,.55,.45,.3,x,y,-4.18)
-        this.box(g,0x151417,.7,.8,.1,3.2,.8,-4.01); this.box(g,0xc5b69d,.58,.38,.32,3.2,.2,-3.65)
         this.barrel(g,-3.55,.55,2.9,true); this.barrel(g,-2.45,.55,2.9,true); this.barrel(g,-3,.98,2.9,true)
         this.box(g,0x72543a,1.05,1.05,1.05,3.6,.53,3.4); this.box(g,0x72543a,.8,.8,.8,2.65,.4,3.7); this.table(g,1.5,.7,.7,wood,4.05,2)
         break
       }
       case 'library': {
-        this.shelf(g,2.35,2.35,-3.45,-4.5,0,true); this.shelf(g,2.35,2.35,3.45,-4.5)
+        this.shelf(g,2.35,2.35,-3.45,-4.5); this.shelf(g,2.35,2.35,3.45,-4.5)
         for(const z of [-3.4,3.4]) { this.shelf(g,2.1,2.35,-4.5,z,Math.PI/2); this.shelf(g,2.1,2.35,4.5,z,Math.PI/2) }
-        this.cylinder(g,wood,.72,.72,.72,0,.36,2.75,8); this.box(g,0x315b3b,.55,.12,.4,.15,.86,2.72); this.cylinder(g,0xb38b49,.06,.08,.5,.15,.65,2.72,7)
+        this.cylinder(g,wood,.72,.72,.72,0,.36,2.75,8)
         this.box(g,0x9a7442,.18,2.25,.16,3.85,1.13,2.65,.55); for(let i=0;i<5;i++)this.box(g,0x9a7442,.65,.08,.12,3.85,0.35+i*.4,2.65,.55)
-        this.box(g,0x315b3b,.62,.12,.42,.2,.08,3.35,.2); this.box(g,0xe0d5b9,.35,.025,.28,.62,.07,3.5,-.2)
         break
       }
       case 'suite': {
@@ -497,7 +415,6 @@ export class MansionScene {
         this.box(g,0x8b5260,.18,1.75,2.65,-3.75,1.3,-2.65); this.box(g,0x8b5260,.18,1.75,2.65,-1.65,1.3,-2.65)
         this.box(g,dark,1.25,2.25,.72,-3.9,1.13,3.35); this.table(g,1.65,.62,.78,0x936c5b,4.05,2.45,Math.PI/2); this.chair(g,0x74424d,3.35,2.45,Math.PI/2)
         const mirror=new THREE.Mesh(new THREE.CylinderGeometry(.65,.65,.08,12),new THREE.MeshStandardMaterial({color:0x9fb4c2,roughness:.12,metalness:.75})); mirror.rotation.z=Math.PI/2; mirror.position.set(4.48,1.65,2.45); g.add(mirror)
-        this.box(g,0x513126,.55,.22,.38,3.85,1,2.45); this.box(g,0xd7c7ad,.55,.08,.38,3.85,1.14,2.45); for(let i=0;i<3;i++)this.cylinder(g,0xf1e1c2,.1,.1,.12,3.1-i*.45,.08,1.35-i*.3,8)
         break
       }
     }
@@ -704,16 +621,17 @@ export class MansionScene {
       // addresses its pivots) but replace its visible result with the art.
       for (const child of group.children) child.visible = false
       spriteRoot = new THREE.Group()
-      const isAtlas = isDetective
-      const texture = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}assets/characters/${isAtlas ? 'detective-atlas' : archetypeId}.png`)
+      const isAtlas = true
+      const spriteRows = isDetective ? 4 : 5
+      const texture = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}assets/characters/${isDetective ? 'detective-atlas' : `${archetypeId}-atlas`}.png`)
       texture.colorSpace = THREE.SRGBColorSpace
       texture.minFilter = THREE.LinearFilter
       texture.magFilter = THREE.NearestFilter
       if (isAtlas) {
         texture.wrapS = THREE.RepeatWrapping
         texture.wrapT = THREE.RepeatWrapping
-        texture.repeat.set(0.25, 0.25)
-        texture.offset.set(0, 0.75)
+        texture.repeat.set(0.25, 1 / spriteRows)
+        texture.offset.set(0, 1 - 1 / spriteRows)
       }
       spriteMaterial = new THREE.MeshBasicMaterial({
         map: texture,
@@ -724,7 +642,9 @@ export class MansionScene {
         toneMapped: false,
       })
       const sprite = new THREE.Mesh(new THREE.PlaneGeometry(isAtlas ? 2.45 : 1.18, isAtlas ? 2.45 : 2.25), spriteMaterial)
-      sprite.position.y = 1.08
+      // The plane is 2.45 units tall, so its center must sit above half-height.
+      // The previous 1.08 position embedded the bottom 0.145 units in the floor.
+      sprite.position.y = 2.45 / 2 + 0.01
       sprite.renderOrder = 4
       spriteRoot.add(sprite)
       const shadow = new THREE.Mesh(
@@ -744,7 +664,7 @@ export class MansionScene {
     label.style.cssText = `position:absolute;transform:translate(-50%,-100%);font:600 11px Georgia,serif;color:${isDetective ? '#e8d8a0' : '#d8d0c0'};text-shadow:0 1px 3px #000,0 0 6px #000;white-space:nowrap;letter-spacing:0.04em;`
     this.labelLayer.appendChild(label)
 
-    this.actors.set(id, { group, body, head, label, walking: false, dead: false, bob: Math.random() * Math.PI * 2, leftArm, rightArm, leftLeg, rightLeg, prop, idleKind, facingY: 0, targetFacingY: 0, outline, outlined: false, spriteRoot, spriteMaterial, spriteFlip: 1, spriteAtlas: isDetective, spriteFrame: 0, action: null, actionUntil: 0 })
+    this.actors.set(id, { group, body, head, label, walking: false, dead: false, bob: Math.random() * Math.PI * 2, leftArm, rightArm, leftLeg, rightLeg, prop, idleKind, facingY: 0, targetFacingY: 0, outline, outlined: false, spriteRoot, spriteMaterial, spriteFlip: 1, spriteAtlas: true, spriteKind: isDetective ? 'detective' : 'npc', spriteRows: isDetective ? 4 : 5, spriteFrame: 0, defaultForward: !isDetective, action: null, actionStartedAt: 0, actionUntil: 0 })
   }
 
   removeAllActors() {
@@ -767,9 +687,10 @@ export class MansionScene {
       }
       a.group.position.set(x, 0, z)
       a.walking = walking
+      a.defaultForward = a.spriteKind === 'npc' && !walking
     }
-    a.group.visible = visible && !a.outlined
-    a.outline.visible = visible && a.outlined
+    a.group.visible = visible && (!a.outlined || a.spriteKind === 'npc')
+    a.outline.visible = visible && a.outlined && a.spriteKind !== 'npc'
     a.label.style.display = visible && !a.outlined ? 'block' : 'none'
   }
 
@@ -778,13 +699,17 @@ export class MansionScene {
     if (!a || a.dead) return
     const dx = x - a.group.position.x
     const dz = z - a.group.position.z
-    if (dx * dx + dz * dz > 0.000001) a.targetFacingY = Math.atan2(-dx, -dz)
+    if (dx * dx + dz * dz > 0.000001) {
+      a.targetFacingY = Math.atan2(-dx, -dz)
+      a.defaultForward = false
+    }
   }
 
   playActorAction(id: string, action: 'investigate', duration = 1.15) {
     const a = this.actors.get(id)
     if (!a || a.dead) return
     a.action = action
+    a.actionStartedAt = this.time
     a.actionUntil = this.time + duration
   }
 
@@ -793,7 +718,8 @@ export class MansionScene {
     a.spriteFrame = frame
     const col = frame % 4
     const row = Math.floor(frame / 4)
-    a.spriteMaterial.map.offset.set(col * 0.25, 0.75 - row * 0.25)
+    const cellH = 1 / a.spriteRows
+    a.spriteMaterial.map.offset.set(col * 0.25, 1 - cellH - row * cellH)
   }
 
   setActorDead(id: string, x: number, z: number) {
@@ -801,11 +727,19 @@ export class MansionScene {
     if (!a) return
     a.dead = true
     a.walking = false
-    a.group.position.set(x, 0.22, z)
-    a.group.rotation.z = Math.PI / 2
+    a.group.position.set(x, 0, z)
     ;(a.body.material as THREE.MeshStandardMaterial).color.multiplyScalar(0.45)
     ;(a.head.material as THREE.MeshStandardMaterial).color.multiplyScalar(0.6)
-    if (a.spriteMaterial) {
+    if (a.spriteKind === 'npc' && a.spriteRoot) {
+      this.setSpriteFrame(a, 12)
+      a.group.rotation.set(0, 0, 0)
+      a.spriteRoot.rotation.set(-Math.PI / 2, 0, 0)
+      a.spriteRoot.position.y = 0.04
+      a.spriteRoot.scale.set(1.15, 1.15, 1)
+      const art = a.spriteRoot.children[0]
+      art.position.set(0, 0, 0)
+      if (a.spriteRoot.children[1]) a.spriteRoot.children[1].visible = false
+    } else if (a.spriteMaterial) {
       a.spriteMaterial.color.setHex(0x787878)
       a.spriteMaterial.opacity = 0.72
     }
@@ -815,10 +749,17 @@ export class MansionScene {
     const a = this.actors.get(id)
     if (!a || !a.dead) return
     a.outlined = true
-    a.group.visible = false
-    a.outline.position.set(x, 0, z)
-    a.outline.rotation.y = a.facingY
-    a.outline.visible = true
+    if (a.spriteKind === 'npc') {
+      this.setSpriteFrame(a, 13)
+      a.group.position.set(x, 0, z)
+      a.group.visible = true
+      a.outline.visible = false
+    } else {
+      a.group.visible = false
+      a.outline.position.set(x, 0, z)
+      a.outline.rotation.y = a.facingY
+      a.outline.visible = true
+    }
     a.label.style.display = 'none'
   }
 
@@ -925,8 +866,15 @@ export class MansionScene {
     // actor bob
     for (const a of this.actors.values()) {
       if (!a.dead) {
-        const turn = Math.atan2(Math.sin(a.targetFacingY - a.facingY), Math.cos(a.targetFacingY - a.facingY))
-        a.facingY += turn * Math.min(1, dt * 12)
+        let turn = Math.atan2(Math.sin(a.targetFacingY - a.facingY), Math.cos(a.targetFacingY - a.facingY))
+        if (a.spriteKind === 'detective') {
+          // Directional atlas frames already communicate the turn. Snapping
+          // the hidden heading avoids a slow visual drift while moving sideways.
+          a.facingY = a.targetFacingY
+          turn = 0
+        } else {
+          a.facingY += turn * Math.min(1, dt * 12)
+        }
         a.group.rotation.y = a.facingY
         if (a.spriteRoot) {
           // Billboard the portrait toward the isometric camera while retaining
@@ -940,8 +888,11 @@ export class MansionScene {
           if (!a.spriteAtlas && Math.abs(lateralHeading) > 0.22) a.spriteFlip = lateralHeading < 0 ? -1 : 1
         }
         if (a.spriteAtlas) {
-          if (a.action && this.time < a.actionUntil) {
-            this.setSpriteFrame(a, 14 + (Math.floor(this.time * 4) % 2))
+          if (a.spriteKind === 'detective' && a.action && this.time < a.actionUntil) {
+            // The atlas has two authored investigation poses. Advance through
+            // them once, rather than alternating them for the whole action.
+            const progress = (this.time - a.actionStartedAt) / (a.actionUntil - a.actionStartedAt)
+            this.setSpriteFrame(a, progress < 0.5 ? 14 : 15)
           } else {
             if (a.action) a.action = null
             const cameraYaw = Math.atan2(
@@ -953,17 +904,46 @@ export class MansionScene {
             // camera looks from +Z, opposite the model's zero-angle heading,
             // so shift the world quarter-turn by 180 degrees.
             const direction = ((Math.round(relative / (Math.PI / 2)) + 2) % 4 + 4) % 4
-            const turning = Math.abs(turn) > 0.28
-            const frame = turning
-              ? 12 + (turn < 0 ? 0 : 1)
-              : a.walking ? (Math.sin(a.bob) >= 0 ? 4 : 8) + direction : direction
+            const turning = a.spriteKind === 'detective' && Math.abs(turn) > 0.28
+            // The detective atlas's idle row stores its two profile poses in
+            // the opposite columns from its walking rows. Swap only those
+            // stopped side views so releasing left/right preserves facing.
+            const idleDirection = a.spriteKind === 'detective' && (direction === 1 || direction === 3)
+              ? 4 - direction
+              : direction
+            let frame: number
+            if (a.spriteKind === 'npc' && a.defaultForward) {
+              a.spriteFlip = 1
+              frame = 0
+            } else if (a.spriteKind === 'npc' && (direction === 1 || direction === 3)) {
+              // Generated side-profile pairs are not consistently opposed in
+              // every NPC atlas, and the canonical profile itself faces right
+              // for the antiquarian but left for the rest. Mirror per identity
+              // so the visible face points toward the actual target.
+              const canonicalFacesLeft = a.idleKind !== 'antiquarian'
+              const targetIsLeft = direction === 3
+              a.spriteFlip = canonicalFacesLeft === targetIsLeft ? 1 : -1
+              frame = (a.walking ? (Math.sin(a.bob) >= 0 ? 4 : 8) : 0) + 1
+            } else {
+              a.spriteFlip = 1
+              frame = turning
+                ? 12 + (turn < 0 ? 0 : 1)
+                : a.walking
+                  ? a.spriteKind === 'detective' && (direction === 1 || direction === 3)
+                    // Idle and walk rows use opposite profile-column naming.
+                    // Alternate a correctly facing upright profile with its
+                    // matching first-step pose to keep gait without the tilt.
+                    ? Math.sin(a.bob) >= 0 ? idleDirection : 4 + direction
+                    : (Math.sin(a.bob) >= 0 ? 4 : 8) + direction
+                  : idleDirection
+            }
             this.setSpriteFrame(a, frame)
           }
         }
       }
       if (a.walking && !a.dead) {
         a.bob += dt * 9
-        a.group.position.y = Math.abs(Math.sin(a.bob)) * 0.09
+        a.group.position.y = a.spriteRoot ? 0 : Math.abs(Math.sin(a.bob)) * 0.09
         a.body.rotation.y = Math.sin(a.bob * 0.5) * 0.04
         const stride = Math.sin(a.bob) * (a.idleKind === 'curator' || a.idleKind === 'vocalist' ? 0.18 : 0.3)
         a.leftLeg.rotation.x = stride; a.rightLeg.rotation.x = -stride
@@ -971,9 +951,8 @@ export class MansionScene {
         a.leftArm.rotation.x = -armStride; a.rightArm.rotation.x = armStride
         a.prop.rotation.y = 0; a.prop.rotation.z = 0
         if (a.spriteRoot) {
-          const step = Math.sin(a.bob)
-          a.spriteRoot.scale.set(a.spriteFlip * (1 + Math.abs(step) * 0.025), 1 - Math.abs(step) * 0.025, 1)
-          a.spriteRoot.rotation.z = step * 0.025
+          a.spriteRoot.scale.set(a.spriteFlip, 1, 1)
+          a.spriteRoot.rotation.z = 0
         }
       } else if (!a.dead) {
         a.group.position.y = 0
@@ -986,9 +965,8 @@ export class MansionScene {
         a.prop.rotation.y = gesture * (a.idleKind === 'magician' || a.idleKind === 'correspondent' || a.idleKind === 'detective' ? 1.8 : 0.6)
         a.head.rotation.z = Math.sin(phase * 0.62) * (a.idleKind === 'surgeon' || a.idleKind === 'antiquarian' ? 0.035 : 0.015)
         if (a.spriteRoot) {
-          const breath = Math.sin(phase * 0.72 + a.bob) * 0.008
-          a.spriteRoot.scale.set(a.spriteFlip * (1 - breath * 0.35), 1 + breath, 1)
-          a.spriteRoot.rotation.z = Math.sin(phase * 0.43 + a.bob) * 0.008
+          a.spriteRoot.scale.set(a.spriteFlip, 1, 1)
+          a.spriteRoot.rotation.z = 0
         }
       }
     }
@@ -1009,7 +987,7 @@ export class MansionScene {
     for (const a of this.actors.values()) {
       if (!a.group.visible) continue
       v.copy(a.group.position)
-      v.y += a.dead ? 0.7 : 1.95
+      v.y += a.dead ? 0.7 : ACTOR_LABEL_HEIGHT
       v.project(this.camera)
       if (v.z > 1) {
         a.label.style.display = 'none'

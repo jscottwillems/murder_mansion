@@ -71,9 +71,57 @@ prey[3].room = prey[4].room = 'ballroom'
 huntSim.decide(hunter)
 console.assert(huntSim.aliveCount() === 9, 'killer must not kill with more than one witness')
 
+// Progressive interview topics must be fully supported by the built-in AI,
+// independent of the optional LLM provider. Exercise every archetype against
+// a four-victim case, including both branches of the last-seen answer.
+const interviewSim = new Simulation(97531, {
+  log: () => {}, lead: () => {}, guestDied: () => {}, bodyDiscovered: () => {}, overheard: () => {},
+})
+const interviewKiller = interviewSim.byId(interviewSim.killerId)!
+for (const victim of interviewSim.guests.filter(g => g.id !== interviewKiller.id).slice(0, 4)) {
+  interviewSim['commitMurder'](interviewKiller, victim)
+  victim.bodyFound = true
+}
+const latestInterviewVictim = interviewSim.victims().at(-1)!
+const progressiveTopics: QuestionTopic[] = ['last_seen', 'connection', 'motive', 'survival', 'next_victim']
+for (const guest of interviewSim.guests) {
+  for (const topic of progressiveTopics) {
+    const result = interviewSim.answerQuestion(guest, topic, 'dining')
+    console.assert(result.answer.trim().length > 0, `${guest.archetypeId} returned an empty ${topic} answer`)
+    console.assert(!result.answer.includes('undefined'), `${guest.archetypeId} leaked undefined in ${topic}`)
+  }
+}
+const noContactGuest = interviewSim.guests.find(g => g.id !== latestInterviewVictim.id)!
+noContactGuest.talkedWith = noContactGuest.talkedWith.filter(name => name !== latestInterviewVictim.name)
+const passingAnswer = interviewSim.answerQuestion(noContactGuest, 'last_seen', 'dining')
+console.assert(passingAnswer.answer.includes(latestInterviewVictim.name), 'last-seen answer should name the latest victim')
+console.assert(passingAnswer.leads.length === 1, 'last-seen answer should create a lead')
+noContactGuest.talkedWith.push(latestInterviewVictim.name)
+const contactAnswer = interviewSim.answerQuestion(noContactGuest, 'last_seen', 'dining')
+console.assert(contactAnswer.answer.includes('spoke with'), 'last-seen answer should acknowledge prior contact')
+console.assert(contactAnswer.leads.length === 1, 'prior-contact answer should create a lead')
+
+// With only the killer left, late-game questions must still return cleanly
+// instead of trying to select a nonexistent guest.
+const endgameSim = new Simulation(86420, {
+  log: () => {}, lead: () => {}, guestDied: () => {}, bodyDiscovered: () => {}, overheard: () => {},
+})
+const endgameKiller = endgameSim.byId(endgameSim.killerId)!
+for (const victim of endgameSim.guests.filter(g => g.id !== endgameKiller.id)) {
+  endgameSim['commitMurder'](endgameKiller, victim)
+  victim.bodyFound = true
+}
+for (const topic of progressiveTopics) {
+  const result = endgameSim.answerQuestion(endgameKiller, topic, 'dining')
+  console.assert(result.answer.trim().length > 0 && !result.answer.includes('undefined'), `single-survivor ${topic} answer failed`)
+}
+
 // simulate a full night: 0.25 real-second steps at 1 min/s => 360*4 steps
 sim.playerRoom = 'library'
-const topics: QuestionTopic[] = ['timeline', 'suspicion', 'intel', 'alibi', 'room', 'pressure', 'social', 'victim']
+const topics: QuestionTopic[] = [
+  'timeline', 'suspicion', 'intel', 'alibi', 'room', 'pressure', 'social', 'victim',
+  ...progressiveTopics,
+]
 for (let i = 0; i < NIGHT_LENGTH_MIN * 4; i++) {
   sim.advance(0.25, 1)
   // periodically interview someone to exercise answer generation

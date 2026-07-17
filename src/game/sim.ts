@@ -698,6 +698,58 @@ export class Simulation {
         }
         break
       }
+      case 'last_seen': {
+        const v = this.victims().at(-1)
+        if (!v) {
+          answer = '“I haven’t seen any victim, detective. Let us hope it stays that way.”'
+        } else if (g.talkedWith.includes(v.name)) {
+          answer = `“I spoke with ${v.name} earlier tonight. They seemed alive, which is more than I can say now.”`
+          leads.push({ source: g.name, text: `${g.name} admits speaking with ${v.name} before the death.` })
+        } else {
+          answer = `“I saw ${v.name} only in passing. We did not speak.”`
+          leads.push({ source: g.name, text: `${g.name} claims to have seen ${v.name} only in passing.` })
+        }
+        break
+      }
+      case 'connection': {
+        const names = this.victims().slice(-3).map(v => v.name)
+        answer = names.length > 1
+          ? `“${names.join(' and ')} shared this house, this storm, and someone’s attention. Anything beyond that is a pattern we’re imposing on panic.”`
+          : '“One death is a tragedy, detective. It takes another to make a pattern.”'
+        break
+      }
+      case 'motive': {
+        const candidates = this.aliveGuests().filter(o => o.id !== g.id)
+        const target = candidates.length === 0 ? undefined : g.isKiller
+          ? pick(candidates.filter(o => !o.isKiller), this.rng)
+          : [...candidates].sort((x, y) => (this.suspicion[y.id] ?? 0) - (this.suspicion[x.id] ?? 0))[0]
+        if (target) {
+          answer = `“${target.name} has gained something precious: fewer people left to contradict them.”`
+          leads.push({ source: g.name, text: `${g.name} believes ${target.name} may benefit from the deaths.` })
+          this.bumpSuspicion(target.id, 0.6)
+        } else {
+          answer = '“No one else is left to benefit. That rather narrows your question, doesn’t it?”'
+        }
+        break
+      }
+      case 'survival': {
+        answer = g.isKiller
+          ? '“Luck, perhaps. Or the killer knows suspicion settles most heavily on whoever remains.”'
+          : '“Because I have kept moving, kept watching, and trusted no one. Including you.”'
+        if (g.isKiller) this.bumpSuspicion(g.id, 0.4)
+        break
+      }
+      case 'next_victim': {
+        const candidates = this.aliveGuests().filter(o => o.id !== g.id)
+        if (candidates.length > 0) {
+          const target = pick(candidates, this.rng)
+          answer = `“${target.name}. Not because I know anything—because they look as frightened as the others did.”`
+          leads.push({ source: g.name, text: `${g.name} fears ${target.name} may be the next target.` })
+        } else {
+          answer = '“There is no one else, detective. So either you are next, or I am.”'
+        }
+        break
+      }
     }
     return { answer, leads }
   }

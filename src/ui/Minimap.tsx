@@ -56,9 +56,9 @@ export function Minimap({ snap }: { snap: Snapshot }) {
   return (
     <canvas
       ref={ref}
-      width={132}
-      height={132}
-      className="rounded border border-[#3a352a] bg-black/70 shadow-lg"
+      width={300}
+      height={300}
+      className="aspect-square w-full rounded border border-[#3a352a] bg-black/70 shadow-lg"
     />
   )
 }

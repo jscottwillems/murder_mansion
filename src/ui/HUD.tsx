@@ -29,7 +29,7 @@ export function HUD({ game, snap }: { game: Game; snap: Snapshot }) {
       </div>
 
       {/* top-right: minimap + buttons */}
-      <div className="absolute right-4 top-4 flex flex-col items-end gap-2">
+      <div className="absolute right-4 top-4 flex w-max flex-col gap-2">
         <Minimap snap={snap} />
         <div className="pointer-events-auto flex gap-2">
           <button

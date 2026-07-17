@@ -66,6 +66,11 @@ export interface TranscriptEntry {
 export type QuestionTopic =
   | 'timeline' | 'suspicion' | 'intel' | 'alibi'
   | 'room' | 'pressure' | 'social' | 'victim'
+  | 'last_seen' | 'connection' | 'motive' | 'survival' | 'next_victim'
+
+export type ConversationEmotion =
+  | 'neutral' | 'suspicious' | 'worried'
+  | 'angry' | 'thoughtful' | 'surprised'
 
 export interface QuestionOption {
   topic: QuestionTopic
@@ -77,6 +82,7 @@ export interface InterviewState {
   questions: QuestionOption[]
   lastQuestion: string
   lastAnswer: string
+  emotion: ConversationEmotion
   thinking: boolean
 }
 
