@@ -24,7 +24,7 @@ export function HUD({ game, snap }: { game: Game; snap: Snapshot }) {
         <div className="mt-2 flex gap-3 text-[10px] uppercase tracking-wider text-[#8a8478]">
           <span>{snap.aliveCount} alive</span>
           <span className={snap.bodiesFound > 0 ? 'text-[#e86a5a]' : ''}>{snap.bodiesFound} bodies</span>
-          <span>{snap.llmActive ? 'AI: LLM' : 'AI: built-in'}</span>
+          <span>{snap.settings.director === 'llm' ? 'AI: LLM' : 'AI: built-in'}</span>
         </div>
       </div>
 

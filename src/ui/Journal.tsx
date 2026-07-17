@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import type { Game } from '@/game/game'
 import type { Snapshot } from '@/game/types'
+import { EVIDENCE_BY_ARCHETYPE } from '@/game/data'
 import { GuestPortrait } from '@/ui/GuestPortrait'
 
-type Tab = 'leads' | 'guests' | 'interviews'
+type Tab = 'leads' | 'evidence' | 'guests' | 'interviews'
 
 export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
   const [tab, setTab] = useState<Tab>('leads')
@@ -12,6 +13,7 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'leads', label: `Leads (${snap.leads.length})` },
+    { id: 'evidence', label: `Evidence (${snap.evidence.length})` },
     { id: 'guests', label: 'Guests' },
     { id: 'interviews', label: 'Interviews' },
   ]
@@ -58,6 +60,44 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
                   <div className="mt-0.5 text-sm text-[#d8d0c0]">{l.text}</div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {tab === 'evidence' && (
+            <div>
+              {snap.evidence.length === 0 && (
+                <div className="rounded border border-dashed border-[#3a352a] bg-black/20 px-5 py-10 text-center">
+                  <div className="font-serif text-base text-[#8a8478]">No physical evidence collected</div>
+                  <div className="mt-1 text-xs italic text-[#5f5a50]">Investigate a discovered body to preserve its scene trace.</div>
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {[...snap.evidence].reverse().map(item => (
+                  <article key={item.id} className="overflow-hidden rounded border border-[#3b3528] bg-black/35">
+                    <div className="flex gap-3 p-3">
+                      <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded border border-[#4b4330] bg-[#111016] shadow-inner">
+                        <img
+                          src={`${import.meta.env.BASE_URL}assets/evidence/${item.evidenceId}.png`}
+                          alt={item.label}
+                          className="h-[5.5rem] w-[5.5rem] object-contain [image-rendering:pixelated]"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[9px] uppercase tracking-[0.16em] text-[#8ab8a0]">Physical evidence</div>
+                        <h3 className="mt-0.5 font-serif text-sm leading-tight text-[#e8d8a0]">{item.label}</h3>
+                        <div className="mt-1 text-[10px] text-[#6f695e]">{fmtMin(item.atMin)} · {item.source}</div>
+                      </div>
+                    </div>
+                    <div className="border-t border-[#2a2822] px-3 py-2.5">
+                      <p className="text-xs leading-relaxed text-[#c7c0b3]">{item.description}</p>
+                      <div className="mt-2 text-[10px] uppercase tracking-wider text-[#6a6458]">Possible sources</div>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {item.candidateNames.map(name => <Badge key={name} text={name} tone="info" />)}
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
             </div>
           )}
 
@@ -113,6 +153,27 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
                           )}
                         </>
                       )}
+                    </div>
+                  </div>
+                  <div data-guest-evidence={g.archetypeId} className="mt-2.5 border-t border-[#2a2822] pt-2">
+                    <div className="mb-1.5 text-[8px] uppercase tracking-[0.16em] text-[#6a6458]">Associated evidence</div>
+                    <div className="grid grid-cols-3 gap-1">
+                      {EVIDENCE_BY_ARCHETYPE[g.archetypeId].map(evidence => (
+                        <div
+                          key={evidence.id}
+                          data-evidence-id={evidence.id}
+                          title={evidence.description}
+                          className="flex h-[4.5rem] min-w-0 flex-col items-center justify-center rounded border border-[#353025] bg-[#111016]/80 px-1 py-1 text-center"
+                        >
+                          <img
+                            src={`${import.meta.env.BASE_URL}assets/evidence/${evidence.id}.png`}
+                            alt=""
+                            aria-hidden="true"
+                            className="h-8 w-8 shrink-0 object-contain [image-rendering:pixelated]"
+                          />
+                          <span className="mt-1 flex h-6 w-full items-center justify-center overflow-hidden text-[8px] leading-[0.65rem] text-[#a9a093] [overflow-wrap:anywhere]">{evidence.label}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>

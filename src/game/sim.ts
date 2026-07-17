@@ -139,7 +139,7 @@ export class Simulation {
   // ------------------------------------------------------------- time & motion
 
   /** Advance by real dt seconds; speed = game minutes per real second. */
-  advance(dtReal: number, speed: number) {
+  advance(dtReal: number, speed: number, movementLockedGuestId?: string) {
     const dtMin = dtReal * speed
     this.clockMin = Math.min(NIGHT_LENGTH_MIN, this.clockMin + dtMin)
 
@@ -152,6 +152,10 @@ export class Simulation {
     }
 
     for (const g of this.aliveGuests()) {
+      // An NPC being interviewed stays exactly where the detective engaged
+      // them. The rest of the house—and the night clock—continues normally.
+      if (g.id === movementLockedGuestId) continue
+
       // movement along waypoints
       const path = this.paths[g.id]
       if (path && path.length > 0) {
@@ -173,8 +177,9 @@ export class Simulation {
         } else {
           const ux = dx / dist
           const uz = dz / dist
+          // Guests may pass through one another so crowds cannot deadlock in
+          // doorways. Walls, room boundaries, and furniture still block them.
           const clear = (x: number, z: number) => canOccupy(x, z, ACTOR_RADIUS)
-            && !this.aliveGuests().some(o => o.id !== g.id && Math.hypot(o.x - x, o.z - z) < ACTOR_RADIUS * 2)
           const attempts: [number, number][] = [
             [ux * step, uz * step], [ux * step, 0], [0, uz * step],
             [-uz * step, ux * step], [uz * step, -ux * step],
@@ -195,8 +200,8 @@ export class Simulation {
           }
           if (moved) {
             const remaining = Math.hypot(wp.x - g.x, wp.z - g.z)
-            // Side-stepping around an actor counts as progress only if it
-            // actually brings this guest closer to the current waypoint.
+            // A recovery step counts as progress only if it actually brings
+            // this guest closer to the current waypoint.
             if (remaining < recovery.lastDistance - 0.002) recovery.blockedFor = 0
             else recovery.blockedFor += dtReal
             recovery.lastDistance = remaining
@@ -212,9 +217,8 @@ export class Simulation {
         }
         const r = roomOfPoint(g.x, g.z)
         if (r) g.room = r
-        // Collision avoidance may prevent the killer from reaching the exact
-        // final waypoint occupied by their prey. Sharing the room is enough
-        // to act; do not require physical overlap or a completed route.
+        // Sharing the room is enough for the killer to act; do not require a
+        // completed route before checking the opportunity.
         if (g.isKiller) this.tryMurder(g)
       } else if (g.state === 'talk') {
         if (this.clockMin >= g.talkUntilMin || !g.talkPartnerId || !this.byId(g.talkPartnerId)?.alive) {
@@ -417,7 +421,7 @@ export class Simulation {
     g.state = 'walk'
   }
 
-  /** Break collision deadlocks by briefly steering into nearby open space. */
+  /** Steer around room geometry when the direct route stops making progress. */
   private addRecoveryDetour(
     g: Guest,
     destination: Waypoint,
@@ -440,7 +444,7 @@ export class Simulation {
       return
     }
 
-    // If nearby furniture leaves no detour, abandon this congested route and
+    // If nearby furniture leaves no detour, abandon the blocked route and
     // choose another neighboring room on the next decision tick.
     delete this.paths[g.id]
     g.state = 'idle'

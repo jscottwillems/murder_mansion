@@ -1,10 +1,10 @@
 // Game orchestrator: loop, input, phases, interviews, accusation, endings,
 // LLM director hookup, and the pub/sub store bridge for React.
 import type {
-  EndInfo, Guest, InterviewState, Lead, LogLine, Phase,
+  CollectedEvidence, EndInfo, Guest, InterviewState, Lead, LogLine, Phase,
   QuestionOption, QuestionTopic, RoomId, Settings, Snapshot, TranscriptEntry,
 } from './types'
-import { ARCHETYPES, EVIDENCE_BY_ID, ROOM_BY_ID, roomOfPoint, canOccupy, fmtTime, NIGHT_LENGTH_MIN } from './data'
+import { ARCHETYPES, EVIDENCE_BY_ID, ROOM_BY_ID, ROOM_HALF, roomAt, roomCenter, roomOfPoint, canOccupy, fmtTime, NIGHT_LENGTH_MIN } from './data'
 import { Simulation } from './sim'
 import { MansionScene } from './world'
 import { Soundtrack } from './audio'
@@ -57,7 +57,9 @@ export class Game {
   private px = 0
   private pz = 0
   private playerRoom: RoomId = 'dining'
+  private guestRevealOpacity = 1
   private leads: Lead[] = []
+  private evidence: CollectedEvidence[] = []
   private logLines: LogLine[] = []
   private transcripts: Record<string, TranscriptEntry[]> = {}
   private interview: InterviewState | null = null
@@ -126,9 +128,10 @@ export class Game {
     for (let i = 0; i < steps; i++) {
       const dt = 1 / 60
       if (this.phase === 'playing' && this.sim) this.stepPlaying(dt)
+      else if (this.phase === 'interview' && this.sim) this.stepInterview(dt)
       this.syncActors()
       this.world.update(dt)
-      this.audio.onGameMinute(this.sim?.clockMin ?? 0, this.settings.speed, this.phase === 'playing')
+      this.audio.onGameMinute(this.sim?.clockMin ?? 0, this.settings.speed, this.timeIsRunning())
     }
     this.emit()
   }
@@ -168,6 +171,7 @@ export class Game {
       bodiesFound: sim?.bodiesFound() ?? 0,
       guests,
       leads: this.leads,
+      evidence: this.evidence,
       transcripts: this.transcripts,
       log: this.logLines.slice(-6),
       interview: this.interview,
@@ -263,11 +267,20 @@ export class Game {
     this.world.faceActorAt('player', body.x, body.z)
     this.world.playActorAction('player', 'investigate')
     this.world.replaceBodyWithOutline(body.id, body.x, body.z)
-    const candidates = evidence.archetypeIds
+    const candidateNames = evidence.archetypeIds
       .map(id => ARCHETYPES.find(a => a.id === id)?.name)
       .filter((name): name is string => !!name)
-      .join(', ')
+    const candidates = candidateNames.join(', ')
     const text = `${evidence.label}: ${evidence.description} Possible sources: ${candidates}.`
+    this.evidence = [...this.evidence, {
+      id: `evidence-${body.id}`,
+      evidenceId: evidence.id,
+      label: evidence.label,
+      description: evidence.description,
+      candidateNames,
+      source: `${body.name} — ${ROOM_BY_ID[body.deathRoom!].name}`,
+      atMin: this.sim?.clockMin ?? 0,
+    }]
     this.pushLead('evidence', `Scene: ${body.name}`, text)
     this.pushLog(`Evidence collected — ${evidence.label}. Added to your journal.`, 'info')
     this.emit()
@@ -292,6 +305,7 @@ export class Game {
     this.audio.ensure()
     const seed = Math.floor(Math.random() * 1e9)
     this.leads = []
+    this.evidence = []
     this.logLines = []
     this.transcripts = {}
     this.interview = null
@@ -646,13 +660,12 @@ export class Game {
     const dt = Math.min(0.05, (ts - this.lastTs) / 1000 || 0.016)
     this.lastTs = ts
 
-    if (this.phase === 'playing' && this.sim) {
-      this.stepPlaying(dt)
-    }
+    if (this.phase === 'playing' && this.sim) this.stepPlaying(dt)
+    else if (this.phase === 'interview' && this.sim) this.stepInterview(dt)
     this.syncActors()
     this.world.update(dt)
 
-    this.audio.onGameMinute(this.sim?.clockMin ?? 0, this.settings.speed, this.phase === 'playing')
+    this.audio.onGameMinute(this.sim?.clockMin ?? 0, this.settings.speed, this.timeIsRunning())
 
     this.emitTimer += dt
     if (this.emitTimer > 0.15) {
@@ -684,6 +697,7 @@ export class Game {
     const r = roomOfPoint(this.px, this.pz)
     if (r && r !== this.playerRoom) {
       this.playerRoom = r
+      this.guestRevealOpacity = 0
       sim.playerRoom = r
       this.world.focusRoom(r)
       // discover bodies
@@ -697,7 +711,21 @@ export class Game {
     }
 
     sim.playerRoom = this.playerRoom
-    sim.advance(dt, this.settings.speed)
+    this.advanceSimulation(dt)
+
+  }
+
+  private stepInterview(dt: number) {
+    this.advanceSimulation(dt, this.interview?.guestId)
+  }
+
+  private timeIsRunning() {
+    return this.phase === 'playing' || this.phase === 'interview'
+  }
+
+  private advanceSimulation(dt: number, movementLockedGuestId?: string) {
+    const sim = this.sim!
+    sim.advance(dt, this.settings.speed, movementLockedGuestId)
 
     // endings
     if (sim.clockMin >= NIGHT_LENGTH_MIN) {
@@ -732,9 +760,10 @@ export class Game {
     this.world.setActor('player', this.px, this.pz, this.isMoving(), this.phase !== 'title')
     this.world.trackPlayer(this.px, this.pz, this.playerRoom)
     if (!sim) return
+    const guestReveal = this.guestRevealAtRoomEntrance()
     for (const g of sim.guests) {
       const inRoom = g.room === this.playerRoom
-      this.world.setActor(g.id, g.x, g.z, g.state === 'walk', inRoom)
+      this.world.setActor(g.id, g.x, g.z, g.state === 'walk', inRoom, guestReveal)
       if (g.state === 'talk' && g.talkPartnerId) {
         const partner = sim.byId(g.talkPartnerId)
         if (partner) this.world.faceActorAt(g.id, partner.x, partner.z)
@@ -747,6 +776,38 @@ export class Game {
         this.world.faceActorAt(guest.id, this.px, this.pz)
       }
     }
+  }
+
+  /**
+   * Ease guests into view as the detective crosses a doorway. Room membership
+   * changes exactly at the wall plane, so a short depth-based reveal prevents
+   * everyone in the destination room appearing on a single frame.
+   */
+  private guestRevealAtRoomEntrance(): number {
+    const room = ROOM_BY_ID[this.playerRoom]
+    const center = roomCenter(this.playerRoom)
+    const entrances: { x: number; z: number }[] = []
+    if (roomAt(room.col - 1, room.row)) entrances.push({ x: center.x - ROOM_HALF, z: center.z })
+    if (roomAt(room.col + 1, room.row)) entrances.push({ x: center.x + ROOM_HALF, z: center.z })
+    if (roomAt(room.col, room.row - 1)) entrances.push({ x: center.x, z: center.z - ROOM_HALF })
+    if (roomAt(room.col, room.row + 1)) entrances.push({ x: center.x, z: center.z + ROOM_HALF })
+    if (entrances.length === 0) return 1
+
+    const distance = Math.min(...entrances.map(e => Math.hypot(this.px - e.x, this.pz - e.z)))
+    if (roomOfPoint(this.px, this.pz) === this.playerRoom) {
+      const entryT = Math.max(0, Math.min(1, distance / 2.8))
+      const entryReveal = entryT * entryT * (3 - 2 * entryT)
+      // Entry is one-way: after guests finish fading in they stay fully visible
+      // everywhere inside the room, including right up to an exit threshold.
+      this.guestRevealOpacity = Math.max(this.guestRevealOpacity, entryReveal)
+    } else {
+      const hallT = Math.max(0, Math.min(1, distance / 2.2))
+      const exitReveal = 1 - hallT * hallT * (3 - 2 * hallT)
+      // Start fading only after crossing into the unassigned passage. Latching
+      // downward prevents the outgoing room from reappearing past its midpoint.
+      this.guestRevealOpacity = Math.min(this.guestRevealOpacity, exitReveal)
+    }
+    return this.guestRevealOpacity
   }
 
   private isMoving(): boolean {
@@ -795,6 +856,12 @@ export class Game {
         appearance: g.evidenceInvestigated ? 'chalk outline' : 'body',
       }))
       : [],
+    evidenceCollected: this.evidence.map(item => ({
+      id: item.evidenceId,
+      label: item.label,
+      source: item.source,
+      possibleSources: item.candidateNames,
+    })),
     clockText: fmtTime(this.sim?.clockMin ?? 0),
     hint: this.computeHint(),
   })

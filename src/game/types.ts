@@ -57,6 +57,16 @@ export interface Lead {
   text: string
 }
 
+export interface CollectedEvidence {
+  id: string
+  evidenceId: string
+  label: string
+  description: string
+  candidateNames: string[]
+  source: string
+  atMin: number
+}
+
 export interface TranscriptEntry {
   atMin: number
   q: string
@@ -142,13 +152,14 @@ export interface Snapshot {
   bodiesFound: number
   guests: GuestSummary[]
   leads: Lead[]
+  evidence: CollectedEvidence[]
   transcripts: Record<string, TranscriptEntry[]>
   log: LogLine[]
   interview: InterviewState | null
   interactHint: string | null
   settings: Settings
   endInfo: EndInfo | null
-  llmActive: boolean
+  llmActive: boolean       // true after the configured LLM has answered successfully
   caseSeed: number
   // positions for the minimap (only what the player legitimately knows)
   minimap: {

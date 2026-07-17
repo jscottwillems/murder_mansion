@@ -13,7 +13,7 @@ export function Minimap({ snap }: { snap: Snapshot }) {
     const W = canvas.width
     const cell = W / 3
     ctx.clearRect(0, 0, W, W)
-    ctx.font = '8px Georgia'
+    ctx.font = '12px Georgia'
     for (const r of ROOMS) {
       const x = r.col * cell
       const y = r.row * cell

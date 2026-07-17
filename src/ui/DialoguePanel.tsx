@@ -24,7 +24,7 @@ export function DialoguePanel({ game, snap }: { game: Game; snap: Snapshot }) {
                   <div className="text-xs uppercase tracking-widest text-[#8a8478]">{guest.archetypeName}</div>
                 </div>
                 <div className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-[#6a6458]">
-                  Time stands still
+                  The night moves on
                 </div>
               </div>
 

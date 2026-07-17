@@ -4,6 +4,7 @@
 import * as THREE from 'three'
 import type { RoomId } from './types'
 import { ROOMS, ROOM_HALF, ROOM_STEP, PASS_HALF, roomCenter } from './data'
+import { DECOR_PLACEMENTS } from './decor'
 
 interface Actor {
   group: THREE.Group
@@ -73,6 +74,7 @@ export class MansionScene {
   private roomLights = new Map<RoomId, THREE.PointLight>()
   private materialCache = new Map<string, THREE.MeshStandardMaterial>()
   private floorTextureCache = new Map<string, THREE.Texture>()
+  private decorTextureCache = new Map<string, THREE.Texture>()
   private rain!: THREE.Points
   private rainVel: Float32Array = new Float32Array(0)
   private dust!: THREE.Points
@@ -215,6 +217,7 @@ export class MansionScene {
 
       // furniture
       this.buildFurniture(g, r.furniture, r.accent)
+      this.buildSpriteDecor(g, r.id)
 
       // lamp: visible bulb + point light
       const bulb = new THREE.Mesh(
@@ -352,6 +355,60 @@ export class MansionScene {
     const b = this.cylinder(g, 0x634329, 0.48, 0.54, 1.0, x, y, z, 10, horizontal ? Math.PI / 2 : 0)
     if (horizontal) b.rotation.z = Math.PI / 2
     for (const dy of [-0.32, 0.32]) this.cylinder(g, 0x2a2927, 0.55, 0.55, 0.08, x + (horizontal ? dy : 0), y + (horizontal ? 0 : dy), z, 10, horizontal ? Math.PI / 2 : 0)
+  }
+
+  private decorTexture(room: RoomId, asset: string, onLoad: (texture: THREE.Texture) => void): THREE.Texture {
+    const key = `${room}/${asset}`
+    let texture = this.decorTextureCache.get(key)
+    if (!texture) {
+      texture = new THREE.TextureLoader().load(
+        `${import.meta.env.BASE_URL}assets/decor/sprites/${room}/${asset}.png`,
+        onLoad,
+      )
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.minFilter = THREE.LinearMipmapLinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.wrapS = THREE.ClampToEdgeWrapping
+      texture.wrapT = THREE.ClampToEdgeWrapping
+      texture.anisotropy = Math.min(4, this.renderer.capabilities.getMaxAnisotropy())
+      this.decorTextureCache.set(key, texture)
+    } else if (texture.image) {
+      onLoad(texture)
+    }
+    return texture
+  }
+
+  private buildSpriteDecor(g: THREE.Group, room: RoomId) {
+    for (const placement of DECOR_PLACEMENTS) {
+      if (placement.room !== room) continue
+      let sprite: THREE.Mesh | null = null
+      const setAspect = (loaded: THREE.Texture) => {
+        const image = loaded.image as { width?: number; height?: number } | undefined
+        if (!sprite || !image?.width || !image.height) return
+        const direction = placement.flip ? -1 : 1
+        sprite.scale.x = placement.height * (image.width / image.height) * direction
+      }
+      const texture = this.decorTexture(room, placement.asset, setAspect)
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.05,
+        depthWrite: true,
+        toneMapped: false,
+        side: THREE.DoubleSide,
+      })
+      sprite = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material)
+      const direction = placement.flip ? -1 : 1
+      sprite.scale.set(placement.height * direction, placement.height, 1)
+      sprite.position.set(
+        placement.x,
+        (placement.baseY ?? 0.025) + placement.height / 2,
+        placement.z,
+      )
+      sprite.renderOrder = placement.renderOrder ?? 1
+      setAspect(texture)
+      g.add(sprite)
+    }
   }
 
   private buildFurniture(g: THREE.Group, kind: string, accent: number) {
@@ -676,7 +733,7 @@ export class MansionScene {
     this.actors.clear()
   }
 
-  setActor(id: string, x: number, z: number, walking: boolean, visible: boolean) {
+  setActor(id: string, x: number, z: number, walking: boolean, visible: boolean, opacity = 1) {
     const a = this.actors.get(id)
     if (!a) return
     if (!a.dead) {
@@ -692,6 +749,13 @@ export class MansionScene {
     a.group.visible = visible && (!a.outlined || a.spriteKind === 'npc')
     a.outline.visible = visible && a.outlined && a.spriteKind !== 'npc'
     a.label.style.display = visible && !a.outlined ? 'block' : 'none'
+    if (a.spriteKind === 'npc' && a.spriteMaterial) {
+      const reveal = Math.max(0, Math.min(1, opacity))
+      a.spriteMaterial.opacity = reveal
+      const shadow = a.spriteRoot?.children[1] as THREE.Mesh | undefined
+      if (shadow?.material instanceof THREE.MeshBasicMaterial) shadow.material.opacity = 0.42 * reveal
+      a.label.style.opacity = String(reveal)
+    }
   }
 
   faceActorAt(id: string, x: number, z: number) {
