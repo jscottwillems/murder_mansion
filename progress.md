@@ -117,3 +117,8 @@ LLM provider presets (current prompt): user asked to configure a free default op
 - Preserved old saved endpoint configurations by migrating them to the Custom preset.
 - Focused ESLint passes for all changed files. Web-game client screenshots were inspected for Groq and Ollama in `output/llm-provider-settings/` and `output/llm-provider-ollama-2/`; no browser error artifacts were produced.
 - Full `npm run build` is currently blocked by an unrelated existing `src/game/world.ts` Actor type error (the object at line 665 lacks limb/animation fields). This provider work did not modify that file.
+
+GitHub Pages portrait-path fix (current prompt): character sprites loaded locally but not from the deployed project subpath.
+- Root cause: `GuestPortrait.tsx` used root-absolute `/assets/characters/...` URLs, which bypassed the repository subpath on GitHub Pages.
+- Updated portrait URLs to prepend Vite's `import.meta.env.BASE_URL`, preserving local development while resolving correctly under the deployed base.
+- Verification: `npm run build` passes. The mandated browser client successfully loaded gameplay from the nested `/murder_mansion/dist/` path with no browser error artifact. A targeted journal check loaded all ten sprite images at nonzero natural widths with no console errors; `output/github-pages-sprite-fix-final/journal.png` was visually inspected.

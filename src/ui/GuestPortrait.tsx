@@ -1,14 +1,16 @@
+const portraitUrl = (filename: string) => `${import.meta.env.BASE_URL}assets/characters/${filename}`
+
 const GUEST_PORTRAITS: Record<string, string> = {
-  columnist: '/assets/characters/columnist.png',
-  surgeon: '/assets/characters/surgeon.png',
-  curator: '/assets/characters/curator.png',
-  magician: '/assets/characters/magician.png',
-  correspondent: '/assets/characters/correspondent.png',
-  accountant: '/assets/characters/accountant.png',
-  vocalist: '/assets/characters/vocalist.png',
-  antiquarian: '/assets/characters/antiquarian.png',
-  chauffeur: '/assets/characters/chauffeur.png',
-  debutante: '/assets/characters/debutante.png',
+  columnist: portraitUrl('columnist.png'),
+  surgeon: portraitUrl('surgeon.png'),
+  curator: portraitUrl('curator.png'),
+  magician: portraitUrl('magician.png'),
+  correspondent: portraitUrl('correspondent.png'),
+  accountant: portraitUrl('accountant.png'),
+  vocalist: portraitUrl('vocalist.png'),
+  antiquarian: portraitUrl('antiquarian.png'),
+  chauffeur: portraitUrl('chauffeur.png'),
+  debutante: portraitUrl('debutante.png'),
 }
 
 type PortraitSize = 'compact' | 'card' | 'dialog'
