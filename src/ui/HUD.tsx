@@ -14,7 +14,10 @@ export function HUD({ game, snap }: { game: Game; snap: Snapshot }) {
   return (
     <div className="pointer-events-none absolute inset-0 select-none">
       {/* top-left: clock + room */}
-      <div className="absolute left-4 top-4 rounded border border-[#3a352a] bg-black/70 px-4 py-3 backdrop-blur-sm">
+      <div
+        className="hud-gothic-info-frame absolute left-4 top-4 px-4 py-3 backdrop-blur-sm"
+        style={{ '--gothic-frame-image': `url(${import.meta.env.BASE_URL}assets/ui/gothic-popup-frame.png)` } as React.CSSProperties}
+      >
         <div className="font-serif text-2xl tracking-wide text-[#e8d8a0]">{snap.clockText}</div>
         <div className="mt-1 h-1 w-40 overflow-hidden rounded bg-[#242220]">
           <div className="h-full bg-gradient-to-r from-[#3a4a6a] to-[#c9a227]" style={{ width: `${hourProgress * 100}%` }} />
@@ -29,38 +32,74 @@ export function HUD({ game, snap }: { game: Game; snap: Snapshot }) {
       </div>
 
       {/* top-right: minimap + buttons */}
-      <div className="absolute right-4 top-4 flex w-max flex-col gap-2">
-        <Minimap snap={snap} />
-        <div className="pointer-events-auto flex gap-2">
+      <div className="absolute right-4 top-4 flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-1">
+        <div
+          className="hud-gothic-map-frame"
+          style={{ '--gothic-frame-image': `url(${import.meta.env.BASE_URL}assets/ui/gothic-popup-frame.png)` } as React.CSSProperties}
+        >
+          <Minimap snap={snap} />
+        </div>
+        <div
+          className="hud-gothic-action-frame pointer-events-auto flex gap-1.5"
+          style={{ '--gothic-frame-image': `url(${import.meta.env.BASE_URL}assets/ui/gothic-chat-frame.png)` } as React.CSSProperties}
+        >
           <button
             onClick={() => game.setPhase('journal')}
-            className="rounded border border-[#3a352a] bg-black/70 px-3 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
+            className="min-w-0 flex-1 rounded border border-[#3a352a] bg-black/70 px-2 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
           >
             Journal <span className="text-[#8a8478]">[J]</span>
           </button>
           <button
             onClick={() => game.setPhase('accuse')}
-            className="rounded border border-[#6a2a22] bg-[#2a0d0a]/80 px-3 py-1.5 font-serif text-xs font-semibold text-[#e86a5a] hover:border-[#e86a5a] hover:bg-[#e86a5a]/20"
+            className="min-w-0 flex-1 rounded border border-[#6a2a22] bg-[#2a0d0a]/80 px-2 py-1.5 font-serif text-xs font-semibold text-[#e86a5a] hover:border-[#e86a5a] hover:bg-[#e86a5a]/20"
           >
             ⚖ Accuse
           </button>
           <button
             onClick={() => game.updateSettings({ muted: !snap.settings.muted })}
-            className="rounded border border-[#3a352a] bg-black/70 px-3 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
+            className="min-w-0 rounded border border-[#3a352a] bg-black/70 px-2 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
           >
             {snap.settings.muted ? '🔇' : '🔊'}
           </button>
           <button
             onClick={() => game.setPhase('paused')}
-            className="rounded border border-[#3a352a] bg-black/70 px-3 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
+            className="min-w-0 flex-1 rounded border border-[#3a352a] bg-black/70 px-2 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
           >
             Pause <span className="text-[#8a8478]">[Esc]</span>
           </button>
         </div>
       </div>
 
+      {snap.evidenceDiscovery && (
+        <div
+          key={snap.evidenceDiscovery.id}
+          data-evidence-discovery
+          className="absolute left-1/2 top-6 z-[60] w-[24rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-hidden rounded border border-[#8ab8a0]/70 bg-[#0b1110]/95 shadow-[0_0_36px_rgba(76,132,108,0.3)] backdrop-blur-md"
+        >
+          <div className="h-px bg-gradient-to-r from-transparent via-[#8ab8a0] to-transparent" />
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded border border-[#49685b] bg-[#111816] shadow-inner">
+              <img
+                src={`${import.meta.env.BASE_URL}assets/evidence/${snap.evidenceDiscovery.evidenceId}.png`}
+                alt=""
+                aria-hidden="true"
+                className="h-12 w-12 object-contain [image-rendering:pixelated]"
+              />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[9px] uppercase tracking-[0.24em] text-[#8ab8a0]">Evidence type discovered</div>
+              <div className="mt-0.5 font-serif text-base leading-tight text-[#e8d8a0]">{snap.evidenceDiscovery.label}</div>
+              <div className="mt-1 text-[11px] text-[#8f9c93]">Associated with {snap.evidenceDiscovery.guestName} · revealed in the journal</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* bottom-left: event log */}
-      <div className="absolute bottom-4 left-4 w-96 space-y-1">
+      <div
+        className="hud-gothic-feed-frame absolute bottom-4 left-4 w-[26rem] max-w-[calc(100vw-2rem)] space-y-1 px-4 py-3"
+        style={{ '--gothic-frame-image': `url(${import.meta.env.BASE_URL}assets/ui/gothic-chat-frame.png)` } as React.CSSProperties}
+      >
         {snap.log.map(l => (
           <div key={l.id} className={`text-xs leading-snug ${toneColor[l.tone]} drop-shadow-[0_1px_2px_#000]`}>
             <span className="text-[#6a6458]">{fmt(l.atMin)}</span> — {l.text}

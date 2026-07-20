@@ -4,7 +4,7 @@ import { useGame } from '@/state/store'
 import { HUD } from '@/ui/HUD'
 import { DialoguePanel } from '@/ui/DialoguePanel'
 import { Journal } from '@/ui/Journal'
-import { TitleScreen, HowToPlay, SettingsScreen, PauseMenu, EndScreen } from '@/ui/Screens'
+import { TitleScreen, CaseSetupScreen, HowToPlay, SettingsScreen, PauseMenu, EndScreen } from '@/ui/Screens'
 import { AccuseModal } from '@/ui/AccuseModal'
 
 export default function App() {
@@ -40,6 +40,7 @@ function UI({ game }: { game: Game }) {
   const snap = useGame(game)
   switch (snap.phase) {
     case 'title': return <TitleScreen game={game} />
+    case 'setup': return <CaseSetupScreen game={game} snap={snap} />
     case 'howto': return <HowToPlay game={game} />
     case 'settings': return <SettingsScreen game={game} snap={snap} />
     case 'paused': return (

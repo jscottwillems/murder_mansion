@@ -43,6 +43,8 @@ export interface Guest {
   bodyFound: boolean
   evidenceId: string | null
   evidenceInvestigated: boolean
+  evidenceIds: string[]
+  revealedEvidenceIds: string[]
   diedAtMin: number
   deathRoom: RoomId | null
 }
@@ -77,14 +79,18 @@ export type QuestionTopic =
   | 'timeline' | 'suspicion' | 'intel' | 'alibi'
   | 'room' | 'pressure' | 'social' | 'victim'
   | 'last_seen' | 'connection' | 'motive' | 'survival' | 'next_victim'
+  | 'follow_up'
 
 export type ConversationEmotion =
   | 'neutral' | 'suspicious' | 'worried'
   | 'angry' | 'thoughtful' | 'surprised'
 
 export interface QuestionOption {
+  id: string
   topic: QuestionTopic
   label: string
+  kind: 'root' | 'branch'
+  disabled?: boolean
 }
 
 export interface InterviewState {
@@ -94,6 +100,9 @@ export interface InterviewState {
   lastAnswer: string
   emotion: ConversationEmotion
   thinking: boolean
+  concluded: boolean
+  activeThreadId: string | null
+  threadStatus: 'topics' | 'active' | 'resolved' | 'exhausted'
 }
 
 export interface LogLine {
@@ -104,7 +113,7 @@ export interface LogLine {
 }
 
 export type Phase =
-  | 'title' | 'howto' | 'settings' | 'playing'
+  | 'title' | 'setup' | 'howto' | 'settings' | 'playing'
   | 'interview' | 'journal' | 'accuse' | 'paused'
   | 'won' | 'lost'
 
@@ -131,6 +140,15 @@ export interface GuestSummary {
   recentlyActive: boolean
   suspicion: number        // 0..1
   roomName: string | null  // only if visible
+  evidenceIds: string[]
+  revealedEvidenceIds: string[]
+}
+
+export interface EvidenceDiscoveryNotice {
+  id: number
+  guestName: string
+  evidenceId: string
+  label: string
 }
 
 export interface EndInfo {
@@ -156,6 +174,7 @@ export interface Snapshot {
   transcripts: Record<string, TranscriptEntry[]>
   log: LogLine[]
   interview: InterviewState | null
+  evidenceDiscovery: EvidenceDiscoveryNotice | null
   interactHint: string | null
   settings: Settings
   endInfo: EndInfo | null

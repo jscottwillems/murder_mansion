@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import type { Game } from '@/game/game'
 import type { Snapshot } from '@/game/types'
-import { EVIDENCE_BY_ARCHETYPE } from '@/game/data'
+import { EVIDENCE_BY_ID } from '@/game/data'
 import { GuestPortrait } from '@/ui/GuestPortrait'
+import { GothicFrame } from '@/ui/GothicFrame'
 
 type Tab = 'leads' | 'evidence' | 'guests' | 'interviews'
 
@@ -19,11 +20,12 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
   ]
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="flex h-[34rem] max-h-[94vh] w-[46rem] max-w-[94vw] flex-col rounded border border-[#3a352a] bg-[#0d0c12]/95 shadow-2xl">
-        <div className="grid grid-cols-[1fr_auto] items-center gap-y-2 border-b border-[#2a2822] px-3 py-3 sm:flex sm:px-5">
+    <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-black/60 backdrop-blur-sm">
+      <div className="gothic-frame gothic-frame--popup relative flex h-[43rem] max-h-[94vh] w-[58rem] max-w-[94vw] flex-col overflow-hidden shadow-2xl">
+        <GothicFrame />
+        <div className="grid grid-cols-[1fr_auto] items-center gap-y-2 border-b border-[#2a2822] px-20 pb-4 pt-36 sm:px-36">
           <div className="order-1 font-serif text-xl text-[#e8d8a0] sm:order-none">Case Journal</div>
-          <div className="order-3 col-span-2 row-start-2 flex justify-center gap-1 sm:order-none sm:row-auto sm:ml-6">
+          <div className="order-3 col-span-2 row-start-2 flex justify-center gap-1">
             {tabs.map(t => (
               <button
                 key={t.id}
@@ -44,7 +46,7 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="mx-16 mb-24 mt-6 min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain sm:mx-36 sm:mb-36">
           {tab === 'leads' && (
             <div className="space-y-2">
               {snap.leads.length === 0 && <div className="text-sm italic text-[#6a6458]">No leads yet. Interview guests, eavesdrop on conversations.</div>}
@@ -102,9 +104,13 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
           )}
 
           {tab === 'guests' && (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid auto-rows-fr grid-cols-1 items-stretch gap-3 sm:grid-cols-2">
               {snap.guests.map(g => (
-                <div key={g.id} className={`rounded border p-3 ${g.alive ? 'border-[#2a2822] bg-black/30' : 'border-[#4a2a22] bg-[#1a0d0a]/50'}`}>
+                <div
+                  key={g.id}
+                  data-guest-card={g.archetypeId}
+                  className={`flex h-full flex-col rounded border p-3 ${g.alive ? 'border-[#2a2822] bg-black/30' : 'border-[#4a2a22] bg-[#1a0d0a]/50'}`}
+                >
                   <div className="flex gap-3">
                     <GuestPortrait archetypeId={g.archetypeId} name={g.name} alive={g.alive} />
                     <div className="min-w-0 flex-1">
@@ -155,25 +161,29 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
                       )}
                     </div>
                   </div>
-                  <div data-guest-evidence={g.archetypeId} className="mt-2.5 border-t border-[#2a2822] pt-2">
+                  <div data-guest-evidence={g.archetypeId} className="mt-auto border-t border-[#2a2822] pt-2">
                     <div className="mb-1.5 text-[8px] uppercase tracking-[0.16em] text-[#6a6458]">Associated evidence</div>
                     <div className="grid grid-cols-3 gap-1">
-                      {EVIDENCE_BY_ARCHETYPE[g.archetypeId].map(evidence => (
+                      {g.evidenceIds.map(evidenceId => {
+                        const evidence = EVIDENCE_BY_ID[evidenceId]
+                        const revealed = g.revealedEvidenceIds.includes(evidenceId)
+                        return (
                         <div
                           key={evidence.id}
                           data-evidence-id={evidence.id}
-                          title={evidence.description}
+                          title={revealed ? evidence.description : 'Unknown association — listen carefully during interviews.'}
                           className="flex h-[4.5rem] min-w-0 flex-col items-center justify-center rounded border border-[#353025] bg-[#111016]/80 px-1 py-1 text-center"
                         >
-                          <img
+                          {revealed ? <img
                             src={`${import.meta.env.BASE_URL}assets/evidence/${evidence.id}.png`}
                             alt=""
                             aria-hidden="true"
                             className="h-8 w-8 shrink-0 object-contain [image-rendering:pixelated]"
-                          />
-                          <span className="mt-1 flex h-6 w-full items-center justify-center overflow-hidden text-[8px] leading-[0.65rem] text-[#a9a093] [overflow-wrap:anywhere]">{evidence.label}</span>
+                          /> : <span className="flex h-8 items-center font-serif text-2xl text-[#5f5a50]">?</span>}
+                          <span className="mt-1 flex h-6 w-full items-center justify-center overflow-hidden text-[8px] leading-[0.65rem] text-[#a9a093] [overflow-wrap:anywhere]">{revealed ? evidence.label : 'Unknown'}</span>
                         </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 </div>

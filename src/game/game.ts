@@ -4,15 +4,31 @@ import type {
   CollectedEvidence, EndInfo, Guest, InterviewState, Lead, LogLine, Phase,
   QuestionOption, QuestionTopic, RoomId, Settings, Snapshot, TranscriptEntry,
 } from './types'
-import { ARCHETYPES, EVIDENCE_BY_ID, ROOM_BY_ID, ROOM_HALF, roomAt, roomCenter, roomOfPoint, canOccupy, fmtTime, NIGHT_LENGTH_MIN } from './data'
+import { EVIDENCE_BY_ID, ROOM_BY_ID, ROOM_HALF, roomAt, roomCenter, roomOfPoint, canOccupy, fmtTime, NIGHT_LENGTH_MIN } from './data'
 import { Simulation } from './sim'
 import { MansionScene } from './world'
 import { Soundtrack } from './audio'
-import { llmDecision, llmAnswer, archetypeOf } from './llm'
+import { llmConversationPlan, llmDecision, archetypeOf } from './llm'
+import type { AuthoredDialogueRoute } from './authoredDialogue'
+import { authoredChoice, authoredQuestionOptions, authoredRoutesForGuest } from './dialogueResolver'
 
 const SETTINGS_KEY = 'murder-mansion-settings'
 const PLAYER_SPEED = 4.4
 const ACTOR_RADIUS = 0.42
+
+type ThreadEffect = 'advance' | 'stall' | 'close'
+interface DialogueThread {
+  id: string
+  scriptId: string
+  topic: QuestionTopic
+  rootLabel: string
+  evidenceId?: string
+  stage: number
+  wrongTurns: number
+  status: 'unstarted' | 'active' | 'resolved' | 'exhausted'
+  offered: QuestionOption[]
+  effects: Record<string, ThreadEffect>
+}
 
 declare global {
   interface Window {
@@ -63,8 +79,14 @@ export class Game {
   private logLines: LogLine[] = []
   private transcripts: Record<string, TranscriptEntry[]> = {}
   private interview: InterviewState | null = null
+  private evidenceDiscovery: Snapshot['evidenceDiscovery'] = null
+  private evidenceDiscoveryN = 0
+  private evidenceDiscoveryTimer: ReturnType<typeof setTimeout> | null = null
   private endInfo: EndInfo | null = null
   private interviewsHeld = 0
+  private dialogueThreads: Record<string, Record<string, DialogueThread>> = {}
+  private conversationPlans: Record<string, AuthoredDialogueRoute[]> = {}
+  private interviewRequestN = 0
   private llmPending = new Set<string>()
   private llmLive = false
   private lastTs = 0
@@ -99,6 +121,7 @@ export class Game {
 
   dispose() {
     this.disposed = true
+    if (this.evidenceDiscoveryTimer) clearTimeout(this.evidenceDiscoveryTimer)
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
     if (window.murderMansionGame === this) {
@@ -157,6 +180,8 @@ export class Game {
         recentlyActive: g.alive && g.lastSeenMin > -100 && sim.clockMin - g.lastSeenMin < 30,
         suspicion: Math.min(1, (sim.suspicion[g.id] ?? 0) / sim.maxSuspicion()),
         roomName: visible ? ROOM_BY_ID[g.room].name : null,
+        evidenceIds: g.evidenceIds,
+        revealedEvidenceIds: g.revealedEvidenceIds,
       }
     }) : []
     const room = ROOM_BY_ID[this.playerRoom]
@@ -171,10 +196,22 @@ export class Game {
       bodiesFound: sim?.bodiesFound() ?? 0,
       guests,
       leads: this.leads,
-      evidence: this.evidence,
+      evidence: this.evidence.map(item => {
+        if (!sim) return item
+        const owners = sim.guests.filter(g => g.evidenceIds.includes(item.evidenceId))
+        const knownNames = owners.filter(g => g.revealedEvidenceIds.includes(item.evidenceId)).map(g => g.name)
+        return {
+          ...item,
+          candidateNames: [
+            ...knownNames,
+            ...owners.slice(knownNames.length).map((_, index) => `Unknown source ${index + 1}`),
+          ],
+        }
+      }),
       transcripts: this.transcripts,
       log: this.logLines.slice(-6),
       interview: this.interview,
+      evidenceDiscovery: this.evidenceDiscovery,
       interactHint: this.computeHint(),
       settings: this.settings,
       endInfo: this.endInfo,
@@ -267,9 +304,12 @@ export class Game {
     this.world.faceActorAt('player', body.x, body.z)
     this.world.playActorAction('player', 'investigate')
     this.world.replaceBodyWithOutline(body.id, body.x, body.z)
-    const candidateNames = evidence.archetypeIds
-      .map(id => ARCHETYPES.find(a => a.id === id)?.name)
-      .filter((name): name is string => !!name)
+    const owners = this.sim?.guests.filter(g => g.evidenceIds.includes(evidence.id)) ?? []
+    const knownNames = owners.filter(g => g.revealedEvidenceIds.includes(evidence.id)).map(g => g.name)
+    const candidateNames = [
+      ...knownNames,
+      ...owners.slice(knownNames.length).map((_, index) => `Unknown source ${index + 1}`),
+    ]
     const candidates = candidateNames.join(', ')
     const text = `${evidence.label}: ${evidence.description} Possible sources: ${candidates}.`
     this.evidence = [...this.evidence, {
@@ -309,8 +349,16 @@ export class Game {
     this.logLines = []
     this.transcripts = {}
     this.interview = null
+    this.evidenceDiscovery = null
+    if (this.evidenceDiscoveryTimer) {
+      clearTimeout(this.evidenceDiscoveryTimer)
+      this.evidenceDiscoveryTimer = null
+    }
     this.endInfo = null
     this.interviewsHeld = 0
+    this.dialogueThreads = {}
+    this.conversationPlans = {}
+    this.interviewRequestN++
     this.llmPending.clear()
 
     this.sim = new Simulation(seed, {
@@ -395,13 +443,78 @@ export class Game {
     this.audio.ensure()
     g.interviewed = true
     this.interviewsHeld++
+    if (this.llmConfigured() && !this.conversationPlans[g.id]) {
+      const requestN = ++this.interviewRequestN
+      this.interview = {
+        guestId,
+        questions: [],
+        lastQuestion: '',
+        lastAnswer: 'Planning this conversation…',
+        emotion: 'thoughtful',
+        thinking: true,
+        concluded: false,
+        activeThreadId: null,
+        threadStatus: 'topics',
+      }
+      this.phase = 'interview'
+      this.emit()
+      const sim = this.sim
+      llmConversationPlan(
+        { baseUrl: this.settings.llmBaseUrl, apiKey: this.settings.llmApiKey, model: this.settings.llmModel },
+        g,
+        {
+          clockMin: sim.clockMin,
+          roomName: ROOM_BY_ID[this.playerRoom].name,
+          knownVictims: sim.victims().map(victim => victim.name),
+          caseEvents: this.caseEventsFor(g),
+          otherGuests: sim.aliveGuests().filter(other => other.id !== g.id).map(other => other.name),
+          evidence: g.evidenceIds.map(id => EVIDENCE_BY_ID[id]).filter(Boolean),
+        },
+      ).then(plan => {
+        if (!this.interview || this.interview.guestId !== g.id || requestN !== this.interviewRequestN) return
+        if (plan) {
+          this.conversationPlans[g.id] = plan
+          this.llmLive = true
+        } else {
+          this.conversationPlans[g.id] = authoredRoutesForGuest(g)
+          this.llmLive = false
+        }
+        delete this.dialogueThreads[g.id]
+        this.interview = {
+          ...this.interview,
+          questions: this.buildRootQuestions(g),
+          lastAnswer: `“${this.pickGreet(g)}”`,
+          emotion: 'neutral',
+          thinking: false,
+        }
+        this.emit()
+      }).catch(() => {
+        if (!this.interview || this.interview.guestId !== g.id || requestN !== this.interviewRequestN) return
+        this.conversationPlans[g.id] = authoredRoutesForGuest(g)
+        this.llmLive = false
+        delete this.dialogueThreads[g.id]
+        this.interview = {
+          ...this.interview,
+          questions: this.buildRootQuestions(g),
+          lastAnswer: `“${this.pickGreet(g)}”`,
+          emotion: 'neutral',
+          thinking: false,
+        }
+        this.emit()
+      })
+      return
+    }
+    const active = Object.values(this.ensureGuestThreads(g)).find(thread => thread.status === 'active')
     this.interview = {
       guestId,
-      questions: this.buildQuestions(),
+      questions: active?.offered.length ? active.offered : this.buildRootQuestions(g),
       lastQuestion: '',
       lastAnswer: `“${this.pickGreet(g)}”`,
       emotion: 'neutral',
       thinking: false,
+      concluded: false,
+      activeThreadId: active?.id ?? null,
+      threadStatus: active ? 'active' : 'topics',
     }
     this.phase = 'interview'
     this.emit()
@@ -412,52 +525,72 @@ export class Game {
     return a.greet[Math.floor(Math.random() * a.greet.length)]
   }
 
-  private buildQuestions(): QuestionOption[] {
-    const sim = this.sim!
-    const victims = sim.victims()
-    if (victims.length === 0) {
-      return [
-        { topic: 'timeline', label: 'How have you spent the evening?' },
-        { topic: 'suspicion', label: 'Has anyone here made you uneasy?' },
-        { topic: 'social', label: 'Who have you spent time with tonight?' },
-        { topic: 'room', label: `What brings you to the ${ROOM_BY_ID[this.playerRoom].name}?` },
-      ]
-    }
+  private ensureGuestThreads(g: Guest): Record<string, DialogueThread> {
+    if (this.dialogueThreads[g.id]) return this.dialogueThreads[g.id]
+    const threads: Record<string, DialogueThread> = {}
+    this.routesForGuest(g).forEach(route => {
+      const id = `thread:${route.id}`
+      threads[id] = {
+        id, scriptId: route.id, topic: route.topic, rootLabel: route.rootQuestion,
+        evidenceId: route.evidenceId,
+        stage: 0, wrongTurns: 0, status: 'unstarted', offered: [], effects: {},
+      }
+    })
+    this.dialogueThreads[g.id] = threads
+    return threads
+  }
 
-    const latestVictim = victims[victims.length - 1]
-    if (victims.length === 1) {
-      return [
-        { topic: 'timeline', label: 'Where were you when it happened?' },
-        { topic: 'suspicion', label: 'Who do you suspect?' },
-        { topic: 'victim', label: `How well did you know ${latestVictim.name}?` },
-        { topic: 'last_seen', label: `When did you last see ${latestVictim.name}?` },
-      ]
-    }
+  private routesForGuest(g: Guest): AuthoredDialogueRoute[] {
+    return this.conversationPlans[g.id] ?? authoredRoutesForGuest(g)
+  }
 
-    if (victims.length === 2) {
-      return [
-        { topic: 'suspicion', label: 'Who do you suspect now?' },
-        { topic: 'last_seen', label: `When did you last see ${latestVictim.name}?` },
-        { topic: 'connection', label: 'What connects the two victims?' },
-        { topic: 'alibi', label: 'Who can account for your movements?' },
-      ]
-    }
+  private buildRootQuestions(g: Guest): QuestionOption[] {
+    return Object.values(this.ensureGuestThreads(g)).map(thread => ({
+      id: `root:${thread.id}`,
+      topic: thread.topic,
+      label: thread.status === 'resolved' ? `${thread.rootLabel} — resolved`
+        : thread.status === 'exhausted' ? `${thread.rootLabel} — no further lead`
+          : thread.rootLabel,
+      kind: 'root',
+      disabled: thread.status === 'resolved' || thread.status === 'exhausted',
+    }))
+  }
 
-    if (victims.length === 3) {
-      return [
-        { topic: 'suspicion', label: 'Who is capable of all this?' },
-        { topic: 'connection', label: 'Do you see a pattern in the deaths?' },
-        { topic: 'motive', label: 'Who benefits from these deaths?' },
-        { topic: 'last_seen', label: `When did you last see ${latestVictim.name}?` },
-      ]
-    }
+  private authoredRoute(g: Guest, thread: DialogueThread): AuthoredDialogueRoute | undefined {
+    return this.routesForGuest(g).find(route => route.id === thread.scriptId)
+  }
 
-    return [
-      { topic: 'connection', label: 'Why were these guests chosen?' },
-      { topic: 'motive', label: 'Who has gained the most from this?' },
-      { topic: 'survival', label: 'Why do you think you’re still alive?' },
-      { topic: 'next_victim', label: 'Who do you think will be next?' },
-    ]
+  private authoredBranchChoices(thread: DialogueThread, route: AuthoredDialogueRoute): QuestionOption[] {
+    const idPrefix = `${thread.id}:s${thread.stage}:w${thread.wrongTurns}`
+    const options = authoredQuestionOptions(route, thread.stage, idPrefix)
+    const specs = options.map((option, index) => ({
+      option,
+      effect: (['advance', 'stall', 'close'] as ThreadEffect[])[index],
+    }))
+    // Rotate by stable thread/stage data so the productive option is not fixed
+    // to the same screen position across every conversation.
+    const offset = (thread.id.length + thread.stage + thread.wrongTurns) % specs.length
+    const rotated = [...specs.slice(offset), ...specs.slice(0, offset)]
+    thread.effects = {}
+    thread.offered = rotated.map(spec => {
+      thread.effects[spec.option.id] = spec.effect
+      return spec.option
+    })
+    return thread.offered
+  }
+
+  returnToInterviewTopics() {
+    if (!this.interview || this.interview.thinking || !this.sim) return
+    const g = this.sim.byId(this.interview.guestId)
+    if (!g) return
+    this.interview = {
+      ...this.interview,
+      activeThreadId: null,
+      threadStatus: 'topics',
+      concluded: false,
+      questions: this.buildRootQuestions(g),
+    }
+    this.emit()
   }
 
   private caseEventsFor(g: Guest): string[] {
@@ -474,110 +607,116 @@ export class Game {
     return events
   }
 
-  /** Choose an authored portrait expression for offline/built-in answers. */
-  private builtinInterviewEmotion(g: Guest, topic: QuestionTopic, questionLabel: string): InterviewState['emotion'] {
-    const priorUses = (this.transcripts[g.id] ?? []).filter(entry => entry.q === questionLabel).length
-    const quickToAnger = new Set(['columnist', 'surgeon', 'correspondent', 'accountant', 'vocalist', 'antiquarian', 'chauffeur'])
-
-    // Repeated probing escalates every character; sharper personalities lose
-    // patience on the first repeat, while gentler ones become guarded first.
-    if (priorUses >= 2 || topic === 'pressure') return 'angry'
-    if (priorUses === 1) return quickToAnger.has(g.archetypeId) ? 'angry' : 'suspicious'
-
-    switch (topic) {
-      case 'suspicion':
-      case 'intel':
-      case 'motive':
-        return 'suspicious'
-      case 'victim':
-      case 'last_seen':
-      case 'survival':
-        return g.isKiller && topic === 'last_seen' ? 'suspicious' : 'worried'
-      case 'next_victim':
-        return 'surprised'
-      case 'timeline':
-      case 'connection':
-      case 'social':
-        return 'thoughtful'
-      case 'alibi':
-        return g.isKiller ? 'suspicious' : (g.talkedWith.length ? 'thoughtful' : 'worried')
-      case 'room':
-        return ['curator', 'antiquarian', 'surgeon', 'accountant'].includes(g.archetypeId) ? 'thoughtful' : 'neutral'
-      default:
-        return 'neutral'
-    }
-  }
-
-  ask(topic: QuestionTopic) {
+  ask(questionId: string) {
     if (!this.sim || !this.interview || this.interview.thinking) return
     const g = this.sim.byId(this.interview.guestId)
     if (!g) return
-    const q = this.interview.questions.find(o => o.topic === topic)
-    const builtInEmotion = this.builtinInterviewEmotion(g, topic, q?.label ?? topic)
-    this.interview = { ...this.interview, thinking: true, lastQuestion: q?.label ?? '' }
+    const q = this.interview.questions.find(option => option.id === questionId)
+    if (!q || q.disabled) return
+    const threads = this.ensureGuestThreads(g)
+    const thread = q.kind === 'root'
+      ? threads[questionId.slice('root:'.length)]
+      : (this.interview.activeThreadId ? threads[this.interview.activeThreadId] : undefined)
+    if (!thread || thread.status === 'resolved' || thread.status === 'exhausted') return
+    const route = this.authoredRoute(g, thread)
+    if (!route) return
+
+    const selectedEffect: ThreadEffect | 'root' = q.kind === 'root' ? 'root' : thread.effects[q.id]
+    if (!selectedEffect) return
+    const selectedStage = thread.stage
+    const authoredBeat = selectedEffect === 'root'
+      ? { text: route.openingResponse, emotion: route.openingEmotion }
+      : (() => {
+          const choice = authoredChoice(route, selectedStage, selectedEffect)
+          return { text: choice.response, emotion: choice.emotion }
+        })()
+    thread.status = 'active'
+    thread.offered = []
+    const terminalSuccess = selectedEffect === 'advance' && thread.stage + 1 >= 2
+    if (selectedEffect === 'advance') thread.stage++
+    if (selectedEffect === 'stall') thread.wrongTurns++
+    const terminalFailure = selectedEffect === 'close' || (selectedEffect === 'stall' && thread.wrongTurns >= 2)
+    const terminal = terminalSuccess || terminalFailure
+    const evidenceCue = terminalSuccess && thread.evidenceId ? EVIDENCE_BY_ID[thread.evidenceId] : undefined
+    const fallbackChoices = terminal ? [] : this.authoredBranchChoices(thread, route)
+    const requestN = ++this.interviewRequestN
+    this.interview = {
+      ...this.interview,
+      activeThreadId: thread.id,
+      threadStatus: 'active',
+      thinking: true,
+      lastQuestion: q.label,
+      questions: fallbackChoices,
+    }
     this.emit()
 
-    const applyAnswer = (answer: string, leadList: { source: string; text: string }[], emotion: InterviewState['emotion'] = 'neutral') => {
-      if (!this.interview || this.interview.guestId !== g.id) return
+    const applyAnswer = (
+      answer: string,
+      leadList: { source: string; text: string }[],
+      emotion: InterviewState['emotion'],
+      renderedChoices: QuestionOption[],
+    ) => {
+      if (!this.interview || this.interview.guestId !== g.id || requestN !== this.interviewRequestN) return
       for (const l of leadList) this.pushLead('interview', l.source, l.text, true)
-      const entry: TranscriptEntry = { atMin: this.sim!.clockMin, q: q?.label ?? topic, a: answer }
+      const entry: TranscriptEntry = { atMin: this.sim!.clockMin, q: q.label, a: answer }
       this.transcripts = {
         ...this.transcripts,
         [g.id]: [...(this.transcripts[g.id] ?? []), entry],
       }
+      if (terminalSuccess) {
+        thread.status = 'resolved'
+        if (evidenceCue) this.revealGuestEvidence(g, evidenceCue.id)
+      } else if (terminalFailure) {
+        thread.status = 'exhausted'
+      } else {
+        thread.status = 'active'
+        thread.offered = renderedChoices
+      }
       this.interview = {
         ...this.interview,
         thinking: false,
-        lastAnswer: answer.startsWith('“') ? answer : `“${answer}”`,
-        emotion,
-        questions: this.buildQuestions(),
+        lastAnswer: terminal ? 'nothing more to discuss right now' : (answer.startsWith('“') ? answer : `“${answer}”`),
+        emotion: terminal ? 'neutral' : emotion,
+        concluded: terminal,
+        threadStatus: terminalSuccess ? 'resolved' : terminalFailure ? 'exhausted' : 'active',
+        questions: terminal ? [] : renderedChoices,
       }
       this.emit()
     }
 
-    const llmOn = this.llmConfigured()
-    if (llmOn) {
-      const sim = this.sim
-      llmAnswer(
-        { baseUrl: this.settings.llmBaseUrl, apiKey: this.settings.llmApiKey, model: this.settings.llmModel },
-        g,
-        {
-          clockMin: sim.clockMin,
-          topic,
-          questionLabel: q?.label ?? topic,
-          roomName: ROOM_BY_ID[this.playerRoom].name,
-          rumors: g.knowledge.slice(-6).map(r => r.text),
-          victims: sim.victims().map(v => v.name),
-          suspectNames: sim.aliveGuests().filter(o => o.id !== g.id).map(o => o.name),
-          talkedWith: g.talkedWith,
-          caseEvents: this.caseEventsFor(g),
-          questionsAsked: (this.transcripts[g.id] ?? []).length,
-          timesAskedTopic: (this.transcripts[g.id] ?? []).filter(entry => entry.q === (q?.label ?? topic)).length,
-        },
-      ).then(result => {
-        if (result) {
-          this.llmLive = true
-          // LLM gives prose; still mine a lead for factual topics
-          const fb = sim.answerQuestion(g, topic, this.playerRoom)
-          applyAnswer(result.text, topic === 'intel' || topic === 'timeline' || topic === 'suspicion' || topic === 'alibi' ? fb.leads : [], result.emotion)
-        } else {
-          this.llmLive = false
-          const fb = sim.answerQuestion(g, topic, this.playerRoom)
-          applyAnswer(fb.answer, fb.leads, builtInEmotion)
-        }
-      }).catch(() => {
-        const fb = sim.answerQuestion(g, topic, this.playerRoom)
-        applyAnswer(fb.answer, fb.leads, builtInEmotion)
-      })
-    } else {
-      // small delay for pacing
-      const fb = this.sim.answerQuestion(g, topic, this.playerRoom)
-      setTimeout(() => applyAnswer(fb.answer, fb.leads, builtInEmotion), 350)
+    // Both modes now play from an immutable plan. Built-in plans are authored
+    // locally; LLM plans are generated once at interview start and persisted.
+    setTimeout(() => {
+      applyAnswer(authoredBeat.text, [], authoredBeat.emotion, fallbackChoices)
+    }, 350)
+  }
+
+  private revealGuestEvidence(g: Guest, evidenceId: string) {
+    if (g.revealedEvidenceIds.includes(evidenceId)) return
+    const evidence = EVIDENCE_BY_ID[evidenceId]
+    if (!evidence) return
+    g.revealedEvidenceIds = [...g.revealedEvidenceIds, evidenceId]
+    this.pushLead('evidence', g.name, `A detail in ${g.name}'s answer suggests an association with ${evidence.label}.`, true)
+    this.evidenceDiscovery = {
+      id: ++this.evidenceDiscoveryN,
+      guestName: g.name,
+      evidenceId: evidence.id,
+      label: evidence.label,
     }
+    this.audio.stinger('body')
+    this.pushLog(`Evidence association discovered — ${g.name}: ${evidence.label}.`, 'info')
+    if (this.evidenceDiscoveryTimer) clearTimeout(this.evidenceDiscoveryTimer)
+    this.evidenceDiscoveryTimer = setTimeout(() => {
+      this.evidenceDiscovery = null
+      this.evidenceDiscoveryTimer = null
+      this.emit()
+    }, 4200)
+    this.emit()
   }
 
   endInterview() {
     if (this.phase !== 'interview') return
+    this.interviewRequestN++
     this.interview = null
     this.phase = 'playing'
     this.emit()

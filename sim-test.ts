@@ -1,7 +1,8 @@
 // Headless smoke test for the simulation (run with node after esbuild bundling)
 import { Simulation } from './src/game/sim'
-import { ARCHETYPES, EVIDENCE_BY_ARCHETYPE, SCENE_EVIDENCE, NIGHT_LENGTH_MIN } from './src/game/data'
+import { SCENE_EVIDENCE, NIGHT_LENGTH_MIN } from './src/game/data'
 import type { QuestionTopic } from './src/game/types'
+import { parseInterviewAnswer } from './src/game/llm'
 
 let deaths = 0
 let discoveries = 0
@@ -20,20 +21,35 @@ const sim = new Simulation(12345, {
 console.assert(sim.guests.length === 10, 'expected 10 guests')
 console.assert(sim.guests.filter(g => g.isKiller).length === 1, 'expected 1 killer')
 
-// evidence matrix: exactly three traces per archetype, and no unique trace that
-// could reveal a murderer from one examination.
-for (const a of ARCHETYPES) {
-  console.assert(EVIDENCE_BY_ARCHETYPE[a.id].length === 3, `${a.id} should leave exactly 3 evidence types`)
+// The per-case shuffled evidence matrix remains balanced: three traces per
+// guest and three possible owners per trace.
+for (const guest of sim.guests) {
+  console.assert(guest.evidenceIds.length === 3, `${guest.archetypeId} should leave exactly 3 evidence types`)
+  console.assert(guest.revealedEvidenceIds.length === 0, `${guest.archetypeId} evidence should begin hidden`)
 }
 for (const evidence of SCENE_EVIDENCE) {
-  console.assert(evidence.archetypeIds.length > 1, `${evidence.id} must implicate multiple archetypes`)
+  console.assert(sim.guests.filter(g => g.evidenceIds.includes(evidence.id)).length === 3, `${evidence.id} should have exactly three possible owners`)
 }
+const builtInEvidenceGuest = sim.guests[0]
+for (const evidence of SCENE_EVIDENCE) {
+  const result = sim.answerQuestion(builtInEvidenceGuest, 'room', 'dining', evidence.id)
+  console.assert(result.answer.length > 40, `built-in ${evidence.id} clue should add a substantive indirect detail`)
+  console.assert(!result.answer.toLowerCase().includes(evidence.label.toLowerCase()), `built-in ${evidence.id} clue must not state the journal label`)
+}
+
+const evidenceTagged = parseInterviewAnswer('I keep a little bottle for cleaning the tools; the odor does linger. [thoughtful] [continue] [evidence]')
+console.assert(evidenceTagged.text.includes('little bottle') && !evidenceTagged.text.includes('[evidence]'), 'evidence control tag should be stripped from dialogue')
+console.assert(evidenceTagged.evidenceMentioned, 'evidence control tag should confirm an incorporated clue')
+const noEvidenceTagged = parseInterviewAnswer('I was in the gallery all evening. [neutral] [closed] [no-evidence]')
+console.assert(!noEvidenceTagged.evidenceMentioned && noEvidenceTagged.concluded, 'no-evidence answers should not unlock journal evidence')
 
 const evidenceSim = new Simulation(54321, {
   log: () => {}, lead: () => {}, guestDied: () => {}, bodyDiscovered: () => {}, overheard: () => {},
 })
 const evidenceKiller = evidenceSim.byId(evidenceSim.killerId)!
 const evidenceVictim = evidenceSim.guests.find(g => g.id !== evidenceKiller.id)!
+evidenceKiller.room = evidenceVictim.room = 'study'
+evidenceSim.playerRoom = 'dining'
 evidenceSim['commitMurder'](evidenceKiller, evidenceVictim)
 console.assert(
   evidenceKiller.killCooldownUntilMin >= evidenceSim.clockMin + 30 &&
@@ -41,9 +57,13 @@ console.assert(
   'repeat murder cooldown should be randomized between 30 and 45 game minutes',
 )
 console.assert(
-  EVIDENCE_BY_ARCHETYPE[evidenceKiller.archetypeId].some(e => e.id === evidenceVictim.evidenceId),
-  'murder evidence must come from the killer archetype evidence pool',
+  evidenceKiller.evidenceIds.includes(evidenceVictim.evidenceId!),
+  'murder evidence must come from the killer evidence pool for this case',
 )
+console.assert(evidenceKiller.room !== 'study', 'killer must teleport out of the murder room')
+console.assert(evidenceKiller.room !== evidenceSim.playerRoom, 'killer must not teleport into the detective room')
+console.assert(evidenceKiller.state === 'idle', 'killer must arrive immediately instead of walking from the scene')
+console.assert(evidenceSim['paths'][evidenceKiller.id] === undefined, 'killer must not retain a route from the murder scene')
 
 // The killer must immediately use a legal opportunity (one victim and at
 // most one witness), while respecting detective presence and crowd limits.

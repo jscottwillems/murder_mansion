@@ -4,7 +4,7 @@ import type { Guest, Lead, LogLine, QuestionTopic, RoomId, Rumor } from './types
 import {
   ROOMS, ROOM_BY_ID, GUEST_NAMES_BY_GENDER, ARCHETYPE_GENDER, GUEST_COLORS, ARCHETYPES,
   adjacentRooms, roomCenter, roomOfPoint, hexToNum,
-  fmtTime, pick, fill, makeRng, NIGHT_LENGTH_MIN, canOccupy, EVIDENCE_BY_ARCHETYPE,
+  fmtTime, pick, fill, makeRng, NIGHT_LENGTH_MIN, canOccupy, EVIDENCE_BY_ARCHETYPE, BUILTIN_EVIDENCE_HINTS,
 } from './data'
 import type { NPCDecision } from './llm'
 
@@ -81,6 +81,8 @@ export class Simulation {
     }
     const nextName = { female: 0, male: 0 }
     const occupied: { x: number; z: number }[] = []
+    // Shuffle the ten balanced three-trace profiles between identities each
+    // case. This preserves three owners per trace while defeating memorization.
     this.guests = archetypes.map((a, i) => {
       const gender = ARCHETYPE_GENDER[a.id]
       const name = namesByGender[gender][nextName[gender]++]
@@ -120,6 +122,11 @@ export class Simulation {
         bodyFound: false,
         evidenceId: null,
         evidenceInvestigated: false,
+        // Evidence associations belong to the established profession/character
+        // and feed its authored interview threads. Names, locations, behavior,
+        // and murderer identity still vary per case.
+        evidenceIds: EVIDENCE_BY_ARCHETYPE[a.id].map(e => e.id),
+        revealedEvidenceIds: [],
         diedAtMin: 0,
         deathRoom: null,
       } satisfies Guest
@@ -396,18 +403,51 @@ export class Simulation {
 
   private commitMurder(killer: Guest, victim: Guest) {
     const priorVictims = this.guests.filter(g => !g.alive).length
-    const evidencePool = EVIDENCE_BY_ARCHETYPE[killer.archetypeId]
+    const evidencePool = killer.evidenceIds
     victim.alive = false
     victim.state = 'dead'
     victim.diedAtMin = this.clockMin
     victim.deathRoom = victim.room
-    victim.evidenceId = evidencePool[priorVictims % evidencePool.length].id
+    victim.evidenceId = evidencePool[priorVictims % evidencePool.length]
     delete this.paths[victim.id]
     killer.killCooldownUntilMin = this.clockMin + 30 + this.rng() * 15
     this.ev.guestDied(victim)
-    // killer slips away to look innocent
-    const exit = pick(adjacentRooms(victim.room), this.rng)
-    this.sendTo(killer, exit)
+    this.teleportKillerAfterMurder(killer, victim.room)
+  }
+
+  /** Remove the killer from the scene without exposing them in a doorway. */
+  private teleportKillerAfterMurder(killer: Guest, murderRoom: RoomId) {
+    const destinations = ROOMS.filter(r => r.id !== murderRoom && r.id !== this.playerRoom)
+    const destination = pick(destinations, this.rng).id
+    const center = roomCenter(destination)
+    let x = center.x
+    let z = center.z
+
+    // Prefer an unoccupied, walkable spot so the arrival looks natural if the
+    // detective enters the destination later.
+    for (let tries = 0; tries < 40; tries++) {
+      const candidateX = center.x + (this.rng() - 0.5) * 7.5
+      const candidateZ = center.z + (this.rng() - 0.5) * 7.5
+      const overlapsGuest = this.aliveGuests().some(g =>
+        g.id !== killer.id && Math.hypot(g.x - candidateX, g.z - candidateZ) < ACTOR_RADIUS * 2,
+      )
+      if (canOccupy(candidateX, candidateZ, ACTOR_RADIUS) && !overlapsGuest) {
+        x = candidateX
+        z = candidateZ
+        break
+      }
+    }
+
+    delete this.paths[killer.id]
+    delete this.movementRecovery[killer.id]
+    killer.room = destination
+    killer.x = x
+    killer.z = z
+    killer.tx = 0
+    killer.tz = 0
+    killer.state = 'idle'
+    killer.talkPartnerId = null
+    killer.talkUntilMin = 0
   }
 
   private sendTo(g: Guest, room: RoomId) {
@@ -585,7 +625,7 @@ export class Simulation {
 
   // ------------------------------------------------------------- interviews
 
-  answerQuestion(g: Guest, topic: QuestionTopic, playerRoom: RoomId): { answer: string; leads: { source: string; text: string }[] } {
+  answerQuestion(g: Guest, topic: QuestionTopic, playerRoom: RoomId, evidenceCueId?: string): { answer: string; leads: { source: string; text: string }[] } {
     const a = this.arch(g)
     const leads: { source: string; text: string }[] = []
     const vars = {
@@ -676,6 +716,7 @@ export class Simulation {
         answer = fill(pick(a.roomTake, this.rng), { ...vars, room: ROOM_BY_ID[playerRoom].name })
         break
       }
+      case 'follow_up':
       case 'pressure': {
         answer = fill(pick(a.pressure, this.rng), vars)
         if (g.isKiller) this.bumpSuspicion(g.id, 0.3)
@@ -753,6 +794,15 @@ export class Simulation {
           answer = '“There is no one else, detective. So either you are next, or I am.”'
         }
         break
+      }
+    }
+    if (evidenceCueId) {
+      const hints = BUILTIN_EVIDENCE_HINTS[evidenceCueId]
+      if (hints?.length) {
+        const hint = pick(hints, this.rng)
+        answer = answer.endsWith('”')
+          ? `${answer.slice(0, -1)} ${hint}”`
+          : `${answer} ${hint}`
       }
     }
     return { answer, leads }

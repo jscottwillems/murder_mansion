@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { Game } from '@/game/game'
 import type { Settings, Snapshot } from '@/game/types'
+import { GothicFrame } from '@/ui/GothicFrame'
 
 const serifBtn =
   'w-72 rounded border border-[#3a352a] bg-black/60 px-6 py-3 font-serif text-lg text-[#c9b98a] transition-colors hover:border-[#c9a227] hover:text-[#e8d8a0]'
@@ -8,29 +9,127 @@ const serifBtn =
 export function TitleScreen({ game }: { game: Game }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black/70 via-black/40 to-black/80">
-      <div className="mb-2 text-xs uppercase tracking-[0.5em] text-[#8a8478]">A noir deduction simulation</div>
-      <h1 className="font-serif text-7xl tracking-wide text-[#e8d8a0] drop-shadow-[0_4px_12px_#000]">
-        MURDER <span className="text-[#c9a227]">MANSION</span>
-      </h1>
-      <div className="mt-3 max-w-lg text-center font-serif text-sm italic leading-relaxed text-[#a8a090]">
-        Midnight. A stormbound mansion. Ten guests — one of them a killer.
-        You have until sunrise to learn who.
-      </div>
-      <div className="mt-10 flex flex-col gap-3">
-        <button className={serifBtn} onClick={() => game.startCase()}>Start the Case</button>
-        <button className={serifBtn} onClick={() => game.setPhase('howto')}>How to Play</button>
-        <button className={serifBtn} onClick={() => game.openSettings('title')}>Settings</button>
-      </div>
-      <div className="mt-10 text-[10px] uppercase tracking-widest text-[#5a5448]">
-        WASD move · E interview · J journal · Esc pause
+      <div
+        className="title-gothic-frame flex max-h-[94vh] w-[58rem] max-w-[94vw] flex-col items-center overflow-hidden px-12 py-10"
+        style={{ '--gothic-frame-image': `url(${import.meta.env.BASE_URL}assets/ui/gothic-popup-frame.png)` } as React.CSSProperties}
+      >
+        <div className="mb-2 text-xs uppercase tracking-[0.5em] text-[#8a8478]">A noir deduction simulation</div>
+        <h1 className="font-serif text-7xl tracking-wide text-[#e8d8a0] drop-shadow-[0_4px_12px_#000]">
+          MURDER <span className="text-[#c9a227]">MANSION</span>
+        </h1>
+        <div className="mt-3 max-w-lg text-center font-serif text-sm italic leading-relaxed text-[#a8a090]">
+          Midnight. A stormbound mansion. Ten guests — one of them a killer.
+          You have until sunrise to learn who.
+        </div>
+        <div className="mt-10 flex flex-col gap-3">
+          <button className={serifBtn} onClick={() => game.setPhase('setup')}>Start the Case</button>
+          <button className={serifBtn} onClick={() => game.setPhase('howto')}>How to Play</button>
+          <button className={serifBtn} onClick={() => game.openSettings('title')}>Settings</button>
+        </div>
+        <div className="mt-10 text-[10px] uppercase tracking-widest text-[#5a5448]">
+          WASD move · E interview · J journal · Esc pause
+        </div>
       </div>
     </div>
   )
 }
 
+export function CaseSetupScreen({ game, snap }: { game: Game; snap: Snapshot }) {
+  const s = snap.settings
+  const director = s.director
+  const llmReady = s.llmProvider === 'ollama' || Boolean(s.llmApiKey)
+  const selectProvider = (provider: Settings['llmProvider']) => {
+    if (provider === 'groq') {
+      game.updateSettings({ llmProvider: provider, llmBaseUrl: 'https://api.groq.com/openai/v1', llmModel: 'llama-3.1-8b-instant' })
+    } else if (provider === 'ollama') {
+      game.updateSettings({ llmProvider: provider, llmBaseUrl: 'http://localhost:11434/v1', llmModel: 'llama3.2' })
+    } else {
+      game.updateSettings({ llmProvider: provider })
+    }
+  }
+
+  return (
+    <Overlay ornate>
+      <div className="text-xs uppercase tracking-[0.35em] text-[#8a8478]">Before the case begins</div>
+      <h2 className="mt-2 font-serif text-3xl text-[#e8d8a0]">Choose the guests' minds</h2>
+      <p className="mt-2 max-w-lg text-center font-serif text-sm italic leading-relaxed text-[#8a8478]">
+        This choice controls every guest for the entire case.
+      </p>
+
+      <div className="mt-6 grid w-full max-w-lg grid-cols-2 gap-3">
+        <button
+          type="button"
+          aria-pressed={director === 'builtin'}
+          onClick={() => game.updateSettings({ director: 'builtin' })}
+          className={`rounded border p-5 text-left transition-colors ${director === 'builtin' ? 'border-[#c9a227] bg-[#c9a227]/15' : 'border-[#3a352a] bg-black/40 hover:border-[#786a43]'}`}
+        >
+          <div className="font-serif text-lg text-[#e8d8a0]">Built-in Game</div>
+          <div className="mt-2 text-xs leading-relaxed text-[#8a8478]">Fast, reliable, and fully offline. Guests use the game's authored behavior and dialogue.</div>
+        </button>
+        <button
+          type="button"
+          aria-pressed={director === 'llm'}
+          onClick={() => game.updateSettings({ director: 'llm' })}
+          className={`rounded border p-5 text-left transition-colors ${director === 'llm' ? 'border-[#c9a227] bg-[#c9a227]/15' : 'border-[#3a352a] bg-black/40 hover:border-[#786a43]'}`}
+        >
+          <div className="font-serif text-lg text-[#e8d8a0]">LLM Game</div>
+          <div className="mt-2 text-xs leading-relaxed text-[#8a8478]">Guests improvise their actions and answers through your configured AI provider.</div>
+        </button>
+      </div>
+
+      {director === 'llm' && (
+        <div className="mt-4 w-full max-w-lg space-y-3 rounded border border-[#3a352a] bg-black/50 p-4 text-sm text-[#c9c0b0]">
+          <div className="font-serif text-[#c9b98a]">Configure LLM</div>
+          <div>
+            <div className="mb-1 text-xs uppercase tracking-wider text-[#6a6458]">Provider</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {([
+                ['groq', 'Groq Free'],
+                ['ollama', 'Ollama Local'],
+                ['custom', 'Custom'],
+              ] as const).map(([provider, label]) => (
+                <button
+                  key={provider}
+                  type="button"
+                  onClick={() => selectProvider(provider)}
+                  className={`rounded border px-2 py-1.5 text-xs ${s.llmProvider === provider ? 'border-[#c9a227] bg-[#c9a227]/15 text-[#e8d8a0]' : 'border-[#3a352a] text-[#8a8478] hover:text-[#c9b98a]'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <Field label="Base URL" value={s.llmBaseUrl} placeholder="https://api.openai.com/v1"
+            onChange={v => game.updateSettings({ llmBaseUrl: v })} />
+          {s.llmProvider !== 'ollama' && (
+            <Field label="API Key" value={s.llmApiKey} placeholder={s.llmProvider === 'groq' ? 'gsk_…' : 'API key'} type="password"
+              onChange={v => game.updateSettings({ llmApiKey: v })} />
+          )}
+          <Field label="Model" value={s.llmModel} placeholder="gpt-4o-mini"
+            onChange={v => game.updateSettings({ llmModel: v })} />
+          {s.llmProvider === 'groq' && <div className="text-xs text-[#8a8478]">Create a free Groq key, then paste it above.</div>}
+          {s.llmProvider === 'ollama' && <div className="text-xs text-[#8a8478]">Ollama must be running locally with this model and browser access enabled.</div>}
+          {!llmReady && <div className="text-xs text-[#e86a5a]">Enter an API key before starting the LLM case.</div>}
+        </div>
+      )}
+
+      <button
+        className={`${serifBtn} mt-6 disabled:cursor-not-allowed disabled:opacity-40`}
+        disabled={director === 'llm' && !llmReady}
+        onClick={() => game.startCase()}
+      >
+        Begin {director === 'llm' ? 'LLM' : 'Built-in'} Case
+      </button>
+      <button className="mt-3 text-xs uppercase tracking-widest text-[#6a6458] hover:text-[#c9b98a]" onClick={() => game.setPhase('title')}>
+        Back to title
+      </button>
+    </Overlay>
+  )
+}
+
 export function HowToPlay({ game }: { game: Game }) {
   return (
-    <Overlay>
+    <Overlay ornate>
       <h2 className="font-serif text-3xl text-[#e8d8a0]">How to Play</h2>
       <div className="mt-4 space-y-3 text-sm leading-relaxed text-[#c9c0b0]">
         <p><b className="text-[#c9a227]">The situation.</b> You are a detective trapped by a storm with ten guests until 6:00 AM. One of them — chosen at random each case — is the murderer.</p>
@@ -57,7 +156,7 @@ export function SettingsScreen({ game, snap }: { game: Game; snap: Snapshot }) {
     }
   }
   return (
-    <Overlay>
+    <Overlay ornate>
       <h2 className="font-serif text-3xl text-[#e8d8a0]">Settings</h2>
 
       <div className="mt-5 w-full max-w-md space-y-4 text-sm text-[#c9c0b0]">
@@ -149,7 +248,7 @@ export function SettingsScreen({ game, snap }: { game: Game; snap: Snapshot }) {
       </div>
 
       <button
-        className={`${serifBtn} mt-6`}
+        className={`${serifBtn} mb-8 mt-6`}
         onClick={() => game.closeSettings()}
       >
         Back
@@ -165,7 +264,7 @@ export function PauseMenu({ game }: { game: Game }) {
       <div className="mt-6 flex flex-col gap-3">
         <button className={serifBtn} onClick={() => game.setPhase('playing')}>Resume</button>
         <button className={serifBtn} onClick={() => game.openSettings('paused')}>Settings</button>
-        <button className={serifBtn} onClick={() => game.startCase()}>Restart Case</button>
+        <button className={serifBtn} onClick={() => game.setPhase('setup')}>Restart Case</button>
         <button className={serifBtn} onClick={() => game.quitToTitle()}>Quit to Title</button>
       </div>
     </Overlay>
@@ -199,7 +298,7 @@ export function EndScreen({ game, snap }: { game: Game; snap: Snapshot }) {
         <Stat label="Bodies" value={String(e.stats.bodiesFound)} />
       </div>
       <div className="mt-8 flex flex-col gap-3">
-        <button className={serifBtn} onClick={() => game.startCase()}>New Case (new killer)</button>
+        <button className={serifBtn} onClick={() => game.setPhase('setup')}>New Case (new killer)</button>
         <button className={serifBtn} onClick={() => game.quitToTitle()}>Title Screen</button>
       </div>
     </Overlay>
@@ -215,11 +314,22 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-function Overlay({ children }: { children: ReactNode }) {
+function Overlay({ children, ornate = false }: { children: ReactNode; ornate?: boolean }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 p-6 backdrop-blur-sm">
-      <div className="flex max-h-full w-full max-w-2xl flex-col items-center overflow-y-auto rounded border border-[#3a352a] bg-[#0d0c12]/95 p-8">
-        {children}
+      <div
+        className={`${ornate ? 'gothic-frame gothic-frame--popup overflow-hidden px-24 pb-36 pt-40' : 'w-full max-w-2xl rounded border border-[#3a352a] bg-[#0d0c12]/95 p-8'} relative flex max-h-full flex-col items-center ${ornate ? '' : 'overflow-y-auto'}`}
+        style={ornate ? {
+          width: 'min(58rem, 94vw, calc((100vh - 3rem) * 736 / 544))',
+          aspectRatio: '736 / 544',
+        } : undefined}
+      >
+        {ornate && <GothicFrame />}
+        {ornate ? (
+          <div className="relative z-[1] flex min-h-0 w-full flex-col items-center overflow-x-hidden overflow-y-auto overscroll-contain">
+            {children}
+          </div>
+        ) : children}
       </div>
     </div>
   )

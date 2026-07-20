@@ -3,6 +3,7 @@
 const SOUNDTRACK_URL = new URL('../../Midnight in the Static.mp3', import.meta.url).href
 const CLOCK_URL = new URL('../../ticktock.mp3', import.meta.url).href
 const BODY_DISCOVERY_URL = new URL('../../chord.mp3', import.meta.url).href
+const RAIN_URL = new URL('../../rain.mp3', import.meta.url).href
 
 export class Soundtrack {
   private ctx: AudioContext | null = null
@@ -16,6 +17,8 @@ export class Soundtrack {
   private clockSource: MediaElementAudioSourceNode | null = null
   private bodyCue: HTMLAudioElement | null = null
   private bodyCueSource: MediaElementAudioSourceNode | null = null
+  private rainLoop: HTMLAudioElement | null = null
+  private rainSource: MediaElementAudioSourceNode | null = null
   private thunderTimer: ReturnType<typeof setTimeout> | null = null
   private noiseBuf: AudioBuffer | null = null
   private muted = false
@@ -28,6 +31,7 @@ export class Soundtrack {
     if (this.ctx) {
       if (this.ctx.state === 'suspended') void this.ctx.resume()
       if (this.soundtrack?.paused) void this.soundtrack.play().catch(() => undefined)
+      if (this.rainLoop?.paused) void this.rainLoop.play().catch(() => undefined)
       if (this.clockShouldRun && this.clockLoop?.paused) void this.clockLoop.play().catch(() => undefined)
       return
     }
@@ -113,14 +117,16 @@ export class Soundtrack {
 
   private startRain(ctx: AudioContext) {
     if (!this.ambienceBus) return
+    // Thunder still uses a filtered noise buffer, but the continuous rain is authored.
     this.noiseBuf = this.makeSoftNoise(ctx, 5)
-    const rain = ctx.createBufferSource()
-    rain.buffer = this.noiseBuf
+    const rain = new Audio(RAIN_URL)
     rain.loop = true
+    rain.preload = 'auto'
+    rain.dataset.gameRain = 'true'
 
     const low = ctx.createBiquadFilter()
     low.type = 'lowpass'
-    low.frequency.value = 1250
+    low.frequency.value = 2600
     low.Q.value = 0.18
 
     const high = ctx.createBiquadFilter()
@@ -129,10 +135,14 @@ export class Soundtrack {
     high.Q.value = 0.25
 
     const rainGain = ctx.createGain()
-    rainGain.gain.value = 0.075
+    rainGain.gain.value = 0.12
 
-    rain.connect(low).connect(high).connect(rainGain).connect(this.ambienceBus)
-    rain.start()
+    this.rainLoop = rain
+    this.rainSource = ctx.createMediaElementSource(rain)
+    this.rainSource.connect(low).connect(high).connect(rainGain).connect(this.ambienceBus)
+    void rain.play().catch(() => {
+      // A later user gesture will call ensure() again and retry playback.
+    })
   }
 
   private makeSoftNoise(ctx: AudioContext, seconds: number): AudioBuffer {
@@ -293,6 +303,11 @@ export class Soundtrack {
       this.bodyCue.removeAttribute('src')
       this.bodyCue.load()
     }
+    if (this.rainLoop) {
+      this.rainLoop.pause()
+      this.rainLoop.removeAttribute('src')
+      this.rainLoop.load()
+    }
     this.ctx = null
     this.master = null
     this.musicBus = null
@@ -304,5 +319,7 @@ export class Soundtrack {
     this.clockSource = null
     this.bodyCue = null
     this.bodyCueSource = null
+    this.rainLoop = null
+    this.rainSource = null
   }
 }

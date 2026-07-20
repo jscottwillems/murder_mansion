@@ -65,6 +65,96 @@
   }
 }
 
+@layer components {
+  .gothic-frame {
+    isolation: isolate;
+    box-shadow:
+      inset 0 0 28px rgba(201, 162, 39, 0.08),
+      0 18px 55px rgba(0, 0, 0, 0.72);
+  }
+
+  .gothic-frame::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 4%;
+    background: rgba(13, 12, 18, 0.97);
+  }
+
+  .gothic-frame--chat::before {
+    inset: 3.5%;
+  }
+
+  .gothic-frame > :not(.gothic-frame-sprite) {
+    position: relative;
+    z-index: 1;
+  }
+
+  .gothic-frame-sprite {
+    position: absolute;
+    z-index: 30;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .hud-gothic-map-frame {
+    display: flex;
+    overflow: hidden;
+    border: 27px solid transparent;
+    border-image-source: var(--gothic-frame-image);
+    border-image-slice: 105;
+    border-image-width: 34px;
+    border-image-repeat: stretch;
+    background: rgba(7, 6, 10, 0.88);
+    filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.72));
+  }
+
+  .hud-gothic-action-frame {
+    overflow: hidden;
+    border: 13px solid transparent;
+    border-image-source: var(--gothic-frame-image);
+    border-image-slice: 82;
+    border-image-width: 17px;
+    border-image-repeat: stretch;
+    background: rgba(7, 6, 10, 0.9);
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.65));
+  }
+
+  .title-gothic-frame,
+  .hud-gothic-info-frame,
+  .hud-gothic-feed-frame {
+    border-style: solid;
+    border-color: transparent;
+    border-image-source: var(--gothic-frame-image);
+    border-image-repeat: stretch;
+    background: rgba(7, 6, 10, 0.86);
+    filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.72));
+  }
+
+  .title-gothic-frame {
+    border-width: 42px;
+    border-image-slice: 108;
+    border-image-width: 52px;
+  }
+
+  .hud-gothic-info-frame {
+    border-width: 18px;
+    border-image-slice: 112;
+    border-image-width: 24px;
+  }
+
+  .hud-gothic-feed-frame {
+    overflow: hidden;
+    border-width: 14px;
+    border-image-slice: 84;
+    border-image-width: 19px;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

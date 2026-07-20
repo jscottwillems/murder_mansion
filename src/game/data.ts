@@ -12,19 +12,18 @@ export interface RoomDef {
   accent: number
   lightColor: number
   lightIntensity: number
-  furniture: 'study' | 'gallery' | 'conservatory' | 'kitchen' | 'dining' | 'ballroom' | 'cellar' | 'library' | 'suite'
 }
 
 export const ROOMS: RoomDef[] = [
-  { id: 'study', name: 'Study', brief: 'Leather, pipe smoke, and a desk full of letters.', col: 0, row: 0, floor: 0x4a3527, wall: 0x2c2018, accent: 0x8a6a3a, lightColor: 0xffb45e, lightIntensity: 1.15, furniture: 'study' },
-  { id: 'gallery', name: 'Gallery', brief: 'Portraits watch from gilded frames.', col: 1, row: 0, floor: 0x3a3f4a, wall: 0x23262e, accent: 0xb08d3e, lightColor: 0xcfd8ff, lightIntensity: 0.95, furniture: 'gallery' },
-  { id: 'conservatory', name: 'Conservatory', brief: 'Rain hammers the glass; the orchids don’t mind.', col: 2, row: 0, floor: 0x2e4432, wall: 0x1c2a20, accent: 0x5e8a4a, lightColor: 0x9fe8b0, lightIntensity: 0.9, furniture: 'conservatory' },
-  { id: 'kitchen', name: 'Kitchen', brief: 'Copper pans, a banked stove, too many knives.', col: 0, row: 1, floor: 0x55504a, wall: 0x33302c, accent: 0xb5723a, lightColor: 0xffc98a, lightIntensity: 1.05, furniture: 'kitchen' },
-  { id: 'dining', name: 'Dining Hall', brief: 'A long table set for guests who may not live to dine.', col: 1, row: 1, floor: 0x4c2f33, wall: 0x2e1d20, accent: 0xc9a227, lightColor: 0xffd27a, lightIntensity: 1.25, furniture: 'dining' },
-  { id: 'ballroom', name: 'Ballroom', brief: 'A chandelier over an empty dance floor.', col: 2, row: 1, floor: 0x54486a, wall: 0x322b42, accent: 0xd6c9f0, lightColor: 0xe8dcff, lightIntensity: 1.2, furniture: 'ballroom' },
-  { id: 'cellar', name: 'Cellar', brief: 'Barrels, mildew, and sounds that might be rats.', col: 0, row: 2, floor: 0x3d3a35, wall: 0x242220, accent: 0x6a5a40, lightColor: 0xff9a4a, lightIntensity: 0.6, furniture: 'cellar' },
-  { id: 'library', name: 'Library', brief: 'Ten thousand pages and one missing book.', col: 1, row: 2, floor: 0x43302a, wall: 0x291d19, accent: 0x9a7a4a, lightColor: 0xffc06a, lightIntensity: 1.0, furniture: 'library' },
-  { id: 'suite', name: 'Master Suite', brief: 'Velvet, perfume, and a locked jewelry box.', col: 2, row: 2, floor: 0x5a2f3d, wall: 0x381e28, accent: 0xd98a9a, lightColor: 0xffb0a0, lightIntensity: 1.0, furniture: 'suite' },
+  { id: 'study', name: 'Study', brief: 'Pipe smoke lingers beneath the amber light.', col: 0, row: 0, floor: 0x4a3527, wall: 0x2c2018, accent: 0x8a6a3a, lightColor: 0xffb45e, lightIntensity: 1.15 },
+  { id: 'gallery', name: 'Gallery', brief: 'Cold light washes across the formal walls.', col: 1, row: 0, floor: 0x3a3f4a, wall: 0x23262e, accent: 0xb08d3e, lightColor: 0xcfd8ff, lightIntensity: 0.95 },
+  { id: 'conservatory', name: 'Conservatory', brief: 'Rain hammers the glass through the green gloom.', col: 2, row: 0, floor: 0x2e4432, wall: 0x1c2a20, accent: 0x5e8a4a, lightColor: 0x9fe8b0, lightIntensity: 0.9 },
+  { id: 'kitchen', name: 'Kitchen', brief: 'Warm light catches on worn quarry tile.', col: 0, row: 1, floor: 0x55504a, wall: 0x33302c, accent: 0xb5723a, lightColor: 0xffc98a, lightIntensity: 1.05 },
+  { id: 'dining', name: 'Dining Hall', brief: 'The herringbone floor waits beneath a tense hush.', col: 1, row: 1, floor: 0x4c2f33, wall: 0x2e1d20, accent: 0xc9a227, lightColor: 0xffd27a, lightIntensity: 1.25 },
+  { id: 'ballroom', name: 'Ballroom', brief: 'An empty dance floor gleams in violet light.', col: 2, row: 1, floor: 0x54486a, wall: 0x322b42, accent: 0xd6c9f0, lightColor: 0xe8dcff, lightIntensity: 1.2 },
+  { id: 'cellar', name: 'Cellar', brief: 'Mildew hangs in the air with sounds that might be rats.', col: 0, row: 2, floor: 0x3d3a35, wall: 0x242220, accent: 0x6a5a40, lightColor: 0xff9a4a, lightIntensity: 0.6 },
+  { id: 'library', name: 'Library', brief: 'Amber pools of light break the surrounding dark.', col: 1, row: 2, floor: 0x43302a, wall: 0x291d19, accent: 0x9a7a4a, lightColor: 0xffc06a, lightIntensity: 1.0 },
+  { id: 'suite', name: 'Master Suite', brief: 'Perfume lingers against velvet-dark walls.', col: 2, row: 2, floor: 0x5a2f3d, wall: 0x381e28, accent: 0xd98a9a, lightColor: 0xffb0a0, lightIntensity: 1.0 },
 ]
 
 export const ROOM_BY_ID: Record<RoomId, RoomDef> = Object.fromEntries(ROOMS.map(r => [r.id, r])) as Record<RoomId, RoomDef>
@@ -87,49 +86,9 @@ export function isWalkable(x: number, z: number): boolean {
   return false
 }
 
-export interface CollisionRect {
-  room: RoomId
-  x: number
-  z: number
-  halfW: number
-  halfD: number
-}
-
-// Gameplay footprints for the large, floor-level furnishings. Small props and
-// chairs deliberately remain non-solid so rooms stay navigable.
-export const FURNITURE_COLLIDERS: CollisionRect[] = [
-  { room: 'study', x: 0, z: -2.65, halfW: 1.7, halfD: 0.78 },
-  { room: 'gallery', x: -2.8, z: -1.85, halfW: 0.5, halfD: 0.5 },
-  { room: 'gallery', x: 2.8, z: -1.85, halfW: 0.5, halfD: 0.5 },
-  { room: 'gallery', x: 0, z: 2.75, halfW: 1.3, halfD: 0.58 },
-  { room: 'conservatory', x: 1.9, z: -1.9, halfW: 1.15, halfD: 1.15 },
-  { room: 'conservatory', x: -3.35, z: 3.2, halfW: 1.25, halfD: 0.55 },
-  { room: 'kitchen', x: -2.15, z: 2.25, halfW: 1.3, halfD: 0.78 },
-  { room: 'kitchen', x: -2.8, z: -4.15, halfW: 1.3, halfD: 0.65 },
-  { room: 'kitchen', x: -4.15, z: 2.4, halfW: 0.55, halfD: 1.9 },
-  { room: 'kitchen', x: 3.8, z: -3.65, halfW: 0.7, halfD: 0.65 },
-  { room: 'dining', x: 0, z: 0.72, halfW: 2.75, halfD: 0.85 },
-  { room: 'ballroom', x: -3.25, z: -3.1, halfW: 1.35, halfD: 1.05 },
-  { room: 'ballroom', x: 4.35, z: -3.25, halfW: 0.48, halfD: 1.3 },
-  { room: 'ballroom', x: 4.35, z: 3.25, halfW: 0.48, halfD: 1.3 },
-  { room: 'cellar', x: -3, z: 2.9, halfW: 1.05, halfD: 0.65 },
-  { room: 'cellar', x: 3.25, z: 3.55, halfW: 1.15, halfD: 0.8 },
-  { room: 'library', x: 0, z: 2.75, halfW: 0.85, halfD: 0.85 },
-  { room: 'suite', x: -2.7, z: -2.65, halfW: 1.45, halfD: 1.65 },
-  { room: 'suite', x: -3.9, z: 3.35, halfW: 0.78, halfD: 0.55 },
-  { room: 'suite', x: 4.05, z: 2.45, halfW: 0.48, halfD: 0.95 },
-]
-
-export function collidesWithFurniture(x: number, z: number, radius: number): boolean {
-  for (const b of FURNITURE_COLLIDERS) {
-    const c = roomCenter(b.room)
-    if (Math.abs(x - (c.x + b.x)) < b.halfW + radius && Math.abs(z - (c.z + b.z)) < b.halfD + radius) return true
-  }
-  return false
-}
-
 export function canOccupy(x: number, z: number, radius: number): boolean {
-  return isWalkable(x, z) && !collidesWithFurniture(x, z, radius)
+  void radius
+  return isWalkable(x, z)
 }
 
 // ---------------------------------------------------------------- archetypes
@@ -297,6 +256,52 @@ export const SCENE_EVIDENCE: SceneEvidence[] = [
 ]
 
 export const EVIDENCE_BY_ID = Object.fromEntries(SCENE_EVIDENCE.map(e => [e.id, e])) as Record<string, SceneEvidence>
+
+// Built-in interview lines imply an association without naming the journal
+// evidence or explaining why it matters. One may be appended on a reveal roll.
+export const BUILTIN_EVIDENCE_HINTS: Record<string, string[]> = {
+  'ink-fiber': [
+    'I had to blot my fingers earlier; that blue-black ink gets everywhere.',
+    'There is probably still a dark smudge on my cuff from my writing.',
+  ],
+  antiseptic: [
+    'You may notice a sharp, clean smell on my cuffs; it tends to linger.',
+    'I used a rather pungent cleaning solution earlier, if that is what you smell.',
+  ],
+  'fine-earth': [
+    'I brushed some pale grit from my shoes, though clearly not all of it.',
+    'The hems of my trousers have picked up a fine, dusty grit tonight.',
+  ],
+  'black-wool': [
+    'This dark coat sheds little threads whenever it catches on old furniture.',
+    'I snagged my black sleeve earlier; the weave has been fraying ever since.',
+  ],
+  'metal-polish': [
+    'I spent part of the evening buffing some fittings; the waxy stuff clings to the hands.',
+    'There is still a metallic polish on my fingertips from tending to something tarnished.',
+  ],
+  'floral-perfume': [
+    'The floral scent is mine, yes; one needs something pleasant against all this damp.',
+    'My perfume does linger in a room longer than I do, I am afraid.',
+  ],
+  'face-powder': [
+    'A little pale powder from my compact has found its way onto everything tonight.',
+    'I touched up my face earlier; the powder catches on one’s collar terribly.',
+  ],
+  'blade-oil': [
+    'I oiled a delicate mechanism earlier; one drop goes a surprisingly long way.',
+    'My fingers may still be slick from keeping a precision tool moving cleanly.',
+  ],
+  'wax-resin': [
+    'A brittle amber fleck from my work was stuck to my sleeve a moment ago.',
+    'I have been handling a warm, resinous material; it hardens into little golden crumbs.',
+  ],
+  'torn-note': [
+    'I have been jotting hurried little marks all evening and tearing off each finished scrap.',
+    'My shorthand becomes nearly illegible when I am rushed, but it saves paper and time.',
+  ],
+}
+
 export const EVIDENCE_BY_ARCHETYPE = Object.fromEntries(
   ARCHETYPES.map(a => [a.id, SCENE_EVIDENCE.filter(e => e.archetypeIds.includes(a.id))]),
 ) as Record<string, SceneEvidence[]>
