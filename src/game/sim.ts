@@ -21,6 +21,7 @@ const ACTOR_RADIUS = 0.42
 const STUCK_RECOVERY_SECONDS = 0.65
 const DETOUR_DISTANCE = ACTOR_RADIUS * 2.5
 const NPC_WALK_SPEED = 1.55
+const MURDER_COLOCATION_SECONDS = 5
 const ROOM_PREFERENCES: Record<string, RoomId[]> = {
   columnist: ['ballroom', 'suite', 'dining'],
   surgeon: ['study', 'library', 'conservatory'],
@@ -50,6 +51,7 @@ export class Simulation {
   private paths: Record<string, Waypoint[]> = {}
   private movementRecovery: Record<string, MovementRecovery> = {}
   private recentRooms: Record<string, RoomId[]> = {}
+  private murderColocationSeconds: Record<string, number> = {}
   private ev: SimEvents
 
   constructor(seed: number, ev: SimEvents) {
@@ -159,6 +161,7 @@ export class Simulation {
   advance(dtReal: number, speed: number, movementLockedGuestId?: string) {
     const dtMin = dtReal * speed
     this.clockMin = Math.min(NIGHT_LENGTH_MIN, this.clockMin + dtMin)
+    this.updateMurderColocation(dtReal)
 
     // sample location history every 15 game minutes
     if (this.clockMin >= this.histNextMin) {
@@ -350,8 +353,29 @@ export class Simulation {
     const others = this.guestsInRoom(killer.room).filter(o => o.id !== killer.id)
     // One target is required; a second guest is the maximum allowed witness.
     if (others.length < 1 || others.length > 2) return false
-    this.commitMurder(killer, pick(others, this.rng))
+    const eligibleVictims = others.filter(victim =>
+      (this.murderColocationSeconds[this.murderColocationKey(killer, victim)] ?? 0) >= MURDER_COLOCATION_SECONDS,
+    )
+    if (!eligibleVictims.length) return false
+    this.commitMurder(killer, pick(eligibleVictims, this.rng))
     return true
+  }
+
+  /** Track uninterrupted real time shared by the killer and each living guest. */
+  private updateMurderColocation(dtReal: number) {
+    const killer = this.byId(this.killerId)
+    if (!killer?.alive) return
+    for (const victim of this.guests) {
+      if (!victim.alive || victim.id === killer.id) continue
+      const key = this.murderColocationKey(killer, victim)
+      this.murderColocationSeconds[key] = victim.room === killer.room
+        ? (this.murderColocationSeconds[key] ?? 0) + Math.max(0, dtReal)
+        : 0
+    }
+  }
+
+  private murderColocationKey(killer: Guest, victim: Guest) {
+    return `${killer.id}:${victim.id}`
   }
 
   private findBestMurderTarget(killer: Guest): Guest | null {
@@ -374,6 +398,7 @@ export class Simulation {
     victim.deathRoom = victim.room
     victim.evidenceId = evidencePool[priorVictims % evidencePool.length]
     delete this.paths[victim.id]
+    this.murderColocationSeconds = {}
     killer.killCooldownUntilMin = this.clockMin + 30 + this.rng() * 15
     this.ev.guestDied(victim)
     this.teleportKillerAfterMurder(killer, victim.room)

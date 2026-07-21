@@ -1,5 +1,12 @@
 Original prompt: the music for this game is currently horrible and very hard to listen to, please work it to be something that players will want to continue listening to as they play
 
+Killer co-location delay follow-up (current prompt): murders during play now require the selected victim and killer to remain in the same room for five uninterrupted real seconds. Each killer-victim timer resets when they separate, and all timers clear after a murder/teleport. The pre-game opening crime remains exempt.
+- Verification: production build, focused ESLint, full simulation smoke test, and diff check pass. Focused assertions cover 4.99-second denial, 5.00-second permission, detective/crowd restrictions, and leave/re-enter reset behavior. The mandated client was run, and a targeted live-case capture in `output/killer-colocation-delay/` was visually inspected with zero console/page errors.
+
+Groq HTTP 413 interview-plan correction (current prompt): replaced the single 7,000-token, four-route chat completion with two sequential two-route requests capped at 3,200 tokens each. The complete immutable four-route plan and strict validation remain unchanged, while each provider request stays below the size that the default Groq connection was rejecting.
+- Added `llm-plan-test.ts`, which mocks the OpenAI-compatible endpoint and verifies four validated routes are assembled from exactly two requests using the 3,200-token cap.
+- Verification: focused mocked-plan test, production build, focused ESLint, and diff check pass. The mandated web-game browser client completed in `output/llm-413-fix-runtime/`; its title capture was visually inspected and no browser error artifact was produced.
+
 Conversation camera follow-up (current prompt): when an interview begins, the camera now pans to the midpoint between the detective and interviewed guest so both actors share the center of the frame. Ending the interview restores normal player/room camera tracking.
 - Verification: production build, focused game/world ESLint, and diff check pass. The mandated web-game client completed in `output/conversation-camera-runtime/`. Targeted interview coverage in `output/conversation-camera-targeted/` confirms the desired camera focus equals the exact player/guest midpoint, the pan settles there, and no browser errors occur; the final interview screenshot was visually inspected.
 - Composition refinement: conversation focus is shifted 0.75 world units left of the actor midpoint, placing the detective and guest slightly right of screen center while preserving their shared framing.
@@ -237,6 +244,10 @@ Notes:
 - Current likely fatigue sources: bright rain noise, loud static pad, sharp square tick, and sawtooth dissonant stingers.
 
 TODO:
+
+Built-in interview coherence follow-up (current prompt): removed the disconnected character story graphs from Built-in Dialogue runtime. Built-in interviews now ask a stable set of case-grounded questions about the current victim, timeline, alibi, witnessed activity, conversations, and suspicion; answers come from the current simulation's room history, rumors, and contact history. Once the detective has collected a physical trace, relevant guests receive a direct association question that reveals only that canonical connection. Asked questions remain visible but disabled, preventing circular repetition.
+- Static verification: production build, focused game/simulation ESLint, and diff check pass.
+- Runtime verification: the mandated web-game client completed in `output/dialogue-coherence-runtime/`. A targeted live interview in `output/dialogue-coherence-targeted/` confirmed victim-specific questions, a simulation-grounded timeline answer, disabled asked-question state, and zero console/page errors; the final dialogue screenshot was visually inspected.
 
 Narrative story-graph overhaul (current prompt): replaced the built-in two-stage advance/stall/close interviews with ten character-owned noir story graphs written by a three-agent writers' room. Every archetype now has a distinct private compromise, durable trust/pressure/flag state, non-repeatable choices, alternate routes, 3–5 reachable endings, and all three canonical evidence associations unlockable through justified observations, bargains, protection, reconstruction, or pressure.
 - Added `src/game/stories/storyPackA.ts`, `storyPackB.ts`, and `storyPackC.ts`, plus the normalized runtime adapter in `storyCatalog.ts`. Built-in mode and failed-LLM fallback use the story graphs; successful LLM plans remain supported.
@@ -594,3 +605,26 @@ Gothic window-border follow-up: added a shared antique-brass double frame with e
 
 - Restricted body-related mystery-sting playback to the player's room-entry discovery path (`playerDiscovers`); opening-crime setup and NPC discoveries are silent. Per user clarification, interview evidence reveals continue to use the same sting.
 - Verified the initial restriction with a production build, focused ESLint, `git diff --check`, and a mandated Playwright gameplay pass. `output/body-sting-regression/shot-0.png` and `state-0.json` were inspected with no browser-error artifact.
+
+## Clock-tick audibility correction (2026-07-20)
+
+- Raised only the authored `ticktock.mp3` channel from 0.10 to 0.28 gain. The clock remains on the SFX-controlled ambience bus and synchronized to simulated minutes, but now stays audible beneath the rain and music mix.
+- Production build, focused audio ESLint, and diff check pass. The mandated browser workflow reached gameplay and its screenshot/state were inspected in `output/clock-audibility-regression/`. A targeted runtime probe confirmed the AudioContext is running and the unmuted clock element is loaded, playing at 1×, and advancing with no console errors.
+
+## Lo-fi evidence-discovery cue (2026-07-20)
+
+- Added root-level `discovery.mp3` as the dedicated evidence cue. It is processed at runtime through 120 Hz high-pass, 3.2 kHz low-pass, gentle compression, and restrained gain for a worn lo-fi tone.
+- Evidence learned from interview dialogue and physical evidence collected while investigating a body both trigger this cue. The chord cue remains exclusive to player-discovered bodies.
+
+## Evidence reveal animation (2026-07-20)
+
+- Added a shared top-center animated evidence reveal for both interview associations and physical scene discoveries. The evidence sprite pops into view with expanding rings, a radial mint-and-gold particle burst, and a short card entrance/exit; reduced-motion users receive a static notification.
+- Production build, focused ESLint, diff check, and the mandated browser client pass. Targeted association and physical-discovery probes confirmed 16 particles, two glow rings, correct context-specific copy and sprites, automatic 4.2-second dismissal, and zero browser errors. Final gameplay captures were visually inspected in `output/evidence-reveal-targeted/`.
+- Production build, focused audio/game ESLint, and diff check pass. The mandated browser workflow reached live gameplay and `output/discovery-cue-regression/shot-0.png` plus state were inspected. A targeted runtime probe confirmed the 1.488-second cue loads and plays through a running AudioContext while the BGM bus remains unchanged, with no console errors.
+
+## Accusation window guest-view parity (2026-07-20)
+
+- Rebuilt the standalone accusation menu inside the same ornate popup window used by the Case Journal.
+- Replaced placeholder color swatches with the established guest portraits and matched the Guests tab's two-column cards, typography, borders, spacing, and suspicion bars.
+- Kept the two-step accusation safeguard and restyled its confirmation view inside the framed window with the selected guest portrait.
+- Production build, focused ESLint, and diff check pass. The mandated web-game client ran successfully; targeted list and confirmation captures were visually inspected in `output/accuse-window-targeted/`, showing nine living suspect cards and zero console/page errors.

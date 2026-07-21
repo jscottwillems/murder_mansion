@@ -64,7 +64,7 @@ export function CaseSetupScreen({ game, snap }: { game: Game; snap: Snapshot }) 
           className={`rounded border p-5 text-left transition-colors ${director === 'builtin' ? 'border-[#c9a227] bg-[#c9a227]/15' : 'border-[#3a352a] bg-black/40 hover:border-[#786a43]'}`}
         >
           <div className="font-serif text-lg text-[#e8d8a0]">Built-in Dialogue</div>
-          <div className="mt-2 text-xs leading-relaxed text-[#8a8478]">Fast, reliable, and fully offline. Interviews use authored dialogue.</div>
+          <div className="mt-2 text-xs leading-relaxed text-[#8a8478]">Fast, reliable, and fully offline. Interviews stay grounded in this case.</div>
         </button>
         <button
           type="button"

@@ -151,6 +151,7 @@ export interface EvidenceDiscoveryNotice {
   guestName: string
   evidenceId: string
   label: string
+  kind: 'association' | 'physical'
 }
 
 export interface EndInfo {

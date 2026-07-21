@@ -4,14 +4,13 @@ import type {
   CollectedEvidence, EndInfo, Guest, InterviewState, Lead, LogLine, Phase,
   QuestionOption, QuestionTopic, RoomId, Settings, Snapshot, TranscriptEntry,
 } from './types'
-import { EVIDENCE_BY_ID, ROOM_BY_ID, ROOM_HALF, roomAt, roomCenter, roomOfPoint, canOccupy, fmtTime, NIGHT_LENGTH_MIN } from './data'
+import { BUILTIN_EVIDENCE_HINTS, EVIDENCE_BY_ID, ROOM_BY_ID, ROOM_HALF, roomAt, roomCenter, roomOfPoint, canOccupy, fmtTime, NIGHT_LENGTH_MIN } from './data'
 import { Simulation } from './sim'
 import { MansionScene } from './world'
 import { Soundtrack } from './audio'
 import { llmConversationPlan, archetypeOf } from './llm'
 import type { AuthoredDialogueRoute } from './authoredDialogue'
 import { authoredChoice, authoredQuestionOptions, authoredRoutesForGuest } from './dialogueResolver'
-import { STORY_CATALOG, newStoryState, type StoryRuntimeState } from './stories/storyCatalog'
 
 const SETTINGS_KEY = 'murder-mansion-settings'
 const PLAYER_SPEED = 4.4
@@ -95,7 +94,6 @@ export class Game {
   private interviewsHeld = 0
   private dialogueThreads: Record<string, Record<string, DialogueThread>> = {}
   private conversationPlans: Record<string, AuthoredDialogueRoute[]> = {}
-  private storyStates: Record<string, StoryRuntimeState> = {}
   private interviewRequestN = 0
   private llmLive = false
   private lastTs = 0
@@ -340,8 +338,9 @@ export class Game {
       atMin: this.sim?.clockMin ?? 0,
     }]
     this.pushLead('evidence', `Scene: ${body.name}`, text)
+    this.audio.evidenceDiscovered()
+    this.showEvidenceDiscovery(evidence.id, evidence.label, body.name, 'physical')
     this.pushLog(`Evidence collected — ${evidence.label}. Added to your journal.`, 'info')
-    this.emit()
   }
 
   private computeHint(): string | null {
@@ -367,7 +366,6 @@ export class Game {
     this.logLines = []
     this.transcripts = {}
     this.interview = null
-    this.storyStates = {}
     this.evidenceDiscovery = null
     if (this.evidenceDiscoveryTimer) {
       clearTimeout(this.evidenceDiscoveryTimer)
@@ -511,20 +509,18 @@ export class Game {
       })
       return
     }
-    const story = this.storyFor(g)
-    const storyState = story ? this.storyState(g) : null
-    const active = story ? undefined : Object.values(this.ensureGuestThreads(g)).find(thread => thread.status === 'active')
-    const storyQuestions = story ? this.storyQuestions(g) : []
+    const builtIn = this.settings.director === 'builtin'
+    const active = builtIn ? undefined : Object.values(this.ensureGuestThreads(g)).find(thread => thread.status === 'active')
     this.interview = {
       guestId,
-      questions: story ? storyQuestions : (active?.offered.length ? active.offered : this.buildRootQuestions(g)),
+      questions: builtIn ? this.buildBuiltinQuestions(g) : (active?.offered.length ? active.offered : this.buildRootQuestions(g)),
       lastQuestion: '',
       lastAnswer: `“${this.pickGreet(g)}”`,
       emotion: 'neutral',
       thinking: false,
-      concluded: !!storyState?.endingId,
-      activeThreadId: storyState?.nodeId ? `story:${g.archetypeId}` : (active?.id ?? null),
-      threadStatus: storyState?.endingId ? 'resolved' : storyState?.nodeId ? 'active' : active ? 'active' : 'topics',
+      concluded: false,
+      activeThreadId: active?.id ?? null,
+      threadStatus: active ? 'active' : 'topics',
       responseSource: this.llmConfigured()
         ? (this.llmLive ? 'llm' : 'fallback')
         : 'builtin',
@@ -538,25 +534,27 @@ export class Game {
     return a.greet[Math.floor(Math.random() * a.greet.length)]
   }
 
-  private storyFor(g: Guest) {
-    if (this.settings.director === 'builtin') return STORY_CATALOG[g.archetypeId]
-    // A failed LLM request should fall back to the richer local story graph.
-    if (this.settings.director === 'llm' && !this.llmLive && this.conversationPlans[g.id]) return STORY_CATALOG[g.archetypeId]
-    return undefined
-  }
-
-  private storyState(g: Guest): StoryRuntimeState {
-    return this.storyStates[g.id] ??= newStoryState()
-  }
-
-  private storyQuestions(g: Guest): QuestionOption[] {
-    const story = this.storyFor(g)
-    if (!story) return []
-    const state = this.storyState(g)
-    if (state.nodeId && !state.endingId && state.offered.length) {
-      return state.offered.map(choice => ({ id: `story-choice:${choice.id}`, topic: 'follow_up', label: choice.label, kind: 'branch' }))
-    }
-    return story.rootQuestions(state).map(root => ({ ...root, kind: 'root' as const }))
+  private buildBuiltinQuestions(g: Guest): QuestionOption[] {
+    if (!this.sim) return []
+    const victim = this.sim.victims().at(-1)
+    const asked = new Set((this.transcripts[g.id] ?? []).map(entry => entry.q))
+    const questions: QuestionOption[] = [
+      { id: 'builtin:timeline', topic: 'timeline', label: victim ? `Where were you around the time ${victim.name} died?` : 'Where have you been for the last hour?', kind: 'root' },
+      { id: 'builtin:alibi', topic: 'alibi', label: 'Who can confirm your account?', kind: 'root' },
+      { id: 'builtin:last_seen', topic: 'last_seen', label: victim ? `When did you last see ${victim.name}?` : 'Who did you see most recently?', kind: 'root' },
+      { id: 'builtin:intel', topic: 'intel', label: 'What have you actually heard or seen tonight?', kind: 'root' },
+      { id: 'builtin:social', topic: 'social', label: 'Who have you spoken with since midnight?', kind: 'root' },
+      { id: 'builtin:suspicion', topic: 'suspicion', label: 'Who do you suspect, and why?', kind: 'root' },
+    ]
+    const foundAssociation = this.evidence.map(item => item.evidenceId)
+      .find(evidenceId => g.evidenceIds.includes(evidenceId) && !g.revealedEvidenceIds.includes(evidenceId))
+    if (foundAssociation) questions.unshift({
+      id: `builtin:evidence:${foundAssociation}`,
+      topic: 'pressure',
+      label: `I found ${EVIDENCE_BY_ID[foundAssociation].label.toLowerCase()}. Could it be connected to you?`,
+      kind: 'root',
+    })
+    return questions.map(question => ({ ...question, disabled: asked.has(question.label) }))
   }
 
   private ensureGuestThreads(g: Guest): Record<string, DialogueThread> {
@@ -579,7 +577,6 @@ export class Game {
   }
 
   private buildRootQuestions(g: Guest): QuestionOption[] {
-    if (this.storyFor(g)) return this.storyQuestions(g)
     return Object.values(this.ensureGuestThreads(g)).map(thread => ({
       id: `root:${thread.id}`,
       topic: thread.topic,
@@ -648,8 +645,8 @@ export class Game {
     if (!g) return
     const q = this.interview.questions.find(option => option.id === questionId)
     if (!q || q.disabled) return
-    if (this.storyFor(g) && (questionId.startsWith('story-root:') || questionId.startsWith('story-choice:'))) {
-      this.askStory(g, q)
+    if (this.settings.director === 'builtin' && questionId.startsWith('builtin:')) {
+      this.askBuiltin(g, q)
       return
     }
     const threads = this.ensureGuestThreads(g)
@@ -730,34 +727,32 @@ export class Game {
     }, 350)
   }
 
-  private askStory(g: Guest, q: QuestionOption) {
-    const story = this.storyFor(g)
-    if (!story || !this.interview) return
-    const state = this.storyState(g)
-    const choiceId = q.id.startsWith('story-choice:') ? q.id.slice('story-choice:'.length) : q.id
-    const beat = story.choose(state, choiceId)
-    if (!beat) return
-    state.offered = beat.choices
+  private askBuiltin(g: Guest, q: QuestionOption) {
+    if (!this.interview || !this.sim) return
     const requestN = ++this.interviewRequestN
     this.interview = { ...this.interview, thinking: true, lastQuestion: q.label, questions: [] }
     this.emit()
     setTimeout(() => {
       if (!this.interview || this.interview.guestId !== g.id || requestN !== this.interviewRequestN) return
-      for (const evidenceId of beat.unlockedEvidence) this.revealGuestEvidence(g, evidenceId)
-      const entry: TranscriptEntry = { atMin: this.sim!.clockMin, q: q.label, a: beat.text }
+      const evidenceId = q.id.startsWith('builtin:evidence:') ? q.id.slice('builtin:evidence:'.length) : undefined
+      const result = evidenceId
+        ? { answer: `That trace could be mine. ${BUILTIN_EVIDENCE_HINTS[evidenceId]?.[0] ?? 'I handled something similar earlier tonight.'}`, leads: [] as { source: string; text: string }[] }
+        : this.sim!.answerQuestion(g, q.topic, this.playerRoom)
+      const answer = result.answer.replace(/^“|”$/g, '')
+      for (const lead of result.leads) this.pushLead('interview', lead.source, lead.text, true)
+      if (evidenceId) this.revealGuestEvidence(g, evidenceId)
+      const entry: TranscriptEntry = { atMin: this.sim!.clockMin, q: q.label, a: answer }
       this.transcripts = { ...this.transcripts, [g.id]: [...(this.transcripts[g.id] ?? []), entry] }
-      const terminal = !!beat.endingId
       this.interview = {
         ...this.interview,
         thinking: false,
-        lastAnswer: `“${beat.text}”`,
-        emotion: beat.emotion,
-        activeThreadId: `story:${story.archetypeId}`,
-        threadStatus: terminal ? (beat.endingId?.includes('rupture') || beat.endingId?.includes('locked') || beat.endingId?.includes('silence') || beat.endingId?.includes('foreclosed') || beat.endingId?.includes('curtain') ? 'exhausted' : 'resolved') : 'active',
-        concluded: terminal,
-        questions: terminal ? [] : beat.choices.map(choice => ({ id: `story-choice:${choice.id}`, topic: 'follow_up', label: choice.label, kind: 'branch' })),
+        lastAnswer: `“${answer}”`,
+        emotion: q.topic === 'pressure' ? 'worried' : q.topic === 'suspicion' ? 'suspicious' : 'thoughtful',
+        activeThreadId: null,
+        threadStatus: 'topics',
+        concluded: false,
+        questions: this.buildBuiltinQuestions(g),
       }
-      if (terminal) this.pushLead('interview', g.name, `${story.title}: ${beat.endingTitle ?? 'thread concluded'}.`, true)
       this.emit()
     }, 250)
   }
@@ -768,14 +763,19 @@ export class Game {
     if (!evidence) return
     g.revealedEvidenceIds = [...g.revealedEvidenceIds, evidenceId]
     this.pushLead('evidence', g.name, `A detail in ${g.name}'s answer suggests an association with ${evidence.label}.`, true)
+    this.audio.evidenceDiscovered()
+    this.showEvidenceDiscovery(evidence.id, evidence.label, g.name, 'association')
+    this.pushLog(`Evidence association discovered — ${g.name}: ${evidence.label}.`, 'info')
+  }
+
+  private showEvidenceDiscovery(evidenceId: string, label: string, guestName: string, kind: 'association' | 'physical') {
     this.evidenceDiscovery = {
       id: ++this.evidenceDiscoveryN,
-      guestName: g.name,
-      evidenceId: evidence.id,
-      label: evidence.label,
+      guestName,
+      evidenceId,
+      label,
+      kind,
     }
-    this.audio.stinger('body')
-    this.pushLog(`Evidence association discovered — ${g.name}: ${evidence.label}.`, 'info')
     if (this.evidenceDiscoveryTimer) clearTimeout(this.evidenceDiscoveryTimer)
     this.evidenceDiscoveryTimer = setTimeout(() => {
       this.evidenceDiscovery = null
@@ -1054,22 +1054,12 @@ export class Game {
     })),
     interview: this.interview && this.sim ? (() => {
       const guest = this.sim.byId(this.interview!.guestId)
-      const storyState = guest ? this.storyStates[guest.id] : undefined
       return {
         guest: guest?.name,
         archetype: guest?.archetypeId,
         answer: this.interview!.lastAnswer,
         choices: this.interview!.questions.map(q => q.label),
         concluded: this.interview!.concluded,
-        story: guest && storyState ? {
-          title: STORY_CATALOG[guest.archetypeId]?.title,
-          node: storyState.nodeId,
-          trust: storyState.trust,
-          pressure: storyState.pressure,
-          flags: storyState.flags,
-          unlockedEvidence: storyState.evidence,
-          ending: storyState.endingId,
-        } : null,
       }
     })() : null,
     clockText: fmtTime(this.sim?.clockMin ?? 0),

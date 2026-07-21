@@ -297,9 +297,13 @@ function parsePlanStage(raw: unknown, knownVictims: string[]): AuthoredDialogueS
 }
 
 /**
- * Plan and freeze an NPC's complete interview graph in one request. The model
- * authors every visible line and selects where each allowed association lives;
- * the game validates the graph and remains responsible for applying its paths.
+ * Plan and freeze an NPC's complete interview graph. The model authors every
+ * visible line and selects where each allowed association lives; the game
+ * validates the graph and remains responsible for applying its paths.
+ *
+ * Routes are requested in two small batches. Some OpenAI-compatible providers
+ * reject the former 7,000-token request with HTTP 413 even though the prompt is
+ * well inside the model's advertised context window.
  */
 export async function llmConversationPlan(
   cfg: LLMConfig,
@@ -324,35 +328,44 @@ export async function llmConversationPlan(
       g.isKiller ? murdererPrompt(g) : '',
       `You are planning the COMPLETE interactive interview for this NPC before the player sees any questions. Return the entire immutable branching conversation as JSON. The game will save it for this run; no later model call will rewrite a response or choice.`,
     ].filter(Boolean).join('\n')
-    const user = [
+    const sharedContext = [
       `Time: ${fmtTime(ctx.clockMin)}. Interview location: ${ctx.roomName}.`,
       `Other guests: ${ctx.otherGuests.join(', ')}.`,
       currentCaseMemory(ctx.caseEvents),
       ctx.knownVictims.length
         ? `KNOWN VICTIMS: ${ctx.knownVictims.join(', ')}. Mention only these discovered victims.`
         : `KNOWN VICTIMS: None. No body has been discovered. Every root, answer, choice, and response must avoid victim, murder, killing, death, corpse, body, or any implication that someone has died.`,
-      `Create exactly four distinct conversation routes using these exact immutable route assignments:`,
-      ...routeSpecs.map(spec => spec.evidence
-        ? `- id=${JSON.stringify(spec.id)}, evidenceId=${JSON.stringify(spec.evidenceId)}. This route's second-stage ADVANCE response is the reveal moment for this allowed association: ${spec.evidence.description} Build a fair two-step conversational trail toward an ordinary habit, possession, material, scent, residue, or activity. Do not use the evidence label ${JSON.stringify(spec.evidence.label)} in dialogue and do not call it evidence or a clue.`
-        : `- id=${JSON.stringify(spec.id)}, evidenceId=null. This is an information/personality route and must never imply a physical evidence association.`),
-      `For EACH route: write one unique detective root question, one in-character opening response, and exactly two stages. Each stage has ADVANCE, STALL, and CLOSE choices. Every choice contains the player's exact dialogue label plus the NPC response and portrait emotion it will produce.`,
-      `ADVANCE must follow a concrete hook planted in the preceding response and move toward the route's planned reveal. STALL must be plausible and yield characterful context without revealing the association. CLOSE must naturally end that subject. The second-stage ADVANCE response is the only reveal moment.`,
-      `Plan the paths now as a coherent whole: later choices must explicitly follow facts established earlier. Make all roots and choices distinct, specific, and genuinely useful to choose between. Never use generic lines such as "tell me more", "what do you mean", "why is that important", or "what aren't you telling me".`,
-      `Allowed topic values: ${PLAN_TOPICS.join('|')}. Allowed emotion values: ${CONVERSATION_EMOTIONS.join('|')}.`,
-      `RESPONSE FORMAT (REQUIRED): return exactly one JSON object, no Markdown, commentary, tags, or surrounding quotes. Use this exact shape:`,
-      `{"routes":[{"id":"exact supplied id","topic":"allowed topic","evidenceId":"exact supplied evidence id or null","rootQuestion":"detective question?","openingResponse":"NPC response","openingEmotion":"allowed emotion","stages":[{"advance":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"},"stall":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"},"close":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"}},{"advance":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"},"stall":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"},"close":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"}}]}]}`,
-      `The routes array must contain exactly four entries in the supplied order. Do not add fields.`,
-    ].join('\n')
-    // Four complete two-stage routes regularly exceed 3,200 tokens. A truncated
-    // JSON object fails strict validation and used to look like an unexplained
-    // switch back to authored dialogue.
-    const raw = await chat(cfg, [{ role: 'system', content: sys }, { role: 'user', content: user }], 45000, 7000)
-    const parsed = parseWholeJson(raw)
-    if (!isPlainObject(parsed) || Object.keys(parsed).join('|') !== 'routes' || !Array.isArray(parsed.routes) || parsed.routes.length !== 4) return null
+    ]
+    const routeInstruction = (spec: typeof routeSpecs[number]) => spec.evidence
+      ? `- id=${JSON.stringify(spec.id)}, evidenceId=${JSON.stringify(spec.evidenceId)}. This route's second-stage ADVANCE response is the reveal moment for this allowed association: ${spec.evidence.description} Build a fair two-step conversational trail toward an ordinary habit, possession, material, scent, residue, or activity. Do not use the evidence label ${JSON.stringify(spec.evidence.label)} in dialogue and do not call it evidence or a clue.`
+      : `- id=${JSON.stringify(spec.id)}, evidenceId=null. This is an information/personality route and must never imply a physical evidence association.`
+    const formatShape = `{"routes":[{"id":"exact supplied id","topic":"allowed topic","evidenceId":"exact supplied evidence id or null","rootQuestion":"detective question?","openingResponse":"NPC response","openingEmotion":"allowed emotion","stages":[{"advance":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"},"stall":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"},"close":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"}},{"advance":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"},"stall":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"},"close":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"}}]}]}`
+
+    const rawRoutes: unknown[] = []
+    for (let offset = 0; offset < routeSpecs.length; offset += 2) {
+      const batch = routeSpecs.slice(offset, offset + 2)
+      const user = [
+        ...sharedContext,
+        `Create exactly ${batch.length} distinct conversation routes using these exact immutable route assignments:`,
+        ...batch.map(routeInstruction),
+        `For EACH route: write one unique detective root question, one in-character opening response, and exactly two stages. Each stage has ADVANCE, STALL, and CLOSE choices. Every choice contains the player's exact dialogue label plus the NPC response and portrait emotion it will produce.`,
+        `ADVANCE must follow a concrete hook planted in the preceding response and move toward the route's planned reveal. STALL must be plausible and yield characterful context without revealing the association. CLOSE must naturally end that subject. The second-stage ADVANCE response is the only reveal moment.`,
+        `Plan the paths now as a coherent whole: later choices must explicitly follow facts established earlier. Make all roots and choices distinct, specific, and genuinely useful to choose between. Never use generic lines such as "tell me more", "what do you mean", "why is that important", or "what aren't you telling me".`,
+        `Allowed topic values: ${PLAN_TOPICS.join('|')}. Allowed emotion values: ${CONVERSATION_EMOTIONS.join('|')}.`,
+        `RESPONSE FORMAT (REQUIRED): return exactly one JSON object, no Markdown, commentary, tags, or surrounding quotes. Use this exact shape:`,
+        formatShape,
+        `The routes array must contain exactly ${batch.length} entries in the supplied order. Do not add fields.`,
+      ].join('\n')
+      const raw = await chat(cfg, [{ role: 'system', content: sys }, { role: 'user', content: user }], 30000, 3200)
+      const parsed = parseWholeJson(raw)
+      if (!isPlainObject(parsed) || Object.keys(parsed).join('|') !== 'routes' || !Array.isArray(parsed.routes) || parsed.routes.length !== batch.length) return null
+      rawRoutes.push(...parsed.routes)
+    }
+
     const routes: AuthoredDialogueRoute[] = []
     const rootFingerprints = new Set<string>()
     for (let index = 0; index < routeSpecs.length; index++) {
-      const rawRoute = parsed.routes[index]
+      const rawRoute = rawRoutes[index]
       const spec = routeSpecs[index]
       if (!isPlainObject(rawRoute) || Object.keys(rawRoute).some(key => !['id', 'topic', 'evidenceId', 'rootQuestion', 'openingResponse', 'openingEmotion', 'stages'].includes(key))) return null
       if (rawRoute.id !== spec.id || rawRoute.evidenceId !== spec.evidenceId || typeof rawRoute.topic !== 'string' || !PLAN_TOPICS.includes(rawRoute.topic as QuestionTopic)) return null

@@ -3,6 +3,7 @@
 const SOUNDTRACK_URL = new URL('../../Midnight in the Static.mp3', import.meta.url).href
 const CLOCK_URL = new URL('../../ticktock.mp3', import.meta.url).href
 const BODY_DISCOVERY_URL = new URL('../../chord.mp3', import.meta.url).href
+const EVIDENCE_DISCOVERY_URL = new URL('../../discovery.mp3', import.meta.url).href
 const RAIN_URL = new URL('../../rain.mp3', import.meta.url).href
 const FOOTSTEPS_URL = new URL('../../footsteps.mp3', import.meta.url).href
 const TEXT_BLIP_URL = new URL('../../text-blip.mp3', import.meta.url).href
@@ -19,6 +20,8 @@ export class Soundtrack {
   private clockSource: MediaElementAudioSourceNode | null = null
   private bodyCue: HTMLAudioElement | null = null
   private bodyCueSource: MediaElementAudioSourceNode | null = null
+  private evidenceCue: HTMLAudioElement | null = null
+  private evidenceCueSource: MediaElementAudioSourceNode | null = null
   private rainLoop: HTMLAudioElement | null = null
   private rainSource: MediaElementAudioSourceNode | null = null
   private footstepsLoop: HTMLAudioElement | null = null
@@ -73,6 +76,7 @@ export class Soundtrack {
     this.startSoundtrack(ctx)
     this.startClockLoop(ctx)
     this.prepareBodyCue(ctx)
+    this.prepareEvidenceCue(ctx)
     this.prepareFootsteps(ctx)
     this.prepareTextBlip(ctx)
     this.startRain(ctx)
@@ -121,6 +125,38 @@ export class Soundtrack {
     this.bodyCueSource.connect(cueGain).connect(this.sfxBus)
   }
 
+  private prepareEvidenceCue(ctx: AudioContext) {
+    if (!this.sfxBus) return
+    const cue = new Audio(EVIDENCE_DISCOVERY_URL)
+    cue.preload = 'auto'
+    cue.dataset.evidenceDiscoveryCue = 'true'
+
+    // Narrow the frequency range and soften the transients for a restrained,
+    // slightly worn lo-fi character without permanently altering the source.
+    const highpass = ctx.createBiquadFilter()
+    highpass.type = 'highpass'
+    highpass.frequency.value = 120
+    highpass.Q.value = 0.55
+
+    const lowpass = ctx.createBiquadFilter()
+    lowpass.type = 'lowpass'
+    lowpass.frequency.value = 3200
+    lowpass.Q.value = 0.7
+
+    const compressor = ctx.createDynamicsCompressor()
+    compressor.threshold.value = -24
+    compressor.knee.value = 16
+    compressor.ratio.value = 5
+    compressor.attack.value = 0.018
+    compressor.release.value = 0.22
+
+    const cueGain = ctx.createGain()
+    cueGain.gain.value = 0.68
+    this.evidenceCue = cue
+    this.evidenceCueSource = ctx.createMediaElementSource(cue)
+    this.evidenceCueSource.connect(highpass).connect(lowpass).connect(compressor).connect(cueGain).connect(this.sfxBus)
+  }
+
   private startClockLoop(ctx: AudioContext) {
     if (!this.ambienceBus) return
     const clock = new Audio(CLOCK_URL)
@@ -129,7 +165,9 @@ export class Soundtrack {
     clock.dataset.gameClock = 'true'
 
     const clockGain = ctx.createGain()
-    clockGain.gain.value = 0.1
+    // Keep the authored ticks distinct beneath rain after the ambience, SFX,
+    // and master gains are applied, while leaving them a background detail.
+    clockGain.gain.value = 0.28
     this.clockLoop = clock
     this.clockSource = ctx.createMediaElementSource(clock)
     this.clockSource.connect(clockGain).connect(this.ambienceBus)
@@ -289,6 +327,13 @@ export class Soundtrack {
     })
   }
 
+  evidenceDiscovered() {
+    if (!this.ctx || !this.sfxBus || !this.evidenceCue) return
+    this.evidenceCue.pause()
+    this.evidenceCue.currentTime = 0
+    void this.evidenceCue.play().catch(() => undefined)
+  }
+
   private duckMusic(seconds: number) {
     const ctx = this.ctx
     const bus = this.musicBus
@@ -390,6 +435,11 @@ export class Soundtrack {
       this.bodyCue.removeAttribute('src')
       this.bodyCue.load()
     }
+    if (this.evidenceCue) {
+      this.evidenceCue.pause()
+      this.evidenceCue.removeAttribute('src')
+      this.evidenceCue.load()
+    }
     if (this.rainLoop) {
       this.rainLoop.pause()
       this.rainLoop.removeAttribute('src')
@@ -416,6 +466,8 @@ export class Soundtrack {
     this.clockSource = null
     this.bodyCue = null
     this.bodyCueSource = null
+    this.evidenceCue = null
+    this.evidenceCueSource = null
     this.rainLoop = null
     this.rainSource = null
     this.footstepsLoop = null

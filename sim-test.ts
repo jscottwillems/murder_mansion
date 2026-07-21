@@ -71,8 +71,8 @@ console.assert(evidenceKiller.room !== evidenceSim.playerRoom, 'killer must not 
 console.assert(evidenceKiller.state === 'idle', 'killer must arrive immediately instead of walking from the scene')
 console.assert(evidenceSim['paths'][evidenceKiller.id] === undefined, 'killer must not retain a route from the murder scene')
 
-// The killer must immediately use a legal opportunity (one victim and at
-// most one witness), while respecting detective presence and crowd limits.
+// The killer must share a room with a victim for five uninterrupted real
+// seconds, while still respecting detective presence and crowd limits.
 const huntSim = new Simulation(24680, {
   log: () => {}, lead: () => {}, guestDied: () => {}, bodyDiscovered: () => {}, overheard: () => {},
 })
@@ -83,19 +83,36 @@ hunter.killCooldownUntilMin = 25
 for (const g of huntSim.guests) g.room = 'study'
 hunter.room = prey[0].room = prey[1].room = 'kitchen'
 huntSim.playerRoom = 'library'
+huntSim['updateMurderColocation'](4.99)
 huntSim.decide(hunter)
-console.assert(huntSim.aliveCount() === 9, 'killer should kill immediately with at most one witness')
+console.assert(huntSim.aliveCount() === 10, 'killer must not kill before five shared seconds')
+huntSim['updateMurderColocation'](0.01)
+huntSim.decide(hunter)
+console.assert(huntSim.aliveCount() === 9, 'killer should kill after five shared seconds with at most one witness')
 
 hunter.killCooldownUntilMin = huntSim.clockMin
 hunter.room = prey[2].room = 'ballroom'
 huntSim.playerRoom = 'ballroom'
+huntSim['updateMurderColocation'](5)
 huntSim.decide(hunter)
 console.assert(huntSim.aliveCount() === 9, 'killer must not kill in the detective room')
 
 huntSim.playerRoom = 'library'
 prey[3].room = prey[4].room = 'ballroom'
+huntSim['updateMurderColocation'](5)
 huntSim.decide(hunter)
 console.assert(huntSim.aliveCount() === 9, 'killer must not kill with more than one witness')
+
+// Leaving the shared room resets the uninterrupted five-second requirement.
+for (const g of huntSim.aliveGuests()) if (g.id !== hunter.id) g.room = 'study'
+hunter.room = prey[5].room = 'kitchen'
+huntSim['updateMurderColocation'](4)
+prey[5].room = 'study'
+huntSim['updateMurderColocation'](1)
+prey[5].room = 'kitchen'
+huntSim['updateMurderColocation'](1)
+huntSim.decide(hunter)
+console.assert(huntSim.aliveCount() === 9, 'leaving and returning must restart the shared-room timer')
 
 // Progressive interview topics must be fully supported by the built-in AI,
 // independent of the optional LLM provider. Exercise every archetype against
