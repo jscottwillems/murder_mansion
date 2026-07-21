@@ -134,7 +134,7 @@ export function HowToPlay({ game }: { game: Game }) {
       <div className="mt-4 space-y-3 text-sm leading-relaxed text-[#c9c0b0]">
         <p><b className="text-[#c9a227]">The situation.</b> You are a detective trapped by a storm with ten guests until 6:00 AM. One of them — chosen at random each case — is the murderer.</p>
         <p><b className="text-[#c9a227]">Move & observe.</b> WASD / arrow keys to walk between the nine rooms. You can only see your current room. Guests wander, gossip, and trade rumors; linger in a room to overhear them.</p>
-        <p><b className="text-[#c9a227]">Interview.</b> Press <b>E</b> near a guest. The night continues while that guest stays with you. You get four questions at a time — timelines, suspicions, rumors, alibis. Answers change as word spreads through the house.</p>
+        <p><b className="text-[#c9a227]">Interview.</b> Press <b>E</b> near a guest. Time stops while you talk, and the ticking clock pauses with it. You get four questions at a time — timelines, suspicions, rumors, alibis. Answers change as word spreads through the house.</p>
         <p><b className="text-[#c9a227]">Mind the lies.</b> Some guests misremember. The killer deflects suspicion onto the innocent — and kills again when alone with someone, out of your sight.</p>
         <p><b className="text-[#c9a227]">Journal.</b> Press <b>J</b> to review leads, guest status, and past interviews. Accuse from the Guests page when you're sure.</p>
         <p><b className="text-[#c9a227]">Lose conditions.</b> Sunrise arrives, you accuse the wrong person, or no one is left alive.</p>

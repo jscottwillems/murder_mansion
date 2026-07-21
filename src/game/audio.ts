@@ -4,6 +4,7 @@ const SOUNDTRACK_URL = new URL('../../Midnight in the Static.mp3', import.meta.u
 const CLOCK_URL = new URL('../../ticktock.mp3', import.meta.url).href
 const BODY_DISCOVERY_URL = new URL('../../chord.mp3', import.meta.url).href
 const EVIDENCE_DISCOVERY_URL = new URL('../../discovery.mp3', import.meta.url).href
+const HOUR_CHIME_URL = new URL('../../chime.m4a', import.meta.url).href
 const RAIN_URL = new URL('../../rain.mp3', import.meta.url).href
 const FOOTSTEPS_URL = new URL('../../footsteps.mp3', import.meta.url).href
 const TEXT_BLIP_URL = new URL('../../text-blip.mp3', import.meta.url).href
@@ -22,6 +23,8 @@ export class Soundtrack {
   private bodyCueSource: MediaElementAudioSourceNode | null = null
   private evidenceCue: HTMLAudioElement | null = null
   private evidenceCueSource: MediaElementAudioSourceNode | null = null
+  private hourChime: HTMLAudioElement | null = null
+  private hourChimeSource: MediaElementAudioSourceNode | null = null
   private rainLoop: HTMLAudioElement | null = null
   private rainSource: MediaElementAudioSourceNode | null = null
   private footstepsLoop: HTMLAudioElement | null = null
@@ -37,6 +40,7 @@ export class Soundtrack {
   private clockShouldRun = false
   private playerShouldWalk = false
   private dialogueShouldBlip = false
+  private lastGameMinute: number | null = null
 
   /** Must be called from a user gesture at least once. */
   ensure() {
@@ -77,6 +81,7 @@ export class Soundtrack {
     this.startClockLoop(ctx)
     this.prepareBodyCue(ctx)
     this.prepareEvidenceCue(ctx)
+    this.prepareHourChime(ctx)
     this.prepareFootsteps(ctx)
     this.prepareTextBlip(ctx)
     this.startRain(ctx)
@@ -155,6 +160,19 @@ export class Soundtrack {
     this.evidenceCue = cue
     this.evidenceCueSource = ctx.createMediaElementSource(cue)
     this.evidenceCueSource.connect(highpass).connect(lowpass).connect(compressor).connect(cueGain).connect(this.sfxBus)
+  }
+
+  private prepareHourChime(ctx: AudioContext) {
+    if (!this.sfxBus) return
+    const chime = new Audio(HOUR_CHIME_URL)
+    chime.preload = 'auto'
+    chime.dataset.hourChime = 'true'
+
+    const chimeGain = ctx.createGain()
+    chimeGain.gain.value = 0.62
+    this.hourChime = chime
+    this.hourChimeSource = ctx.createMediaElementSource(chime)
+    this.hourChimeSource.connect(chimeGain).connect(this.sfxBus)
   }
 
   private startClockLoop(ctx: AudioContext) {
@@ -348,6 +366,16 @@ export class Soundtrack {
 
   /** Keep one second of clock audio aligned to one simulated minute. */
   onGameMinute(min: number, speed: number, running: boolean) {
+    const previousMinute = this.lastGameMinute
+    if (previousMinute === null || min < previousMinute) {
+      // Establish a baseline at case start (or after a new case rewinds to
+      // midnight) without chiming immediately at 12:00 AM.
+      this.lastGameMinute = min
+    } else if (running) {
+      if (Math.floor(min / 60) > Math.floor(previousMinute / 60)) this.playHourChime()
+      this.lastGameMinute = min
+    }
+
     const clock = this.clockLoop
     this.clockShouldRun = running
     if (!clock) return
@@ -367,6 +395,13 @@ export class Soundtrack {
       if (Math.min(directDrift, wrappedDrift) > 0.08) clock.currentTime = desiredTime
     }
     if (clock.paused) void clock.play().catch(() => undefined)
+  }
+
+  private playHourChime() {
+    if (!this.ctx || !this.sfxBus || !this.hourChime) return
+    this.hourChime.pause()
+    this.hourChime.currentTime = 0
+    void this.hourChime.play().catch(() => undefined)
   }
 
   setPlayerWalking(walking: boolean) {
@@ -440,6 +475,11 @@ export class Soundtrack {
       this.evidenceCue.removeAttribute('src')
       this.evidenceCue.load()
     }
+    if (this.hourChime) {
+      this.hourChime.pause()
+      this.hourChime.removeAttribute('src')
+      this.hourChime.load()
+    }
     if (this.rainLoop) {
       this.rainLoop.pause()
       this.rainLoop.removeAttribute('src')
@@ -468,6 +508,8 @@ export class Soundtrack {
     this.bodyCueSource = null
     this.evidenceCue = null
     this.evidenceCueSource = null
+    this.hourChime = null
+    this.hourChimeSource = null
     this.rainLoop = null
     this.rainSource = null
     this.footstepsLoop = null

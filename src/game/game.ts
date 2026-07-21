@@ -4,7 +4,7 @@ import type {
   CollectedEvidence, EndInfo, Guest, InterviewState, Lead, LogLine, Phase,
   QuestionOption, QuestionTopic, RoomId, Settings, Snapshot, TranscriptEntry,
 } from './types'
-import { BUILTIN_EVIDENCE_HINTS, EVIDENCE_BY_ID, ROOM_BY_ID, ROOM_HALF, roomAt, roomCenter, roomOfPoint, canOccupy, fmtTime, NIGHT_LENGTH_MIN } from './data'
+import { EVIDENCE_BY_ID, ROOM_BY_ID, ROOM_HALF, roomAt, roomCenter, roomOfPoint, canOccupy, fmtTime, NIGHT_LENGTH_MIN } from './data'
 import { Simulation } from './sim'
 import { MansionScene } from './world'
 import { Soundtrack } from './audio'
@@ -82,6 +82,7 @@ export class Game {
   private playerRoom: RoomId = 'dining'
   private guestRevealOpacity = 1
   private playerWalking = false
+  private playerEncounteredBodyIds = new Set<string>()
   private leads: Lead[] = []
   private evidence: CollectedEvidence[] = []
   private logLines: LogLine[] = []
@@ -165,7 +166,6 @@ export class Game {
       if (this.phase === 'playing' && this.sim) this.stepPlaying(dt)
       else {
         this.playerWalking = false
-        if (this.phase === 'interview' && this.sim) this.stepInterview(dt)
       }
       this.syncActors()
       this.world.update(dt)
@@ -366,6 +366,7 @@ export class Game {
     this.logLines = []
     this.transcripts = {}
     this.interview = null
+    this.playerEncounteredBodyIds.clear()
     this.evidenceDiscovery = null
     if (this.evidenceDiscoveryTimer) {
       clearTimeout(this.evidenceDiscoveryTimer)
@@ -460,6 +461,7 @@ export class Game {
         responseSource: 'llm',
       }
       this.phase = 'interview'
+      this.audio.onGameMinute(this.sim.clockMin, this.settings.speed, false)
       this.emit()
       const sim = this.sim
       llmConversationPlan(
@@ -509,11 +511,10 @@ export class Game {
       })
       return
     }
-    const builtIn = this.settings.director === 'builtin'
-    const active = builtIn ? undefined : Object.values(this.ensureGuestThreads(g)).find(thread => thread.status === 'active')
+    const active = Object.values(this.ensureGuestThreads(g)).find(thread => thread.status === 'active')
     this.interview = {
       guestId,
-      questions: builtIn ? this.buildBuiltinQuestions(g) : (active?.offered.length ? active.offered : this.buildRootQuestions(g)),
+      questions: active?.offered.length ? active.offered : this.buildRootQuestions(g),
       lastQuestion: '',
       lastAnswer: `“${this.pickGreet(g)}”`,
       emotion: 'neutral',
@@ -526,35 +527,13 @@ export class Game {
         : 'builtin',
     }
     this.phase = 'interview'
+    this.audio.onGameMinute(this.sim.clockMin, this.settings.speed, false)
     this.emit()
   }
 
   private pickGreet(g: Guest): string {
     const a = archetypeOf(g)
     return a.greet[Math.floor(Math.random() * a.greet.length)]
-  }
-
-  private buildBuiltinQuestions(g: Guest): QuestionOption[] {
-    if (!this.sim) return []
-    const victim = this.sim.victims().at(-1)
-    const asked = new Set((this.transcripts[g.id] ?? []).map(entry => entry.q))
-    const questions: QuestionOption[] = [
-      { id: 'builtin:timeline', topic: 'timeline', label: victim ? `Where were you around the time ${victim.name} died?` : 'Where have you been for the last hour?', kind: 'root' },
-      { id: 'builtin:alibi', topic: 'alibi', label: 'Who can confirm your account?', kind: 'root' },
-      { id: 'builtin:last_seen', topic: 'last_seen', label: victim ? `When did you last see ${victim.name}?` : 'Who did you see most recently?', kind: 'root' },
-      { id: 'builtin:intel', topic: 'intel', label: 'What have you actually heard or seen tonight?', kind: 'root' },
-      { id: 'builtin:social', topic: 'social', label: 'Who have you spoken with since midnight?', kind: 'root' },
-      { id: 'builtin:suspicion', topic: 'suspicion', label: 'Who do you suspect, and why?', kind: 'root' },
-    ]
-    const foundAssociation = this.evidence.map(item => item.evidenceId)
-      .find(evidenceId => g.evidenceIds.includes(evidenceId) && !g.revealedEvidenceIds.includes(evidenceId))
-    if (foundAssociation) questions.unshift({
-      id: `builtin:evidence:${foundAssociation}`,
-      topic: 'pressure',
-      label: `I found ${EVIDENCE_BY_ID[foundAssociation].label.toLowerCase()}. Could it be connected to you?`,
-      kind: 'root',
-    })
-    return questions.map(question => ({ ...question, disabled: asked.has(question.label) }))
   }
 
   private ensureGuestThreads(g: Guest): Record<string, DialogueThread> {
@@ -645,10 +624,6 @@ export class Game {
     if (!g) return
     const q = this.interview.questions.find(option => option.id === questionId)
     if (!q || q.disabled) return
-    if (this.settings.director === 'builtin' && questionId.startsWith('builtin:')) {
-      this.askBuiltin(g, q)
-      return
-    }
     const threads = this.ensureGuestThreads(g)
     const thread = q.kind === 'root'
       ? threads[questionId.slice('root:'.length)]
@@ -727,36 +702,6 @@ export class Game {
     }, 350)
   }
 
-  private askBuiltin(g: Guest, q: QuestionOption) {
-    if (!this.interview || !this.sim) return
-    const requestN = ++this.interviewRequestN
-    this.interview = { ...this.interview, thinking: true, lastQuestion: q.label, questions: [] }
-    this.emit()
-    setTimeout(() => {
-      if (!this.interview || this.interview.guestId !== g.id || requestN !== this.interviewRequestN) return
-      const evidenceId = q.id.startsWith('builtin:evidence:') ? q.id.slice('builtin:evidence:'.length) : undefined
-      const result = evidenceId
-        ? { answer: `That trace could be mine. ${BUILTIN_EVIDENCE_HINTS[evidenceId]?.[0] ?? 'I handled something similar earlier tonight.'}`, leads: [] as { source: string; text: string }[] }
-        : this.sim!.answerQuestion(g, q.topic, this.playerRoom)
-      const answer = result.answer.replace(/^“|”$/g, '')
-      for (const lead of result.leads) this.pushLead('interview', lead.source, lead.text, true)
-      if (evidenceId) this.revealGuestEvidence(g, evidenceId)
-      const entry: TranscriptEntry = { atMin: this.sim!.clockMin, q: q.label, a: answer }
-      this.transcripts = { ...this.transcripts, [g.id]: [...(this.transcripts[g.id] ?? []), entry] }
-      this.interview = {
-        ...this.interview,
-        thinking: false,
-        lastAnswer: `“${answer}”`,
-        emotion: q.topic === 'pressure' ? 'worried' : q.topic === 'suspicion' ? 'suspicious' : 'thoughtful',
-        activeThreadId: null,
-        threadStatus: 'topics',
-        concluded: false,
-        questions: this.buildBuiltinQuestions(g),
-      }
-      this.emit()
-    }, 250)
-  }
-
   private revealGuestEvidence(g: Guest, evidenceId: string) {
     if (g.revealedEvidenceIds.includes(evidenceId)) return
     const evidence = EVIDENCE_BY_ID[evidenceId]
@@ -790,6 +735,7 @@ export class Game {
     this.interviewRequestN++
     this.interview = null
     this.phase = 'playing'
+    this.audio.onGameMinute(this.sim?.clockMin ?? 0, this.settings.speed, true)
     this.emit()
   }
 
@@ -842,7 +788,6 @@ export class Game {
     if (this.phase === 'playing' && this.sim) this.stepPlaying(dt)
     else {
       this.playerWalking = false
-      if (this.phase === 'interview' && this.sim) this.stepInterview(dt)
     }
     this.syncActors()
     this.world.update(dt)
@@ -886,13 +831,23 @@ export class Game {
       this.guestRevealOpacity = 0
       sim.playerRoom = r
       this.world.focusRoom(r)
-      // discover bodies
+      // Record newly reported bodies, then play the sting the first time the
+      // detective personally enters a room containing each body. This also
+      // covers the opening victim and bodies an NPC reported first.
       const found = sim.playerDiscovers(r)
       for (const body of found) {
         this.world.markBodyRoom(body.deathRoom!)
-        this.audio.stinger('body')
         this.pushLog(`You found ${body.name}'s body.`, 'danger')
         this.pushLead('discovery', 'You', `You discovered ${body.name}'s body in the ${ROOM_BY_ID[r].name} (~${fmtTime(body.diedAtMin)}).`)
+      }
+      const firstEncounters = sim.guests.filter(body =>
+        !body.alive
+        && body.deathRoom === r
+        && !this.playerEncounteredBodyIds.has(body.id)
+      )
+      if (firstEncounters.length > 0) {
+        for (const body of firstEncounters) this.playerEncounteredBodyIds.add(body.id)
+        this.audio.stinger('body')
       }
     }
 
@@ -901,12 +856,8 @@ export class Game {
 
   }
 
-  private stepInterview(dt: number) {
-    this.advanceSimulation(dt, this.interview?.guestId)
-  }
-
   private timeIsRunning() {
-    return this.phase === 'playing' || this.phase === 'interview'
+    return this.phase === 'playing'
   }
 
   private advanceSimulation(dt: number, movementLockedGuestId?: string) {
@@ -963,8 +914,11 @@ export class Game {
       }
     }
     if (interviewGuest) {
-      this.world.faceActorAt('player', interviewGuest.x, interviewGuest.z)
-      this.world.faceActorAt(interviewGuest.id, this.px, this.pz)
+      // Conversation poses must be correct on the first visible frame. Guests
+      // normally ease toward a new heading, which can leave their prior walk
+      // direction (including a rear-facing frame) visible behind the dialogue.
+      this.world.faceActorAt('player', interviewGuest.x, interviewGuest.z, true)
+      this.world.faceActorAt(interviewGuest.id, this.px, this.pz, true)
     }
   }
 

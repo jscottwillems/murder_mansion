@@ -1,5 +1,8 @@
 Original prompt: the music for this game is currently horrible and very hard to listen to, please work it to be something that players will want to continue listening to as they play
 
+Built-in dialogue diversity/evidence follow-up (current prompt): traced the generic interview experience to a legacy built-in-only bypass in `Game.startInterview`/`ask`. It ignored the existing archetype-authored conversation catalog and offered every NPC the same six simulation questions; evidence questions only appeared after collecting a matching scene clue. Built-in interviews now use the same deterministic per-archetype thread state machine as fallback dialogue: four unique routes per character, three of which lead to that archetype's three evidence associations through two successful follow-ups.
+- Verification: production build, focused ESLint, exhaustive authored-dialogue audit, and diff check pass. The mandated web-game client reached setup/game state without browser errors. A targeted live built-in run in `output/dialogue-diversity-targeted/` compared an antiquarian's four roots against a chauffeur's four entirely different roots, then followed the antiquarian's first route through both productive branches and confirmed `fine-earth` was revealed. The interview screenshot was visually inspected; metadata reports zero console/page errors.
+
 Killer co-location delay follow-up (current prompt): murders during play now require the selected victim and killer to remain in the same room for five uninterrupted real seconds. Each killer-victim timer resets when they separate, and all timers clear after a murder/teleport. The pre-game opening crime remains exempt.
 - Verification: production build, focused ESLint, full simulation smoke test, and diff check pass. Focused assertions cover 4.99-second denial, 5.00-second permission, detective/crowd restrictions, and leave/re-enter reset behavior. The mandated client was run, and a targeted live-case capture in `output/killer-colocation-delay/` was visually inspected with zero console/page errors.
 
@@ -622,9 +625,31 @@ Gothic window-border follow-up: added a shared antique-brass double frame with e
 - Production build, focused ESLint, diff check, and the mandated browser client pass. Targeted association and physical-discovery probes confirmed 16 particles, two glow rings, correct context-specific copy and sprites, automatic 4.2-second dismissal, and zero browser errors. Final gameplay captures were visually inspected in `output/evidence-reveal-targeted/`.
 - Production build, focused audio/game ESLint, and diff check pass. The mandated browser workflow reached live gameplay and `output/discovery-cue-regression/shot-0.png` plus state were inspected. A targeted runtime probe confirmed the 1.488-second cue loads and plays through a running AudioContext while the BGM bus remains unchanged, with no console errors.
 
+## Detective room-entry body sting (2026-07-20)
+
+- Decoupled the detective's personal body encounter from the simulation-wide `bodyFound` flag. The mystery chord now plays the first time the detective enters a room containing each body, including the opening victim and bodies previously reported by NPCs, without replaying on later re-entry.
+- Production build, focused game ESLint, and diff check pass. The mandated browser workflow reached live gameplay and its screenshot/state were inspected in `output/body-room-sting-regression/`. A targeted opening-victim test confirmed one `body` sting on first room entry and no second sting on re-entry, with no console errors.
+
+## Hourly in-game chime (2026-07-20)
+
+- Added root-level `chime.m4a` as an SFX-bus cue at 0.62 gain. It plays once whenever running simulated time crosses an hourly boundary (1:00 AM onward), does not fire immediately at the midnight case start, and resets cleanly when a new case rewinds the clock.
+- Production build, focused audio ESLint, and diff check pass. The mandated gameplay capture/state in `output/hour-chime-regression/` were inspected with no browser-error artifact. A targeted runtime test confirmed zero plays at midnight and 12:59, exactly one at 1:00, no repeat at 1:00:30, a loaded/playing 6.912-second cue, and unchanged BGM gain.
+
 ## Accusation window guest-view parity (2026-07-20)
 
 - Rebuilt the standalone accusation menu inside the same ornate popup window used by the Case Journal.
 - Replaced placeholder color swatches with the established guest portraits and matched the Guests tab's two-column cards, typography, borders, spacing, and suspicion bars.
 - Kept the two-step accusation safeguard and restyled its confirmation view inside the framed window with the selected guest portrait.
 - Production build, focused ESLint, and diff check pass. The mandated web-game client ran successfully; targeted list and confirmation captures were visually inspected in `output/accuse-window-targeted/`, showing nine living suspect cards and zero console/page errors.
+
+## Interview time-stop restoration (2026-07-20)
+
+- Reimplemented paused simulation time during detective interviews. Entering a conversation now freezes the night clock and all simulation activity; the authored `ticktock.mp3` loop pauses as the audible indication and resumes when gameplay resumes.
+- Updated the interview panel indicator and How to Play copy to describe the restored time-stop behavior.
+- Production build, focused ESLint, diff check, and the mandated browser client pass. Targeted runtime coverage confirmed the simulation minute remains exactly fixed throughout an interview, the clock loop is paused immediately and remains paused, then resumes on exit with zero browser errors. The conversation capture was visually inspected in `output/interview-time-stop-targeted/`.
+
+## Conversation mutual-facing correction (2026-07-20)
+
+- Detective interviews now snap both the detective and guest to face one another on the first conversation frame and continuously retain that mutual-facing lock while the interview is open.
+- Normal walking headings and NPC-to-NPC conversation turns keep their existing eased rotation.
+- Production build, focused ESLint, diff check, and the mandated browser client pass. Targeted runtime coverage placed the actors on a diagonal before opening an interview and measured zero heading error for both, with their headings exactly opposite and no console/page errors. The interview UI was visually inspected at `output/conversation-facing-targeted/interview.png`.

@@ -751,13 +751,14 @@ export class MansionScene {
     }
   }
 
-  faceActorAt(id: string, x: number, z: number) {
+  faceActorAt(id: string, x: number, z: number, immediate = false) {
     const a = this.actors.get(id)
     if (!a || a.dead) return
     const dx = x - a.group.position.x
     const dz = z - a.group.position.z
     if (dx * dx + dz * dz > 0.000001) {
       a.targetFacingY = Math.atan2(-dx, -dz)
+      if (immediate) a.facingY = a.targetFacingY
       a.defaultForward = false
     }
   }

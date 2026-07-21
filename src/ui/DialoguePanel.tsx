@@ -39,7 +39,7 @@ export function DialoguePanel({ game, snap }: { game: Game; snap: Snapshot }) {
                   <div className="text-xs uppercase tracking-widest text-[#8a8478]">{guest.archetypeName}</div>
                 </div>
                 <div className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-[#6a6458]">
-                  <div>The night moves on</div>
+                  <div>Time stands still</div>
                   <div className={`mt-1 text-right ${iv.responseSource === 'fallback' ? 'text-[#e86a5a]' : 'text-[#8a8478]'}`}>
                     {iv.responseSource === 'llm' ? 'LLM dialogue'
                       : iv.responseSource === 'fallback' ? 'LLM failed · built-in fallback'
