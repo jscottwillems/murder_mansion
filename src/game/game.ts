@@ -1,5 +1,5 @@
 // Game orchestrator: loop, input, phases, interviews, accusation, endings,
-// LLM director hookup, and the pub/sub store bridge for React.
+// optional LLM dialogue hookup, and the pub/sub store bridge for React.
 import type {
   CollectedEvidence, EndInfo, Guest, InterviewState, Lead, LogLine, Phase,
   QuestionOption, QuestionTopic, RoomId, Settings, Snapshot, TranscriptEntry,
@@ -8,9 +8,10 @@ import { EVIDENCE_BY_ID, ROOM_BY_ID, ROOM_HALF, roomAt, roomCenter, roomOfPoint,
 import { Simulation } from './sim'
 import { MansionScene } from './world'
 import { Soundtrack } from './audio'
-import { llmConversationPlan, llmDecision, archetypeOf } from './llm'
+import { llmConversationPlan, archetypeOf } from './llm'
 import type { AuthoredDialogueRoute } from './authoredDialogue'
 import { authoredChoice, authoredQuestionOptions, authoredRoutesForGuest } from './dialogueResolver'
+import { STORY_CATALOG, newStoryState, type StoryRuntimeState } from './stories/storyCatalog'
 
 const SETTINGS_KEY = 'murder-mansion-settings'
 const PLAYER_SPEED = 4.4
@@ -45,7 +46,8 @@ const DEFAULT_SETTINGS: Settings = {
   llmApiKey: '',
   llmModel: 'llama-3.1-8b-instant',
   speed: 1,
-  volume: 0.7,
+  bgmVolume: 0.7,
+  sfxVolume: 0.7,
   muted: false,
 }
 
@@ -53,9 +55,15 @@ function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
     if (raw) {
-      const saved = JSON.parse(raw) as Partial<Settings>
+      const saved = JSON.parse(raw) as Partial<Settings> & { volume?: number }
       // Configurations saved before provider presets existed are custom endpoints.
       if (!saved.llmProvider && saved.llmBaseUrl) saved.llmProvider = 'custom'
+      // Migrate the former single volume control into both independent buses.
+      if (typeof saved.volume === 'number') {
+        if (saved.bgmVolume === undefined) saved.bgmVolume = saved.volume
+        if (saved.sfxVolume === undefined) saved.sfxVolume = saved.volume
+        delete saved.volume
+      }
       return { ...DEFAULT_SETTINGS, ...saved }
     }
   } catch { /* ignore */ }
@@ -74,6 +82,7 @@ export class Game {
   private pz = 0
   private playerRoom: RoomId = 'dining'
   private guestRevealOpacity = 1
+  private playerWalking = false
   private leads: Lead[] = []
   private evidence: CollectedEvidence[] = []
   private logLines: LogLine[] = []
@@ -86,8 +95,8 @@ export class Game {
   private interviewsHeld = 0
   private dialogueThreads: Record<string, Record<string, DialogueThread>> = {}
   private conversationPlans: Record<string, AuthoredDialogueRoute[]> = {}
+  private storyStates: Record<string, StoryRuntimeState> = {}
   private interviewRequestN = 0
-  private llmPending = new Set<string>()
   private llmLive = false
   private lastTs = 0
   private emitTimer = 0
@@ -108,7 +117,8 @@ export class Game {
     this.world.addActor('player', 0x8a7a5a, 'Detective', true)
     this.world.focusRoom(this.playerRoom)
     this.audio.setMuted(this.settings.muted)
-    this.audio.setVolume(this.settings.volume)
+    this.audio.setBgmVolume(this.settings.bgmVolume)
+    this.audio.setSfxVolume(this.settings.sfxVolume)
     window.murderMansionGame = this
     window.render_game_to_text = this.renderGameToText
     window.advanceTime = this.advanceTime
@@ -146,14 +156,22 @@ export class Game {
 
   getSnapshot = () => this.snap
 
+  setDialogueTyping = (active: boolean, restart = false) => {
+    this.audio.setDialogueTyping(active, restart)
+  }
+
   private advanceTime = (ms: number) => {
     const steps = Math.max(1, Math.round(ms / (1000 / 60)))
     for (let i = 0; i < steps; i++) {
       const dt = 1 / 60
       if (this.phase === 'playing' && this.sim) this.stepPlaying(dt)
-      else if (this.phase === 'interview' && this.sim) this.stepInterview(dt)
+      else {
+        this.playerWalking = false
+        if (this.phase === 'interview' && this.sim) this.stepInterview(dt)
+      }
       this.syncActors()
       this.world.update(dt)
+      this.audio.setPlayerWalking(this.playerWalking)
       this.audio.onGameMinute(this.sim?.clockMin ?? 0, this.settings.speed, this.timeIsRunning())
     }
     this.emit()
@@ -349,6 +367,7 @@ export class Game {
     this.logLines = []
     this.transcripts = {}
     this.interview = null
+    this.storyStates = {}
     this.evidenceDiscovery = null
     if (this.evidenceDiscoveryTimer) {
       clearTimeout(this.evidenceDiscoveryTimer)
@@ -359,7 +378,6 @@ export class Game {
     this.dialogueThreads = {}
     this.conversationPlans = {}
     this.interviewRequestN++
-    this.llmPending.clear()
 
     this.sim = new Simulation(seed, {
       log: (text, tone) => this.pushLog(text, tone),
@@ -367,28 +385,18 @@ export class Game {
       guestDied: (g) => {
         this.world.setActorDead(g.id, g.x, g.z)
       },
-      bodyDiscovered: (g, byName) => {
+      bodyDiscovered: (g) => {
         this.world.markBodyRoom(g.deathRoom!)
-        if (byName === 'You') {
-          this.audio.stinger('body')
-          this.pushLog(`You found ${g.name}'s body in the ${ROOM_BY_ID[g.deathRoom!].name}.`, 'danger')
-          this.pushLead('discovery', 'You', `You discovered ${g.name}'s body in the ${ROOM_BY_ID[g.deathRoom!].name} (~${fmtTime(g.diedAtMin)}).`)
-        } else {
-          this.audio.stinger('body')
-        }
       },
       overheard: (_who, text) => this.pushLog(text, 'rumor'),
     })
-
-    if (this.llmConfigured()) {
-      this.sim.externalDecider = (g) => this.llmDecide(g)
-    }
 
     this.world.removeAllActors()
     this.world.addActor('player', 0x8a7a5a, 'Detective', true)
     for (const g of this.sim.guests) {
       this.world.addActor(g.id, g.colorNum, g.name, false, g.archetypeId)
     }
+    const openingVictim = this.sim.createOpeningCrime()
     this.world.resetRoomLights()
 
     // player starts in the Dining Hall (center of the mansion)
@@ -398,9 +406,11 @@ export class Game {
     this.pz = c.z
     this.world.focusRoom(this.playerRoom)
 
-    this.pushLog('Midnight. The storm has cut the roads. Ten guests, one detective — and one murderer.', 'system')
-    this.pushLog('Find the killer before sunrise (6:00 AM). WASD to move, E to interview, J for the case journal.', 'system')
-    this.pushLead('system', 'Case', 'The case begins at midnight. One of the ten guests is the murderer.')
+    const openingRoom = ROOM_BY_ID[openingVictim.deathRoom!].name
+    this.pushLog(`${openingVictim.name} was found dead in the ${openingRoom}. You were summoned before the storm cut the roads.`, 'danger')
+    this.pushLog('Nine surviving guests remain, and one of them is the murderer. Find the killer before sunrise (6:00 AM).', 'system')
+    this.pushLog('WASD to move, E to interview or examine the body, J for the case journal.', 'system')
+    this.pushLead('discovery', 'Opening crime', `${openingVictim.name}'s body was discovered in the ${openingRoom} shortly before midnight. This death is why the detective came to the mansion.`)
     this.setPhase('playing')
     this.emit()
   }
@@ -422,15 +432,9 @@ export class Game {
     this.settings = { ...this.settings, ...patch }
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings)) } catch { /* ignore */ }
     this.audio.setMuted(this.settings.muted)
-    this.audio.setVolume(this.settings.volume)
-    if (this.sim) {
-      if (this.llmConfigured()) {
-        this.sim.externalDecider = (g) => this.llmDecide(g)
-      } else {
-        this.sim.externalDecider = undefined
-        this.llmLive = false
-      }
-    }
+    this.audio.setBgmVolume(this.settings.bgmVolume)
+    this.audio.setSfxVolume(this.settings.sfxVolume)
+    if (!this.llmConfigured()) this.llmLive = false
     this.emit()
   }
 
@@ -455,6 +459,7 @@ export class Game {
         concluded: false,
         activeThreadId: null,
         threadStatus: 'topics',
+        responseSource: 'llm',
       }
       this.phase = 'interview'
       this.emit()
@@ -486,6 +491,7 @@ export class Game {
           lastAnswer: `“${this.pickGreet(g)}”`,
           emotion: 'neutral',
           thinking: false,
+          responseSource: plan ? 'llm' : 'fallback',
         }
         this.emit()
       }).catch(() => {
@@ -499,22 +505,29 @@ export class Game {
           lastAnswer: `“${this.pickGreet(g)}”`,
           emotion: 'neutral',
           thinking: false,
+          responseSource: 'fallback',
         }
         this.emit()
       })
       return
     }
-    const active = Object.values(this.ensureGuestThreads(g)).find(thread => thread.status === 'active')
+    const story = this.storyFor(g)
+    const storyState = story ? this.storyState(g) : null
+    const active = story ? undefined : Object.values(this.ensureGuestThreads(g)).find(thread => thread.status === 'active')
+    const storyQuestions = story ? this.storyQuestions(g) : []
     this.interview = {
       guestId,
-      questions: active?.offered.length ? active.offered : this.buildRootQuestions(g),
+      questions: story ? storyQuestions : (active?.offered.length ? active.offered : this.buildRootQuestions(g)),
       lastQuestion: '',
       lastAnswer: `“${this.pickGreet(g)}”`,
       emotion: 'neutral',
       thinking: false,
-      concluded: false,
-      activeThreadId: active?.id ?? null,
-      threadStatus: active ? 'active' : 'topics',
+      concluded: !!storyState?.endingId,
+      activeThreadId: storyState?.nodeId ? `story:${g.archetypeId}` : (active?.id ?? null),
+      threadStatus: storyState?.endingId ? 'resolved' : storyState?.nodeId ? 'active' : active ? 'active' : 'topics',
+      responseSource: this.llmConfigured()
+        ? (this.llmLive ? 'llm' : 'fallback')
+        : 'builtin',
     }
     this.phase = 'interview'
     this.emit()
@@ -523,6 +536,27 @@ export class Game {
   private pickGreet(g: Guest): string {
     const a = archetypeOf(g)
     return a.greet[Math.floor(Math.random() * a.greet.length)]
+  }
+
+  private storyFor(g: Guest) {
+    if (this.settings.director === 'builtin') return STORY_CATALOG[g.archetypeId]
+    // A failed LLM request should fall back to the richer local story graph.
+    if (this.settings.director === 'llm' && !this.llmLive && this.conversationPlans[g.id]) return STORY_CATALOG[g.archetypeId]
+    return undefined
+  }
+
+  private storyState(g: Guest): StoryRuntimeState {
+    return this.storyStates[g.id] ??= newStoryState()
+  }
+
+  private storyQuestions(g: Guest): QuestionOption[] {
+    const story = this.storyFor(g)
+    if (!story) return []
+    const state = this.storyState(g)
+    if (state.nodeId && !state.endingId && state.offered.length) {
+      return state.offered.map(choice => ({ id: `story-choice:${choice.id}`, topic: 'follow_up', label: choice.label, kind: 'branch' }))
+    }
+    return story.rootQuestions(state).map(root => ({ ...root, kind: 'root' as const }))
   }
 
   private ensureGuestThreads(g: Guest): Record<string, DialogueThread> {
@@ -545,6 +579,7 @@ export class Game {
   }
 
   private buildRootQuestions(g: Guest): QuestionOption[] {
+    if (this.storyFor(g)) return this.storyQuestions(g)
     return Object.values(this.ensureGuestThreads(g)).map(thread => ({
       id: `root:${thread.id}`,
       topic: thread.topic,
@@ -613,6 +648,10 @@ export class Game {
     if (!g) return
     const q = this.interview.questions.find(option => option.id === questionId)
     if (!q || q.disabled) return
+    if (this.storyFor(g) && (questionId.startsWith('story-root:') || questionId.startsWith('story-choice:'))) {
+      this.askStory(g, q)
+      return
+    }
     const threads = this.ensureGuestThreads(g)
     const thread = q.kind === 'root'
       ? threads[questionId.slice('root:'.length)]
@@ -691,6 +730,38 @@ export class Game {
     }, 350)
   }
 
+  private askStory(g: Guest, q: QuestionOption) {
+    const story = this.storyFor(g)
+    if (!story || !this.interview) return
+    const state = this.storyState(g)
+    const choiceId = q.id.startsWith('story-choice:') ? q.id.slice('story-choice:'.length) : q.id
+    const beat = story.choose(state, choiceId)
+    if (!beat) return
+    state.offered = beat.choices
+    const requestN = ++this.interviewRequestN
+    this.interview = { ...this.interview, thinking: true, lastQuestion: q.label, questions: [] }
+    this.emit()
+    setTimeout(() => {
+      if (!this.interview || this.interview.guestId !== g.id || requestN !== this.interviewRequestN) return
+      for (const evidenceId of beat.unlockedEvidence) this.revealGuestEvidence(g, evidenceId)
+      const entry: TranscriptEntry = { atMin: this.sim!.clockMin, q: q.label, a: beat.text }
+      this.transcripts = { ...this.transcripts, [g.id]: [...(this.transcripts[g.id] ?? []), entry] }
+      const terminal = !!beat.endingId
+      this.interview = {
+        ...this.interview,
+        thinking: false,
+        lastAnswer: `“${beat.text}”`,
+        emotion: beat.emotion,
+        activeThreadId: `story:${story.archetypeId}`,
+        threadStatus: terminal ? (beat.endingId?.includes('rupture') || beat.endingId?.includes('locked') || beat.endingId?.includes('silence') || beat.endingId?.includes('foreclosed') || beat.endingId?.includes('curtain') ? 'exhausted' : 'resolved') : 'active',
+        concluded: terminal,
+        questions: terminal ? [] : beat.choices.map(choice => ({ id: `story-choice:${choice.id}`, topic: 'follow_up', label: choice.label, kind: 'branch' })),
+      }
+      if (terminal) this.pushLead('interview', g.name, `${story.title}: ${beat.endingTitle ?? 'thread concluded'}.`, true)
+      this.emit()
+    }, 250)
+  }
+
   private revealGuestEvidence(g: Guest, evidenceId: string) {
     if (g.revealedEvidenceIds.includes(evidenceId)) return
     const evidence = EVIDENCE_BY_ID[evidenceId]
@@ -761,37 +832,6 @@ export class Game {
     this.emit()
   }
 
-  // ------------------------------------------------------------- LLM director
-
-  /** Returns true to claim the decision (async); applies result or falls back. */
-  private llmDecide = (g: Guest): boolean => {
-    const sim = this.sim
-    if (!sim || this.llmPending.has(g.id)) return false
-    this.llmPending.add(g.id)
-    llmDecision(
-      { baseUrl: this.settings.llmBaseUrl, apiKey: this.settings.llmApiKey, model: this.settings.llmModel },
-      g,
-      { ...sim.decisionContext(g), caseEvents: this.caseEventsFor(g) },
-    ).then(d => {
-      if (d && this.sim === sim) {
-        this.llmLive = true
-        const ok = sim.applyLLMDecision(g, d)
-        if (!ok) sim.decide(g)
-        if (d.line && g.room === this.playerRoom) {
-          this.pushLog(`${g.name}: “${d.line}”`, 'rumor')
-        }
-      } else if (this.sim === sim) {
-        this.llmLive = false
-        sim.decide(g)
-      }
-    }).catch(() => {
-      if (this.sim === sim) sim.decide(g)
-    }).finally(() => {
-      this.llmPending.delete(g.id)
-    })
-    return true
-  }
-
   // ------------------------------------------------------------- loop
 
   private frame = (ts: number) => {
@@ -800,10 +840,14 @@ export class Game {
     this.lastTs = ts
 
     if (this.phase === 'playing' && this.sim) this.stepPlaying(dt)
-    else if (this.phase === 'interview' && this.sim) this.stepInterview(dt)
+    else {
+      this.playerWalking = false
+      if (this.phase === 'interview' && this.sim) this.stepInterview(dt)
+    }
     this.syncActors()
     this.world.update(dt)
 
+    this.audio.setPlayerWalking(this.playerWalking)
     this.audio.onGameMinute(this.sim?.clockMin ?? 0, this.settings.speed, this.timeIsRunning())
 
     this.emitTimer += dt
@@ -816,6 +860,8 @@ export class Game {
 
   private stepPlaying(dt: number) {
     const sim = this.sim!
+    const previousX = this.px
+    const previousZ = this.pz
     // player movement
     let mx = 0
     let mz = 0
@@ -833,6 +879,7 @@ export class Game {
       if (canOccupy(nx, this.pz, ACTOR_RADIUS)) this.px = nx
       if (canOccupy(this.px, nz, ACTOR_RADIUS)) this.pz = nz
     }
+    this.playerWalking = Math.hypot(this.px - previousX, this.pz - previousZ) > 0.001
     const r = roomOfPoint(this.px, this.pz)
     if (r && r !== this.playerRoom) {
       this.playerRoom = r
@@ -897,7 +944,14 @@ export class Game {
   private syncActors() {
     const sim = this.sim
     this.world.setActor('player', this.px, this.pz, this.isMoving(), this.phase !== 'title')
-    this.world.trackPlayer(this.px, this.pz, this.playerRoom)
+    const interviewGuest = this.phase === 'interview' && this.interview && sim
+      ? sim.byId(this.interview.guestId)
+      : null
+    if (interviewGuest) {
+      this.world.focusConversation(this.px, this.pz, interviewGuest.x, interviewGuest.z)
+    } else {
+      this.world.trackPlayer(this.px, this.pz, this.playerRoom)
+    }
     if (!sim) return
     const guestReveal = this.guestRevealAtRoomEntrance()
     for (const g of sim.guests) {
@@ -908,12 +962,9 @@ export class Game {
         if (partner) this.world.faceActorAt(g.id, partner.x, partner.z)
       }
     }
-    if (this.phase === 'interview' && this.interview) {
-      const guest = sim.byId(this.interview.guestId)
-      if (guest) {
-        this.world.faceActorAt('player', guest.x, guest.z)
-        this.world.faceActorAt(guest.id, this.px, this.pz)
-      }
+    if (interviewGuest) {
+      this.world.faceActorAt('player', interviewGuest.x, interviewGuest.z)
+      this.world.faceActorAt(interviewGuest.id, this.px, this.pz)
     }
   }
 
@@ -1001,6 +1052,26 @@ export class Game {
       source: item.source,
       possibleSources: item.candidateNames,
     })),
+    interview: this.interview && this.sim ? (() => {
+      const guest = this.sim.byId(this.interview!.guestId)
+      const storyState = guest ? this.storyStates[guest.id] : undefined
+      return {
+        guest: guest?.name,
+        archetype: guest?.archetypeId,
+        answer: this.interview!.lastAnswer,
+        choices: this.interview!.questions.map(q => q.label),
+        concluded: this.interview!.concluded,
+        story: guest && storyState ? {
+          title: STORY_CATALOG[guest.archetypeId]?.title,
+          node: storyState.nodeId,
+          trust: storyState.trust,
+          pressure: storyState.pressure,
+          flags: storyState.flags,
+          unlockedEvidence: storyState.evidence,
+          ending: storyState.endingId,
+        } : null,
+      }
+    })() : null,
     clockText: fmtTime(this.sim?.clockMin ?? 0),
     hint: this.computeHint(),
   })

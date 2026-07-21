@@ -21,6 +21,12 @@ const sim = new Simulation(12345, {
 console.assert(sim.guests.length === 10, 'expected 10 guests')
 console.assert(sim.guests.filter(g => g.isKiller).length === 1, 'expected 1 killer')
 
+const openingVictim = sim.createOpeningCrime()
+console.assert(!openingVictim.alive && openingVictim.bodyFound, 'the case must begin with a discovered murder')
+console.assert(openingVictim.id !== sim.killerId, 'the opening victim cannot be the killer')
+console.assert(sim.aliveCount() === 9, 'nine suspects should remain after the opening murder')
+console.assert(openingVictim.evidenceId !== null, 'the opening scene should carry killer-linked evidence')
+
 // The per-case shuffled evidence matrix remains balanced: three traces per
 // guest and three possible owners per trace.
 for (const guest of sim.guests) {

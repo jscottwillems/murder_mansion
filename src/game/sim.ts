@@ -6,7 +6,6 @@ import {
   adjacentRooms, roomCenter, roomOfPoint, hexToNum,
   fmtTime, pick, fill, makeRng, NIGHT_LENGTH_MIN, canOccupy, EVIDENCE_BY_ARCHETYPE, BUILTIN_EVIDENCE_HINTS,
 } from './data'
-import type { NPCDecision } from './llm'
 
 export interface SimEvents {
   log(text: string, tone: LogLine['tone']): void
@@ -52,8 +51,6 @@ export class Simulation {
   private movementRecovery: Record<string, MovementRecovery> = {}
   private recentRooms: Record<string, RoomId[]> = {}
   private ev: SimEvents
-  /** When set (LLM director), called instead of the built-in decider; return true if handled. */
-  externalDecider?: (g: Guest) => boolean
 
   constructor(seed: number, ev: SimEvents) {
     this.seed = seed
@@ -142,6 +139,19 @@ export class Simulation {
   aliveGuests() { return this.guests.filter(g => g.alive) }
   guestsInRoom(room: RoomId) { return this.guests.filter(g => g.alive && g.room === room) }
   victims() { return this.guests.filter(g => !g.alive && g.bodyFound) }
+
+  /** Establish the crime that summoned the detective before play begins. */
+  createOpeningCrime(): Guest {
+    const existing = this.victims()[0]
+    if (existing) return existing
+    const killer = this.byId(this.killerId)!
+    const candidates = this.guests.filter(g => g.id !== killer.id && g.room !== 'dining')
+    const victim = pick(candidates.length ? candidates : this.guests.filter(g => g.id !== killer.id), this.rng)
+    this.commitMurder(killer, victim)
+    victim.bodyFound = true
+    this.ev.bodyDiscovered(victim, 'Household')
+    return victim
+  }
 
   // ------------------------------------------------------------- time & motion
 
@@ -237,8 +247,7 @@ export class Simulation {
       // decision ticks
       if (g.state === 'idle' && this.clockMin >= g.nextDecisionMin) {
         g.nextDecisionMin = this.clockMin + 18 + this.rng() * 18
-        const handled = this.externalDecider?.(g) ?? false
-        if (!handled) this.decide(g)
+        this.decide(g)
       }
     }
 
@@ -334,51 +343,6 @@ export class Simulation {
     if (!candidates.length) return null
     const best = candidates.filter(c => c.preferred === candidates[0].preferred && c.guests === candidates[0].guests)
     return pick(best, this.rng).room
-  }
-
-  /** Apply an LLM-produced decision (validated). Returns true if consumed. */
-  applyLLMDecision(g: Guest, d: NPCDecision): boolean {
-    if (!g.alive || g.state !== 'idle') return false
-    switch (d.action) {
-      case 'move':
-        if (d.targetRoom && d.targetRoom !== g.room && d.targetRoom in ROOM_BY_ID) {
-          this.sendTo(g, d.targetRoom)
-          return true
-        }
-        return false
-      case 'talk': {
-        const others = this.guestsInRoom(g.room).filter(o => o.id !== g.id && o.state === 'idle')
-        const named = d.targetGuest ? others.find(o => o.name === d.targetGuest) : undefined
-        const partner = named ?? others[0]
-        if (partner) {
-          this.startConversation(g, partner)
-          return true
-        }
-        return false
-      }
-      case 'rest':
-      case 'idle':
-        g.nextDecisionMin = this.clockMin + 18 + this.rng() * 18
-        return true
-      default:
-        return false
-    }
-  }
-
-  /** Build the compact situation object handed to the LLM for a decision. */
-  decisionContext(g: Guest) {
-    const roomsWithGuests: Record<string, number> = {}
-    for (const r of ROOMS) {
-      const n = this.guestsInRoom(r.id).filter(o => o.id !== g.id).length
-      if (n > 0) roomsWithGuests[r.id] = n
-    }
-    return {
-      clockMin: this.clockMin,
-      othersHere: this.guestsInRoom(g.room).filter(o => o.id !== g.id).map(o => o.name),
-      roomsWithGuests,
-      detectiveRoom: this.playerRoom,
-      knownRumors: g.knowledge.map(r => r.text),
-    }
   }
 
   private tryMurder(killer: Guest): boolean {

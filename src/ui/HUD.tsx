@@ -1,23 +1,30 @@
+import { useEffect, useState } from 'react'
 import type { Game } from '@/game/game'
 import type { Snapshot } from '@/game/types'
 import { Minimap } from './Minimap'
-
-const toneColor: Record<string, string> = {
-  info: 'text-[#b8b0a0]',
-  rumor: 'text-[#a8b8d8]',
-  danger: 'text-[#e86a5a]',
-  system: 'text-[#c9a227]',
-}
+import { GothicFrame } from './GothicFrame'
 
 export function HUD({ game, snap }: { game: Game; snap: Snapshot }) {
+  const [mapOpen, setMapOpen] = useState(true)
   const hourProgress = Math.min(1, snap.clockMin / 360)
+
+  useEffect(() => {
+    const toggleMap = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 'm' || event.repeat) return
+      const target = event.target
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return
+      event.preventDefault()
+      setMapOpen(open => !open)
+    }
+    window.addEventListener('keydown', toggleMap)
+    return () => window.removeEventListener('keydown', toggleMap)
+  }, [])
+
   return (
     <div className="pointer-events-none absolute inset-0 select-none">
       {/* top-left: clock + room */}
-      <div
-        className="hud-gothic-info-frame absolute left-4 top-4 px-4 py-3 backdrop-blur-sm"
-        style={{ '--gothic-frame-image': `url(${import.meta.env.BASE_URL}assets/ui/gothic-popup-frame.png)` } as React.CSSProperties}
-      >
+      <div className="designer-frame-surface hud-gothic-info-frame absolute left-4 top-4 backdrop-blur-sm">
+        <GothicFrame />
         <div className="font-serif text-2xl tracking-wide text-[#e8d8a0]">{snap.clockText}</div>
         <div className="mt-1 h-1 w-40 overflow-hidden rounded bg-[#242220]">
           <div className="h-full bg-gradient-to-r from-[#3a4a6a] to-[#c9a227]" style={{ width: `${hourProgress * 100}%` }} />
@@ -27,22 +34,28 @@ export function HUD({ game, snap }: { game: Game; snap: Snapshot }) {
         <div className="mt-2 flex gap-3 text-[10px] uppercase tracking-wider text-[#8a8478]">
           <span>{snap.aliveCount} alive</span>
           <span className={snap.bodiesFound > 0 ? 'text-[#e86a5a]' : ''}>{snap.bodiesFound} bodies</span>
-          <span>{snap.settings.director === 'llm' ? 'AI: LLM' : 'AI: built-in'}</span>
+          <span>{snap.settings.director === 'llm' ? 'Dialogue: LLM' : 'Dialogue: built-in'}</span>
         </div>
       </div>
 
-      {/* top-right: minimap + buttons */}
-      <div className="absolute right-4 top-4 flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-1">
-        <div
-          className="hud-gothic-map-frame"
-          style={{ '--gothic-frame-image': `url(${import.meta.env.BASE_URL}assets/ui/gothic-popup-frame.png)` } as React.CSSProperties}
-        >
-          <Minimap snap={snap} />
-        </div>
-        <div
-          className="hud-gothic-action-frame pointer-events-auto flex gap-1.5"
-          style={{ '--gothic-frame-image': `url(${import.meta.env.BASE_URL}assets/ui/gothic-chat-frame.png)` } as React.CSSProperties}
-        >
+      {/* bottom-right: minimap + buttons */}
+      <div className="absolute bottom-4 right-4 flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-1">
+        {mapOpen && (
+          <div className="designer-frame-surface hud-gothic-map-frame relative">
+            <GothicFrame />
+            <Minimap snap={snap} />
+          </div>
+        )}
+        <div className="designer-frame-surface hud-gothic-action-frame pointer-events-auto relative flex gap-1.5">
+          <GothicFrame variant="chat" />
+          <button
+            type="button"
+            onClick={() => setMapOpen(open => !open)}
+            aria-expanded={mapOpen}
+            className="min-w-0 flex-1 rounded border border-[#3a352a] bg-black/70 px-2 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
+          >
+            {mapOpen ? 'Hide' : 'Map'} <span className="text-[#8a8478]">[M]</span>
+          </button>
           <button
             onClick={() => game.setPhase('journal')}
             className="min-w-0 flex-1 rounded border border-[#3a352a] bg-black/70 px-2 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
@@ -95,18 +108,6 @@ export function HUD({ game, snap }: { game: Game; snap: Snapshot }) {
         </div>
       )}
 
-      {/* bottom-left: event log */}
-      <div
-        className="hud-gothic-feed-frame absolute bottom-4 left-4 w-[26rem] max-w-[calc(100vw-2rem)] space-y-1 px-4 py-3"
-        style={{ '--gothic-frame-image': `url(${import.meta.env.BASE_URL}assets/ui/gothic-chat-frame.png)` } as React.CSSProperties}
-      >
-        {snap.log.map(l => (
-          <div key={l.id} className={`text-xs leading-snug ${toneColor[l.tone]} drop-shadow-[0_1px_2px_#000]`}>
-            <span className="text-[#6a6458]">{fmt(l.atMin)}</span> — {l.text}
-          </div>
-        ))}
-      </div>
-
       {/* bottom-center: interaction hint */}
       {snap.interactHint && (
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 rounded border border-[#c9a227]/60 bg-black/80 px-4 py-2 font-serif text-sm text-[#e8d8a0]">
@@ -115,11 +116,4 @@ export function HUD({ game, snap }: { game: Game; snap: Snapshot }) {
       )}
     </div>
   )
-}
-
-function fmt(min: number): string {
-  const m = Math.max(0, Math.floor(min))
-  const h = Math.floor(m / 60) % 24
-  const h12 = h % 12 === 0 ? 12 : h % 12
-  return `${h12}:${String(m % 60).padStart(2, '0')}`
 }

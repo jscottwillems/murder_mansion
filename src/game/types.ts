@@ -103,6 +103,7 @@ export interface InterviewState {
   concluded: boolean
   activeThreadId: string | null
   threadStatus: 'topics' | 'active' | 'resolved' | 'exhausted'
+  responseSource?: 'builtin' | 'llm' | 'fallback'
 }
 
 export interface LogLine {
@@ -124,7 +125,8 @@ export interface Settings {
   llmApiKey: string
   llmModel: string
   speed: number            // game minutes per real second
-  volume: number           // 0..1
+  bgmVolume: number        // 0..1
+  sfxVolume: number        // 0..1
   muted: boolean
 }
 
@@ -178,7 +180,7 @@ export interface Snapshot {
   interactHint: string | null
   settings: Settings
   endInfo: EndInfo | null
-  llmActive: boolean       // true after the configured LLM has answered successfully
+  llmActive: boolean       // true after configured LLM dialogue succeeds
   caseSeed: number
   // positions for the minimap (only what the player legitimately knows)
   minimap: {

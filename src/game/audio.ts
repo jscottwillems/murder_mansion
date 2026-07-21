@@ -4,6 +4,8 @@ const SOUNDTRACK_URL = new URL('../../Midnight in the Static.mp3', import.meta.u
 const CLOCK_URL = new URL('../../ticktock.mp3', import.meta.url).href
 const BODY_DISCOVERY_URL = new URL('../../chord.mp3', import.meta.url).href
 const RAIN_URL = new URL('../../rain.mp3', import.meta.url).href
+const FOOTSTEPS_URL = new URL('../../footsteps.mp3', import.meta.url).href
+const TEXT_BLIP_URL = new URL('../../text-blip.mp3', import.meta.url).href
 
 export class Soundtrack {
   private ctx: AudioContext | null = null
@@ -19,12 +21,19 @@ export class Soundtrack {
   private bodyCueSource: MediaElementAudioSourceNode | null = null
   private rainLoop: HTMLAudioElement | null = null
   private rainSource: MediaElementAudioSourceNode | null = null
+  private footstepsLoop: HTMLAudioElement | null = null
+  private footstepsSource: MediaElementAudioSourceNode | null = null
+  private textBlipLoop: HTMLAudioElement | null = null
+  private textBlipSource: MediaElementAudioSourceNode | null = null
   private thunderTimer: ReturnType<typeof setTimeout> | null = null
   private noiseBuf: AudioBuffer | null = null
   private muted = false
-  private volume = 0.7
+  private bgmVolume = 0.7
+  private sfxVolume = 0.7
   private thunderHasPlayed = false
   private clockShouldRun = false
+  private playerShouldWalk = false
+  private dialogueShouldBlip = false
 
   /** Must be called from a user gesture at least once. */
   ensure() {
@@ -33,6 +42,8 @@ export class Soundtrack {
       if (this.soundtrack?.paused) void this.soundtrack.play().catch(() => undefined)
       if (this.rainLoop?.paused) void this.rainLoop.play().catch(() => undefined)
       if (this.clockShouldRun && this.clockLoop?.paused) void this.clockLoop.play().catch(() => undefined)
+      if (this.playerShouldWalk && this.footstepsLoop?.paused) void this.footstepsLoop.play().catch(() => undefined)
+      if (this.dialogueShouldBlip && this.textBlipLoop?.paused) void this.textBlipLoop.play().catch(() => undefined)
       return
     }
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
@@ -43,31 +54,58 @@ export class Soundtrack {
     this.master = ctx.createGain()
     this.master.gain.value = this.outputVolume()
 
-    const compressor = ctx.createDynamicsCompressor()
-    compressor.threshold.value = -30
-    compressor.knee.value = 20
-    compressor.ratio.value = 2
-    compressor.attack.value = 0.018
-    compressor.release.value = 0.36
-    this.master.connect(compressor).connect(ctx.destination)
+    // Keep buses additive. A shared compressor made louder ambience push the
+    // score down even though the music bus itself never changed gain.
+    this.master.connect(ctx.destination)
 
     this.ambienceBus = ctx.createGain()
-    this.ambienceBus.gain.value = 0.9
+    this.ambienceBus.gain.value = 0.9 * this.sfxVolume
     this.ambienceBus.connect(this.master)
 
     this.musicBus = ctx.createGain()
-    this.musicBus.gain.value = 0.36
+    this.musicBus.gain.value = 0.36 * this.bgmVolume
     this.musicBus.connect(this.master)
 
     this.sfxBus = ctx.createGain()
-    this.sfxBus.gain.value = 1
+    this.sfxBus.gain.value = this.sfxVolume
     this.sfxBus.connect(this.master)
 
     this.startSoundtrack(ctx)
     this.startClockLoop(ctx)
     this.prepareBodyCue(ctx)
+    this.prepareFootsteps(ctx)
+    this.prepareTextBlip(ctx)
     this.startRain(ctx)
     this.scheduleThunder()
+  }
+
+  private prepareTextBlip(ctx: AudioContext) {
+    if (!this.sfxBus) return
+    const blip = new Audio(TEXT_BLIP_URL)
+    blip.loop = true
+    blip.preload = 'auto'
+    blip.dataset.dialogueTextBlip = 'true'
+
+    const blipGain = ctx.createGain()
+    blipGain.gain.value = 0.42
+    this.textBlipLoop = blip
+    this.textBlipSource = ctx.createMediaElementSource(blip)
+    this.textBlipSource.connect(blipGain).connect(this.sfxBus)
+  }
+
+  private prepareFootsteps(ctx: AudioContext) {
+    if (!this.sfxBus) return
+    const footsteps = new Audio(FOOTSTEPS_URL)
+    footsteps.loop = true
+    footsteps.preload = 'auto'
+    footsteps.dataset.playerFootsteps = 'true'
+
+    const footstepGain = ctx.createGain()
+    // The recording is roughly 13 dB quieter than the score before mixing.
+    footstepGain.gain.value = 1.35
+    this.footstepsLoop = footsteps
+    this.footstepsSource = ctx.createMediaElementSource(footsteps)
+    this.footstepsSource.connect(footstepGain).connect(this.sfxBus)
   }
 
   private prepareBodyCue(ctx: AudioContext) {
@@ -112,7 +150,7 @@ export class Soundtrack {
   }
 
   private outputVolume(): number {
-    return this.muted ? 0 : Math.min(1, this.volume) * 0.58
+    return this.muted ? 0 : 0.58
   }
 
   private startRain(ctx: AudioContext) {
@@ -135,7 +173,9 @@ export class Soundtrack {
     high.Q.value = 0.25
 
     const rainGain = ctx.createGain()
-    rainGain.gain.value = 0.12
+    // The source averages around -46 dBFS, so this remains a restrained bed
+    // even with gain above unity (about 17 dB below the music after mixing).
+    rainGain.gain.value = 1.6
 
     this.rainLoop = rain
     this.rainSource = ctx.createMediaElementSource(rain)
@@ -190,6 +230,19 @@ export class Soundtrack {
     g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 3.6)
 
     src.connect(filt).connect(g).connect(this.sfxBus)
+
+    // A mid-bass presence layer keeps thunder audible on laptop speakers,
+    // while the original path supplies the deep room-shaking tail.
+    const presence = ctx.createBiquadFilter()
+    presence.type = 'bandpass'
+    presence.frequency.setValueAtTime(280, ctx.currentTime)
+    presence.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 2.2)
+    presence.Q.value = 0.7
+    const presenceGain = ctx.createGain()
+    presenceGain.gain.setValueAtTime(0.0001, ctx.currentTime)
+    presenceGain.gain.exponentialRampToValueAtTime(0.34 * intensity + 0.08, ctx.currentTime + 0.06)
+    presenceGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 2.5)
+    src.connect(presence).connect(presenceGain).connect(this.sfxBus)
     src.start()
     src.stop(ctx.currentTime + 3.8)
   }
@@ -243,9 +296,9 @@ export class Soundtrack {
     const t = ctx.currentTime
     bus.gain.cancelScheduledValues(t)
     bus.gain.setValueAtTime(bus.gain.value, t)
-    bus.gain.linearRampToValueAtTime(0.12, t + 0.08)
-    bus.gain.setValueAtTime(0.12, t + Math.max(0.2, seconds - 0.5))
-    bus.gain.linearRampToValueAtTime(0.36, t + seconds)
+    bus.gain.linearRampToValueAtTime(0.12 * this.bgmVolume, t + 0.08)
+    bus.gain.setValueAtTime(0.12 * this.bgmVolume, t + Math.max(0.2, seconds - 0.5))
+    bus.gain.linearRampToValueAtTime(0.36 * this.bgmVolume, t + seconds)
   }
 
   /** Keep one second of clock audio aligned to one simulated minute. */
@@ -271,6 +324,29 @@ export class Soundtrack {
     if (clock.paused) void clock.play().catch(() => undefined)
   }
 
+  setPlayerWalking(walking: boolean) {
+    this.playerShouldWalk = walking
+    const footsteps = this.footstepsLoop
+    if (!footsteps) return
+    if (walking) {
+      if (footsteps.paused) void footsteps.play().catch(() => undefined)
+    } else if (!footsteps.paused) {
+      footsteps.pause()
+    }
+  }
+
+  setDialogueTyping(active: boolean, restart = false) {
+    this.dialogueShouldBlip = active
+    const blip = this.textBlipLoop
+    if (!blip) return
+    if (restart) blip.currentTime = 0
+    if (active) {
+      if (blip.paused) void blip.play().catch(() => undefined)
+    } else if (!blip.paused) {
+      blip.pause()
+    }
+  }
+
   setMuted(m: boolean) {
     this.muted = m
     if (this.ctx && this.master) {
@@ -278,10 +354,21 @@ export class Soundtrack {
     }
   }
 
-  setVolume(v: number) {
-    this.volume = Math.max(0, Math.min(1, v))
-    if (this.ctx && this.master) {
-      this.master.gain.setTargetAtTime(this.outputVolume(), this.ctx.currentTime, 0.14)
+  setBgmVolume(v: number) {
+    this.bgmVolume = Math.max(0, Math.min(1, v))
+    if (this.ctx && this.musicBus) {
+      this.musicBus.gain.cancelScheduledValues(this.ctx.currentTime)
+      this.musicBus.gain.setTargetAtTime(0.36 * this.bgmVolume, this.ctx.currentTime, 0.08)
+    }
+  }
+
+  setSfxVolume(v: number) {
+    this.sfxVolume = Math.max(0, Math.min(1, v))
+    if (this.ctx && this.ambienceBus && this.sfxBus) {
+      this.ambienceBus.gain.cancelScheduledValues(this.ctx.currentTime)
+      this.sfxBus.gain.cancelScheduledValues(this.ctx.currentTime)
+      this.ambienceBus.gain.setTargetAtTime(0.9 * this.sfxVolume, this.ctx.currentTime, 0.08)
+      this.sfxBus.gain.setTargetAtTime(this.sfxVolume, this.ctx.currentTime, 0.08)
     }
   }
 
@@ -308,6 +395,16 @@ export class Soundtrack {
       this.rainLoop.removeAttribute('src')
       this.rainLoop.load()
     }
+    if (this.footstepsLoop) {
+      this.footstepsLoop.pause()
+      this.footstepsLoop.removeAttribute('src')
+      this.footstepsLoop.load()
+    }
+    if (this.textBlipLoop) {
+      this.textBlipLoop.pause()
+      this.textBlipLoop.removeAttribute('src')
+      this.textBlipLoop.load()
+    }
     this.ctx = null
     this.master = null
     this.musicBus = null
@@ -321,5 +418,9 @@ export class Soundtrack {
     this.bodyCueSource = null
     this.rainLoop = null
     this.rainSource = null
+    this.footstepsLoop = null
+    this.footstepsSource = null
+    this.textBlipLoop = null
+    this.textBlipSource = null
   }
 }

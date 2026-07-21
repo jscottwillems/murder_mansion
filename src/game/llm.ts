@@ -1,9 +1,9 @@
 // LLM layer: settings, OpenAI-compatible client, master prompts.
 // Every NPC has a master prompt (personality) + an optional murderer addendum.
-// When configured, decision ticks and interview answers are delegated to the LLM;
-// on any failure the caller falls back to the built-in behavioral engine.
-import type { ConversationEmotion, Guest, QuestionTopic, RoomId } from './types'
-import { ROOM_BY_ID, fmtTime, ARCHETYPES } from './data'
+// The model is only called for player-triggered interviews. Movement, social
+// simulation, and murder logic always use the deterministic built-in engine.
+import type { ConversationEmotion, Guest, QuestionTopic } from './types'
+import { fmtTime, ARCHETYPES } from './data'
 import type { SceneEvidence } from './data'
 import type { AuthoredDialogueRoute, AuthoredDialogueStage, AuthoredDialogueChoice } from './authoredDialogue'
 
@@ -65,13 +65,6 @@ async function chat(cfg: LLMConfig, messages: ChatMessage[], timeoutMs = 9000, m
   }
 }
 
-export interface NPCDecision {
-  action: 'move' | 'talk' | 'rest' | 'idle'
-  targetRoom?: RoomId
-  targetGuest?: string
-  line?: string
-}
-
 function currentCaseMemory(lines: string[]): string {
   return [
     `CURRENT CASE MEMORY (this run only; treat it as the authoritative record of events you know):`,
@@ -102,36 +95,6 @@ function extractJson(text: string): unknown | null {
   const m = text.match(/\{[\s\S]*\}/)
   if (!m) return null
   try { return JSON.parse(m[0]) } catch { return null }
-}
-
-/** Ask the LLM how this NPC should act next. Returns null on any failure. */
-export async function llmDecision(
-  cfg: LLMConfig,
-  g: Guest,
-  ctx: { clockMin: number; othersHere: string[]; roomsWithGuests: Record<string, number>; detectiveRoom: RoomId; knownRumors: string[]; caseEvents?: string[] },
-): Promise<NPCDecision | null> {
-  try {
-    const sys = masterPrompt(g) + (g.isKiller ? '\n' + murdererPrompt(g) : '')
-    const user = [
-      `Time: ${fmtTime(ctx.clockMin)}. You are in the ${ROOM_BY_ID[g.room].name}.`,
-      `Guests in your room: ${ctx.othersHere.length ? ctx.othersHere.join(', ') : 'none'}.`,
-      `Guests per room: ${JSON.stringify(ctx.roomsWithGuests)}.`,
-      `The detective is currently in the ${ROOM_BY_ID[ctx.detectiveRoom].name} (${ctx.detectiveRoom}).`,
-      `Things you know: ${ctx.knownRumors.slice(-5).join(' | ') || 'nothing yet'}.`,
-      currentCaseMemory(ctx.caseEvents ?? []),
-      `Choose rest or idle unless there is a specific reason to move or a useful person here to talk to. Movement should feel intentional and infrequent.`,
-      `RESPONSE FORMAT (REQUIRED): return exactly one compact JSON object and nothing else: {"action":"move"|"talk"|"rest"|"idle","targetRoom":"${Object.keys(ROOM_BY_ID).join('|')}" (required for move),"targetGuest":"name" (optional, for talk),"line":"plain dialogue without surrounding quotation marks, or an empty string"}. Do not use Markdown or code fences.`,
-    ].join('\n')
-    const raw = await chat(cfg, [{ role: 'system', content: sys }, { role: 'user', content: user }])
-    const parsed = extractJson(raw) as Partial<NPCDecision> | null
-    if (!parsed || typeof parsed.action !== 'string') return null
-    if (!['move', 'talk', 'rest', 'idle'].includes(parsed.action)) return null
-    if (parsed.action === 'move' && !(parsed.targetRoom && parsed.targetRoom in ROOM_BY_ID)) return null
-    if (typeof parsed.line === 'string') parsed.line = normalizeSpokenDialogue(parsed.line)
-    return parsed as NPCDecision
-  } catch {
-    return null
-  }
 }
 
 const TOPIC_LABEL: Record<QuestionTopic, string> = {
@@ -380,7 +343,10 @@ export async function llmConversationPlan(
       `{"routes":[{"id":"exact supplied id","topic":"allowed topic","evidenceId":"exact supplied evidence id or null","rootQuestion":"detective question?","openingResponse":"NPC response","openingEmotion":"allowed emotion","stages":[{"advance":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"},"stall":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"},"close":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"}},{"advance":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"},"stall":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"},"close":{"label":"player dialogue","response":"NPC response","emotion":"allowed emotion"}}]}]}`,
       `The routes array must contain exactly four entries in the supplied order. Do not add fields.`,
     ].join('\n')
-    const raw = await chat(cfg, [{ role: 'system', content: sys }, { role: 'user', content: user }], 24000, 3200)
+    // Four complete two-stage routes regularly exceed 3,200 tokens. A truncated
+    // JSON object fails strict validation and used to look like an unexplained
+    // switch back to authored dialogue.
+    const raw = await chat(cfg, [{ role: 'system', content: sys }, { role: 'user', content: user }], 45000, 7000)
     const parsed = parseWholeJson(raw)
     if (!isPlainObject(parsed) || Object.keys(parsed).join('|') !== 'routes' || !Array.isArray(parsed.routes) || parsed.routes.length !== 4) return null
     const routes: AuthoredDialogueRoute[] = []

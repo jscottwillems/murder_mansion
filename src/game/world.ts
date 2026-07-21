@@ -66,6 +66,7 @@ const ROOM_EDGE_FOCUS_START = 0.52
 const ROOM_EDGE_FOCUS_END = 1.1
 const ROOM_EDGE_PLAYER_WEIGHT = 0.72
 const PASSAGE_FOCUS_HALF = PASS_HALF - 0.15
+const CONVERSATION_FOCUS_X_OFFSET = -0.75
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)))
@@ -726,12 +727,17 @@ export class MansionScene {
     if (!a.dead) {
       const dx = x - a.group.position.x
       const dz = z - a.group.position.z
-      if (walking && dx * dx + dz * dz > 0.000001) {
+      // A guest can retain the simulation's walk state while their movement is
+      // temporarily locked (for example, during a detective interview) or
+      // while blocked on a route. Only animate walking when they actually
+      // travelled since the previous world sync.
+      const isTravelling = walking && dx * dx + dz * dz > 0.000001
+      if (isTravelling) {
         a.targetFacingY = Math.atan2(-dx, -dz)
       }
       a.group.position.set(x, 0, z)
-      a.walking = walking
-      a.defaultForward = a.spriteKind === 'npc' && !walking
+      a.walking = isTravelling
+      a.defaultForward = a.spriteKind === 'npc' && !isTravelling
     }
     a.group.visible = visible && (!a.outlined || a.spriteKind === 'npc')
     a.outline.visible = visible && a.outlined && a.spriteKind !== 'npc'
@@ -861,6 +867,14 @@ export class MansionScene {
       THREE.MathUtils.lerp(c.x, x, playerWeight),
       0,
       THREE.MathUtils.lerp(c.z, z, playerWeight),
+    )
+  }
+
+  focusConversation(playerX: number, playerZ: number, guestX: number, guestZ: number) {
+    this.camTarget.set(
+      (playerX + guestX) * 0.5 + CONVERSATION_FOCUS_X_OFFSET,
+      0,
+      (playerZ + guestZ) * 0.5,
     )
   }
 
