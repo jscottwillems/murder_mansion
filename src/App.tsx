@@ -74,8 +74,10 @@ function UI({ game }: { game: Game }) {
         <EndScreen game={game} snap={snap} />
       </>
     )
-    case 'playing':
-    default:
-      return <HUD game={game} snap={snap} />
+    case 'playing': return <HUD game={game} snap={snap} />
+    default: {
+      const exhaustive: never = snap.phase
+      throw new Error(`Unhandled game phase: ${exhaustive}`)
+    }
   }
 }

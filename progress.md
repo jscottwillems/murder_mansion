@@ -1,5 +1,69 @@
 Original prompt: the music for this game is currently horrible and very hard to listen to, please work it to be something that players will want to continue listening to as they play
 
+Character-shadow registration follow-up (current prompt): moved each living character's floor shadow out of the camera-facing/flipping portrait root and into the actor's stable world-space group. Shadow scale and entrance-fade opacity remain synchronized with the character, while death still hides the shadow.
+- Verification: production build and focused world ESLint pass. The mandated web-game client completed in `output/character-shadow-runtime/`. Targeted live gameplay captures at two north/south positions were visually inspected; the detective's shadow remains centered at the feet and the browser reported zero console errors.
+
+NPC navigation hardening (current prompt): replacing straight room-center routes and random furniture side-steps with clearance-aware A* paths sampled against the shared `canOccupy` geometry. Routes are smoothed into natural longer segments; the prior recovery behavior remains as a last-resort guard.
+- Failed route searches now return guests to idle with a short retry delay instead of leaving them permanently marked as walking with no path.
+- Verification: production build and focused ESLint pass. A deterministic banquet-crossing regression confirms the route bends around the complete furniture footprint, every sampled segment retains actor clearance, and the NPC reaches the far side without looping. The full-night simulation smoke test also passes. The mandated browser client reached the setup screen without console-error artifacts, and its screenshot was visually inspected in `output/npc-navigation-runtime/`.
+
+Hanging-light layering correction (current prompt): hanging fixture sprites now render after the order-4 character cutouts, allowing genuinely foreground fixtures to cover actors before the existing silhouette-overlap fade softens the obstruction.
+- Verification: production build, focused world ESLint, diff check, and mandated web-game client pass. A fresh built-in case capture in `output/hanging-light-layering-targeted/` was visually inspected; the Dining chandelier's overlap detector engaged as the detective entered beneath it, and metadata reports zero console/page errors.
+
+Hanging-light occlusion follow-up (current prompt): hanging fixture sprites now ease down in opacity when their camera-space silhouette overlaps a living NPC or the detective, then restore when the sightline clears. The emitted room light remains active; only the obstructing fixture artwork fades.
+- Refined detection to compare each fixture's actual projected billboard bounds against each living character's projected head-and-shoulder box. This avoids body-wide false positives and catches the requested case where only a character's head is visually behind the light.
+- Verification: production build, focused world ESLint, diff check, and mandated browser client pass. `output/hanging-light-runtime/shot-0.png` confirms a fully opaque chandelier with no head overlap; `output/hanging-light-head-targeted-2.png` was visually inspected and confirms the chandelier fades to 0.20 while an NPC's head is directly behind it. Runtime diagnostics reported the matching fixture position/opacity and no browser error artifact was produced.
+
+Exterior shiplap wall follow-up (current prompt): generated a shared rain-aged wooden shiplap texture and assigned it only to each room wall's outward-facing BoxGeometry surface. North, south, west, and east walls choose the correct exterior face independently; room-specific interior art remains inward-facing. Southern occlusion now fades both interior and shiplap face materials together.
+- Verification: production build and focused wall/world ESLint pass. The mandated browser client completed, and targeted live captures visually confirm the shared horizontal siding on neighboring room exteriors while Dining paneling and Conservatory plant-shelf art remain on their interior faces. `output/exterior-shiplap-targeted/dining-and-neighbors.png` and `conservatory-interior.png` were inspected; runtime errors are empty.
+
+Dining-room hero furniture follow-up (current prompt): generated and integrated a new transparent ornate grandfather-clock sprite plus a single complete banquet-table-and-chairs sprite for the Dining Hall. At user direction, both were regenerated as straight-on front elevations; the table runs horizontally left-to-right in the room center and the upright clock anchors the northeast wall. Source chroma masters are retained under `tmp/imagegen-dining/`.
+- Verification: production build passes. The mandated browser client reached live gameplay with no reported browser errors. `output/dining-furniture-front-final/shot-0.png` was visually inspected and confirms the table is front-facing, horizontal, and centered, with the front-facing clock clearly readable on the northeast wall.
+
+Pre-case setup height follow-up (current prompt): increased only the ornate “Before the case begins” setup window from a 736:544 frame ratio to 736:568, adding roughly 2rem of vertical room at its full desktop width while preserving the existing responsive viewport cap. Other ornate screens retain their established height.
+- Verification: production build and the mandated browser client pass. `output/pre-case-height-runtime/shot-0.png` was visually inspected at the default desktop viewport; the taller frame remains centered and responsive, the setup controls retain their spacing, and no browser error artifact was produced.
+
+Storm-window wall-texture correction (current prompt): dark-rain window backings are now fully opaque. The window assembly sits over a continuous room wall rather than a geometric opening, so the former 90% opacity allowed wallpaper/masonry to ghost through the glass; rain and lightning overlays remain independently transparent.
+- Verification: production build, focused storm-window ESLint, diff check, and the mandated browser client pass. Targeted movement reached the exterior Gallery in the dark-rain state; `output/window-opaque-targeted/gallery-window.png` was visually inspected and confirms a clean dark-blue window backing with no Gallery wall pattern visible through it. Metadata reports zero console/page errors.
+
+Conservatory wall-art follow-up (current prompt): replaced the generic green panel wall with a generated, front-facing conservatory wall texture featuring two plant-filled shelves, botanical jars, trailing ivy, and a rail of garden tools. The other eight rooms retain their procedural wall painters.
+- Verification: production build passes. The mandated web-game client completed, then a targeted live capture placed the detective in the Conservatory and confirmed the texture on both visible wall planes. `output/conservatory-wall-targeted/conservatory.png` was visually inspected; the room state identifies the Conservatory and the browser error list is empty.
+
+Study partner's desk follow-up (current prompt): selected the broad partner's desk concept, enriched its desktop with an inkwell, case papers, sealed letters, magnifying glass, estate map, ledger, pens, and pocket watch, then converted the generated chroma master into a transparent project sprite. Added it to the Study's northwest (upper-left) floor corner at local `(-2.45, -3.35)`, increased its height from 1.72 to 1.9 world units, and rendered it on a plane locked to the authored isometric angle so camera tracking cannot swivel the furniture artwork.
+- Verification: production build and focused world ESLint pass. The mandated web-game client reached setup without browser errors. A targeted live Study capture at `output/study-partners-desk-fixed-targeted/study-settled.png` was visually inspected and confirms the enlarged desk is grounded in the upper-left corner beside the fireplace while retaining its fixed authored perspective; targeted metadata reports zero console/page errors.
+- Placement refinement: shifted the Study desk slightly left and about 20 screen pixels downward, from local `(-2.45, -3.35)` to `(-2.6, -3.05)`, without changing its scale or fixed orientation.
+- Southward placement refinement: moved the Study desk another approximate 60 screen pixels toward the south wall, from local z `-3.05` to `-2.15`; x, scale, and fixed orientation are unchanged.
+- Desk grounding/collision follow-up: shifted the desk another 0.15 world units left to local x `-2.75`, added a feathered elliptical floor shadow, and restored a radius-expanded Study desk footprint to the shared `canOccupy` check so both player and NPC movement stop at its visible bounds.
+- Grounding/collision verification: production build and focused world/data ESLint pass; direct occupancy assertions confirm the desk center blocks while open Study floor remains walkable. The mandated browser client passes. Targeted live movement stopped the detective at global z `-13.99` against the desk's south edge, with zero browser errors, and `output/study-desk-shadow-collision-targeted/study.png` was visually inspected to confirm the soft shadow grounds the desk without reading as a hard decal.
+- Northward placement refinement: moved the Study desk, its soft shadow, and its collision footprint together 0.2 world units toward the north wall, from local z `-2.15` to `-2.35`.
+- Behind-desk collision follow-up: extended the desk's blocked footprint from its front edge continuously to the Study's north-wall walk limit. Both the detective and NPCs can still route around the sides, but can no longer enter or become trapped in the narrow strip behind the desk.
+- Desk-shadow refinement: moved the floor shadow 0.44 world units north to local z `-2.72`, beneath the desk's projected base, increased its center alpha from 0.72 to 0.94 and midtone alpha from 0.38 to 0.58, and raised material opacity from 0.72 to 0.92 while preserving the feathered edge.
+
+Southern-wall occlusion follow-up (current prompt): southern room-wall segments now ease down in opacity when the camera-to-character sightline shows an NPC or the detective behind them, then restore when the sightline clears.
+- Fade detection raycasts toward each visible character's grounded lower body, so walls remain solid in open room space and soften only when they actually obscure a character near the foreground edge. Wall faces ease to 18% opacity, outlines fade proportionally, and depth writing is disabled only during the fade.
+- Verification: production build and focused world ESLint pass. The mandated browser client entered and traversed live gameplay without browser errors. `output/southern-wall-fade/shot-0.png` confirms the wall remains solid when nobody is behind it; `output/southern-wall-near/shot-0.png` was visually inspected and confirms the Library's southern wall fades to 0.18 around the detective while the architectural window remains readable.
+
+Study pendant symmetry follow-up (current prompt): added a second identical Study ceiling pendant at local x = +1.85, mirroring the existing x = -1.85 fixture across the room center while preserving its depth, height, sprite, and light strength.
+- Production build and focused world ESLint pass. The mandated web-game client completed, and targeted live navigation reached the Study with zero console/page errors. `output/study-second-pendant-targeted/study.png` was visually inspected and confirms the two matching pendants are symmetrically placed on either side of the fireplace.
+
+Grand Study fireplace follow-up (current prompt): replacing only the Study's north storm window with a four-frame animated Gothic fireplace sprite and a warm, gently varying point-light practical.
+- Generated a transparent four-frame hand-painted mantel/fire sprite sheet, grounded it against the north wall, and shifted the Study pendant aside so the new focal point stays unobstructed.
+- Verification: production build and focused ESLint pass. The mandated web-game client completed, and targeted live gameplay in `output/study-fireplace-targeted/` confirms frame and light values change over deterministic time with zero console/page errors; `final.png` was visually inspected.
+- Scale/lighting refinement: enlarged the mantel, made the hearth the dominant Study light, reduced the pendant to a subdued fill, and added a feathered animated fire reflection over the otherwise-unlit floorboards.
+- Refinement verification: production build, focused ESLint, and the mandated browser client pass. Targeted deterministic gameplay confirms the fireplace frame, hearth intensity/color, and subtle floor-spill opacity all animate while the pendant remains less than half the hearth intensity; `output/study-fireplace-lighting-targeted/final.png` was visually inspected and metadata reports zero browser errors.
+- Fireplace scale follow-up: increased the animated mantel another 8% while preserving its floor registration and existing directional firelight footprint.
+- Scale verification: production build, focused ESLint, mandated browser client, and targeted live Study capture pass. `output/study-fireplace-scale-targeted/final.png` was visually inspected; the larger mantel remains grounded and metadata reports zero browser errors.
+- Study fire ambience follow-up: wired the user-provided `fire.mp3` through the ambience bus as a filtered loop that fades in only inside the Study, fades out on departure, and remains governed by the existing mute/SFX controls.
+- Fire ambience verification: production build, focused audio/game ESLint, and mandated browser client pass. A targeted live enter/leave/re-enter sequence confirms the loop transitions paused → playing at full gain → fading while playing → paused → playing again, with zero browser errors; artifacts are in `output/study-fire-audio-targeted/`.
+- Fire ambience mix follow-up: raised only the Study fire loop gain from 0.34 to 0.44 (about 2.2 dB), preserving the existing ambience bus, SFX control, and transition fades.
+- Mix verification: production build, focused ESLint, mandated browser client, and targeted live audio checks pass. The loop settles at 0.44 gain in the Study and still fades to silence and pauses after departure, with zero browser errors (`output/study-fire-volume-targeted/meta.json`).
+
+Wall-height follow-up (current prompt): raising the shared room/hallway architecture from 1.85 to 2.8 world units so 2.45-unit character sprites clear the hallway entrance crowns without head clipping. The shared constant keeps room walls, hallway side walls, entrance trim, columns, and storm-window placement aligned.
+- Verification: production build and focused world ESLint pass. The mandated web-game client reached setup without browser errors. A targeted live case exercised movement beside the raised room/doorway architecture; `output/wall-height-targeted/doorway.png` was visually inspected and shows both detective and guest beneath the new wall line with clear headroom. Metadata reports zero console/page errors.
+
+Proportional storm-window follow-up (current prompt): default storm-window glass height now scales by the same wall-height ratio. At the mansion's 2.8-unit wall line, windows grow from 1.12 to about 1.695 units (2.8 / 1.85), while their established sill height and any explicit custom height remain unchanged.
+- Verification: production build, focused storm-window/world ESLint, and diff check pass. The mandated browser client reached setup without errors. Targeted movement reached the exterior Gallery; `output/window-height-targeted/exterior-room.png` was visually inspected and confirms the taller glass and frame fit naturally beneath the 2.8-unit wall line. Metadata records the 1.695-unit expected height and zero console/page errors.
+
 Built-in dialogue diversity/evidence follow-up (current prompt): traced the generic interview experience to a legacy built-in-only bypass in `Game.startInterview`/`ask`. It ignored the existing archetype-authored conversation catalog and offered every NPC the same six simulation questions; evidence questions only appeared after collecting a matching scene clue. Built-in interviews now use the same deterministic per-archetype thread state machine as fallback dialogue: four unique routes per character, three of which lead to that archetype's three evidence associations through two successful follow-ups.
 - Verification: production build, focused ESLint, exhaustive authored-dialogue audit, and diff check pass. The mandated web-game client reached setup/game state without browser errors. A targeted live built-in run in `output/dialogue-diversity-targeted/` compared an antiquarian's four roots against a chauffeur's four entirely different roots, then followed the antiquarian's first route through both productive branches and confirmed `fine-earth` was revealed. The interview screenshot was visually inspected; metadata reports zero console/page errors.
 
@@ -9,6 +73,39 @@ Killer co-location delay follow-up (current prompt): murders during play now req
 Groq HTTP 413 interview-plan correction (current prompt): replaced the single 7,000-token, four-route chat completion with two sequential two-route requests capped at 3,200 tokens each. The complete immutable four-route plan and strict validation remain unchanged, while each provider request stays below the size that the default Groq connection was rejecting.
 - Added `llm-plan-test.ts`, which mocks the OpenAI-compatible endpoint and verifies four validated routes are assembled from exactly two requests using the 3,200-token cap.
 - Verification: focused mocked-plan test, production build, focused ESLint, and diff check pass. The mandated web-game browser client completed in `output/llm-413-fix-runtime/`; its title capture was visually inspected and no browser error artifact was produced.
+
+Groq HTTP 429 follow-up (current prompt): superseded the two-request plan above with one compact four-route request capped at 2,800 output tokens. All generated questions, labels, and responses are explicitly limited to one sentence of at most 18 words, preserving the complete validated graph while avoiding duplicated prompt usage against Groq Free's 6,000-token-per-minute allowance.
+- Updated `llm-plan-test.ts` to verify exactly one request, the 2,800-token cap, and all four validated routes.
+- Verification: focused mocked-plan test, production build, focused ESLint, diff check, and mandated browser smoke test pass. `output/llm-429-fix-runtime/shot-0.png` was visually inspected and no browser error artifact was produced.
+
+Groq malformed-200 response correction (current prompt): inspection of the supplied successful response showed that its outer HTTP envelope was valid, but `message.content` was invalid JSON at character 6512 and violated the graph contract with three-stage evidence routes plus a duplicated/misnested `stages` key in the information route. Default Groq plan requests now use strict JSON Schema structured output, constraining generation to one object with exactly four routes, exactly two stages per route, and complete advance/stall/close choices. Custom and local OpenAI-compatible endpoints retain prompt-guided JSON for compatibility.
+- Extended `llm-plan-test.ts` to verify Groq receives `response_format.type=json_schema`, strict mode, four-route bounds, and two-stage bounds.
+- Verification: focused mocked-plan test, production build, focused ESLint, diff check, and mandated browser smoke test pass. `output/llm-structured-output-runtime/shot-0.png` was visually inspected and no browser error artifact was produced.
+
+Groq structured-output model compatibility correction (current prompt): Groq confirmed that `llama-3.1-8b-instant` does not support `response_format=json_schema`. The Groq preset and saved former-default configurations now migrate to `openai/gpt-oss-20b`, which Groq lists for strict structured output. GPT-OSS 20B/120B receive the strict interview schema; any other explicitly selected Groq model receives supported JSON Object Mode instead. Custom and Ollama requests remain unchanged.
+- Extended `llm-plan-test.ts` to verify strict schema mode for GPT-OSS and JSON Object Mode for Llama.
+- Verification: focused mocked compatibility test, production build, focused ESLint, diff check, and mandated browser smoke test pass. `output/llm-model-compat-runtime/shot-0.png` was visually inspected and no browser error artifact was produced.
+
+Groq `json_validate_failed` correction (current prompt): full four-route strict constrained generation proved brittle even on GPT-OSS 20B. Groq planning now uses two smaller JSON Object Mode batches, each generating exactly two routes with a 1,600-token cap; the game validates and combines the four routes locally. This removes the strict-decoder failure while keeping each request substantially smaller than the earlier malformed all-route generation.
+- Updated `llm-plan-test.ts` to verify two requests, two route assignments per prompt, JSON Object Mode, 1,600-token caps, and a valid combined four-route plan.
+- Verification: focused mocked batching test, production build, focused ESLint, diff check, and mandated browser smoke test pass. `output/llm-json-object-batches-runtime/shot-0.png` was visually inspected and no browser error artifact was produced.
+
+Groq JSON Object validator removal (current prompt): Groq also returned `json_validate_failed` from `response_format=json_object` before producing content. Interview-plan requests no longer send any provider-side `response_format`; the existing two compact 1,600-token/two-route batches use ordinary completions, then undergo the game's local JSON and graph validation. This makes the reported provider error impossible for the new request shape.
+- Updated `llm-plan-test.ts` to assert that neither plan batch contains a `response_format` field.
+- Verification: focused mocked request-shape test, production build, focused ESLint, diff check, and mandated browser smoke test pass. `output/llm-local-json-validation-runtime/shot-0.png` was visually inspected and no browser error artifact was produced.
+
+GPT-OSS empty-content 200 correction (current prompt): the supplied successful response had `content=""`, `finish_reason="length"`, and 1,598 of 1,600 completion tokens consumed by reasoning. GPT-OSS requests now set `reasoning_effort="low"` and `include_reasoning=false`, and each two-route batch reserves 2,200 completion tokens so the model has room to emit the requested JSON while keeping the two-batch total within Groq Free's GPT-OSS token allowance.
+- Updated `llm-plan-test.ts` to verify both reasoning controls and the 2,200-token completion budget on every batch.
+- Verification: focused mocked request-shape test, production build, focused ESLint, diff check, and mandated browser smoke test pass. `output/llm-reasoning-budget-runtime/shot-0.png` was visually inspected and no browser error artifact was produced.
+
+Partial LLM plan recovery (current prompt): the supplied two-route first-batch response is valid, but planning previously discarded it if the second batch or any single route failed. Each route is now validated independently. Valid LLM routes are retained, unusable/missing slots alone receive their matching authored route, and the interview reports `Partial LLM · built-in fill`; only four authored replacements report complete LLM failure.
+- `llmConversationPlan` now returns routes plus `llm`/`hybrid`/`fallback` provenance, and the game/UI preserve that source accurately.
+- Updated `llm-plan-test.ts` to verify one or more invalid routes produce a complete four-route hybrid plan without discarding valid model output.
+- Verification: focused mocked partial-recovery test, production build, focused ESLint, diff check, and mandated browser smoke test pass. `output/llm-partial-recovery-runtime/shot-0.png` was visually inspected and no browser error artifact was produced.
+
+LLM 200-response fallback correction (current prompt): the provider returned complete JSON successfully, but stylistic validation (word/sentence limits, generic closure wording, extra harmless fields, duplicate labels, or a missing final question mark) could discard the entire plan. Those style constraints now remain prompt guidance rather than fatal response checks. Route/evidence identity, four-route/two-stage structure, supported topics/emotions, usable text, and pre-discovery spoiler protections remain enforced. Missing root question marks are normalized, and every genuine rejection now logs a precise console reason.
+- Updated `llm-plan-test.ts` to confirm a structurally usable plan with a stylistically generic closure is accepted instead of triggering built-in fallback.
+- Verification: focused mocked-plan test, production build, focused ESLint, diff check, and mandated browser smoke test pass. `output/llm-validator-fix-runtime/shot-0.png` was visually inspected and no browser error artifact was produced.
 
 Conversation camera follow-up (current prompt): when an interview begins, the camera now pans to the midpoint between the detective and interviewed guest so both actors share the center of the frame. Ending the interview restores normal player/room camera tracking.
 - Verification: production build, focused game/world ESLint, and diff check pass. The mandated web-game client completed in `output/conversation-camera-runtime/`. Targeted interview coverage in `output/conversation-camera-targeted/` confirms the desired camera focus equals the exact player/guest midpoint, the pan settles there, and no browser errors occur; the final interview screenshot was visually inspected.
@@ -653,3 +750,146 @@ Gothic window-border follow-up: added a shared antique-brass double frame with e
 - Detective interviews now snap both the detective and guest to face one another on the first conversation frame and continuously retain that mutual-facing lock while the interview is open.
 - Normal walking headings and NPC-to-NPC conversation turns keep their existing eased rotation.
 - Production build, focused ESLint, diff check, and the mandated browser client pass. Targeted runtime coverage placed the actors on a diagonal before opening an interview and measured zero heading error for both, with their headings exactly opposite and no console/page errors. The interview UI was visually inspected at `output/conversation-facing-targeted/interview.png`.
+
+## Antiquarian action-pose scale correction (2026-07-21)
+
+- Added an antiquarian-only 0.86 action-pose multiplier to counter the shared 1.15 floor-pose enlargement. His corpse and chalk outline now render at 0.989 world scale, matching the physical length of his standing silhouette while preserving the atlas artwork and registration.
+- Other NPC action poses and every standing/walking pose remain unchanged.
+- Production build, focused ESLint, diff check, and the mandated browser client pass. Targeted runtime coverage confirmed death frame 16 and outline frame 17 use the identical corrected scale with zero console/page errors. Both live states were visually inspected in `output/antiquarian-action-scale/`.
+
+## Chauffeur action-pose scale correction (2026-07-21)
+
+- Applied the same action-only 0.86 multiplier to the off-duty chauffeur. His corpse and chalk outline now render at 0.989 world scale, matching the length of his standing silhouette without changing locomotion or other characters.
+- Production build, focused ESLint, diff check, and the mandated browser client pass. Targeted runtime coverage confirmed death frame 16 and outline frame 17 share the corrected scale with zero console/page errors; both live states were visually inspected in `output/chauffeur-action-scale/`.
+
+## Debutante action-pose scale correction (2026-07-21)
+
+- Applied the action-only 0.86 multiplier to the debutante. Her corpse and chalk outline now render at 0.989 world scale without changing her idle, walking, or portrait presentation.
+- Production build, focused ESLint, diff check, and the mandated browser client pass. Targeted runtime coverage confirmed death frame 16 and outline frame 17 share the corrected scale with zero console/page errors; both live states were visually inspected in `output/debutante-action-scale/`.
+
+## Dynamic conversation-thread conclusions (2026-07-21)
+
+- Replaced the shared `nothing more to discuss right now` terminal overwrite in built-in and LLM-planned interviews. The final in-character answer and portrait emotion now remain visible and intact in transcript memory.
+- Added a separately attributed Detective's conclusion for resolved evidence, resolved information, deliberate closes, and repeated-stall exhaustion. Evidence summaries name the canonical association and explain the contact/transfer relationship without treating it as proof of guilt; unsuccessful threads never unlock or imply evidence.
+- Strengthened the live immutable LLM-plan prompt and validator: terminal reveals must explain a concrete connection, closes require grounded in-world reasons, stalls must work as possible last lines, responses may use two short sentences/32 words, and standalone generic closure filler is rejected. The dormant per-turn prompt now follows the same contract.
+- Production build, focused ESLint, LLM prompt validation, diff checks, and the mandated browser client pass completed. A targeted terminal-state capture verified the conclusion is visible, represented in `render_game_to_text`, and produces zero browser errors in `output/dynamic-conclusion-targeted/`.
+
+## Fixed conversation composition (2026-07-21)
+
+- Enlarged the interview frame from 55×36rem to 64×42rem, slightly reduced the portrait/text/control scale, and replaced both nested vertical scrollers with a fixed flex composition so the complete dialogue interaction stays visible without scrollbars.
+- Production build, focused ESLint, and the mandated web-game client pass. A targeted 1440×980 live interview measured frame/body/reply scroll heights exactly equal to their client heights, with hidden overflow and zero console/page errors; `output/dialog-window-targeted/interview.png` was visually inspected.
+- Follow-up refinement: pulled the frame back to 58×30rem, slightly inset and vertically slimmed the frame sprite to reduce its visual weight, collapsed interior spacing, reserved 24% of the content width for the portrait and a fixed 5rem band for response options, and made only the fixed 8rem dialogue reply scrollable.
+- Increased the content-to-frame inset to 12%/10.5%, expanded the portrait allocation to 26%, and enlarged the bust to 11rem so its bottom aligns with the fixed dialogue box.
+- Final targeted measurement puts the portrait bottom within 2px of the dialogue bottom and leaves a 2px clearance before the fixed option band. The 8rem reply remains the sole `overflow-y: auto` region; production build, focused ESLint, diff check, mandated client, and live browser inspection pass with zero errors. Final capture: `output/dialog-window-refined-targeted/interview-final-2.png`.
+
+## Framed-window background bounds (2026-07-21)
+
+- Moved ornate-window backgrounds inward beneath the visible frame edges. Popup/chat surfaces now use a shared 6–6.5% inset, while title and HUD designer-frame surfaces use inset pseudo-elements instead of full rectangular backgrounds, eliminating dark background overhang through transparent frame margins and corners.
+- Removed rectangular backdrop filters from the interview and framed HUD info panel so blur compositing cannot darken transparent pixels outside the ornament silhouette.
+- Increased the chat frame height from 30rem to 32rem and restored a fixed 5rem response-option band so multi-row choices have breathing room without colliding with the aligned 11rem portrait/dialog row.
+- Production build, focused UI ESLint, diff check, and mandated browser client pass. A live four-choice interview measured 22px between the final choice and footer with zero errors; `output/chat-height-targeted/interview.png` was visually inspected. Title, HUD, journal, interview, and accusation frame captures in `output/frame-background-targeted/` confirm backgrounds terminate beneath visible frame edges.
+- Preserved the manually tuned chat background inset (`10% 7%`) while increasing the chat height by 1rem to 33rem, raising option copy from 11px to 12px, and increasing the bust/dialog-to-options gap from 0.25rem to 0.5rem.
+- Production build, focused ESLint, diff check, and mandated browser client pass. Targeted four-choice coverage confirms a 528px rendered frame, 12px option copy, 6px visual section gap, 44px footer clearance, and zero browser errors; `output/chat-option-spacing-targeted/interview.png` was visually inspected.
+- Increased the chat frame again from 33rem to 35rem and expanded the fixed response band from 5rem to 6rem so wrapped second-row options cannot be clipped.
+- Production build, focused ESLint, diff check, and mandated browser client pass. The targeted four-option layout reports matching 96px client/scroll heights and 12px of space below the final row, with zero errors; `output/chat-options-unclipped-targeted/interview.png` was visually inspected.
+- Pulled the End Interview / Accuse footer upward by 3rem to remove the oversized empty band above it while preserving the 35rem frame and unclipped 6rem response area.
+- Production build, focused ESLint, diff check, and mandated browser client pass. Targeted measurement confirms a 13.1px visual gap between the final response row and footer controls with zero browser errors; `output/chat-footer-gap-targeted/interview.png` was visually inspected.
+- Replaced the translated footer with real layout spacing: reduced its bottom inset from 10.5% to 8% and allowed the response grid to consume the remaining flex space above it, moving recovered room between the bust/dialog row and response options instead of leaving it beneath the footer.
+- Restored a small amount of footer breathing room by settling the bottom inset at 9% (roughly 6px more than the 8% pass), while retaining flex-based vertical distribution.
+- Final live measurement shows 58px between the bust/dialog row and response grid, 11px between responses and footer, and 89.5px from the footer controls to the full frame boundary (including the ornate lower rail), with zero errors. `output/chat-vertical-balance-targeted/interview-final.png` was visually inspected; production build, focused ESLint, diff check, and mandated client pass.
+- Increased the footer bottom inset one additional step from 9% to 10% at the user's visual direction.
+- Reallocated the recovered middle space evenly into content: the bust/dialog row and response-choice region each gained 28px. The bust is now 12.75rem, the fixed scrollable dialogue is 9.75rem tall, and response choices use fixed 3.75rem rows inside a 7.75rem two-row band.
+- Refined that equal split to +24px per region to retain a clean inter-section gap: 12.5rem bust/top row, 9.5rem dialogue, and two 3.625rem choice rows in a 7.5rem response band.
+- Final live verification measures a 200px bust/top row, 152px scrollable dialogue, 120px response band with four equal 58px buttons, a positive 0.8px section clearance, 11px footer gap, and zero errors. `output/chat-space-allocation-targeted/interview-final.png` was visually inspected; production build, focused ESLint, diff check, and mandated client pass.
+- Rebuilt the upper interview section as an explicit two-column, one-row grid: a fixed 12.5rem bust column and a flexible second column with `auto` title/subtitle plus a `minmax(0,1fr)` dialogue row. Both columns now inherit one shared 12.5rem height instead of relying on separately coordinated dimensions.
+- Production build, focused ESLint, diff check, and mandated browser client pass. Targeted geometry confirms a 200px shared top row, 200px bust column, 200px title/dialog column, exact 0px bottom-edge delta, and zero errors; `output/chat-grid-targeted/interview.png` was visually inspected.
+- Wrapped every interactive chat element (upper grid, response choices, thread navigation, and footer controls) in `.dialogue-window-content`. The current frame-relative padding is now centralized as `padding: 10.5% 12% 10%` in `src/index.css` instead of being split between body padding and footer margins.
+- Production build, focused ESLint, diff check, and mandated browser client pass. Runtime inspection confirms the wrapper owns all content via two direct layout children, resolves the centralized padding correctly, preserves exact 200px column alignment, and produces zero errors; `output/chat-content-wrapper-targeted/interview.png` was visually inspected.
+- Removed the footer's top border so no divider appears below the response options; footer spacing and controls are unchanged.
+- Removed the footer's horizontal padding while retaining its vertical padding, aligning the outer edges of the End Interview / Accuse buttons with the response grid and upper content.
+- Increased the overall chat frame height from 35rem to 36rem, adding exactly 16px at the current root font size without changing internal sizing or centralized padding.
+- Conclusion/terminal thread states no longer reserve the 7.5rem response-option grid. The Back to other topics control now uses the freed flex space directly above the footer, preventing it from being clipped or hidden.
+- Production build, focused ESLint, diff check, and mandated browser client pass. A forced terminal-state capture confirms the option grid is absent, Back to other topics is visible at 127.6×32px with 10px footer clearance, and no browser errors occur; `output/chat-conclusion-layout-targeted/conclusion.png` was visually inspected.
+
+## Narrative-first LLM redesign: writer-room gate (2026-07-21)
+
+- Four specialist writer/worldbuilding reviews covered fair-play closed-circle structure, noir character depth, branching choice/consequence design, and procedural-world continuity.
+- Added `docs/NARRATIVE_BIBLE.md` as the canonical 1931 Rookwood Hall/Blue Case setting, character, evidence-thread, relationship, knowledge-state, and ending source of truth.
+- Added `docs/BRANCHING_CASE_DESIGN.md` as the writer-facing procedural storylet blueprint, including deterministic case assembly, trust/pressure/flag effects, cross-NPC circuits, alternate evidence carriers, convergence, and migration rules.
+- The writer-room gate preserves randomized killers and victims while requiring a reachable personal reveal plus a death/shutdown fallback for every one of the 30 archetype-evidence associations.
+
+## Narrative-first LLM redesign: prompt-engineering gate (2026-07-21)
+
+- Four prompt specialists covered compact beat packets, noir voice control, structured-output reliability, provider capability handling, caching, repair/fallback, and token/latency tradeoffs.
+- Added `docs/LLM_PROMPT_ARCHITECTURE.md` as the implementation contract. The deterministic engine owns facts, choice IDs, effects, evidence, transitions, and endings; the model may render only the current NPC line, emotion, and labels for supplied choices.
+- The initial delivery strategy shows authored dialogue immediately, requests one current beat on demand, applies exact local validation, attempts at most one content repair, and otherwise preserves the authored fallback without changing story state.
+
+## Typed deterministic narrative foundation (2026-07-21)
+
+- Added literal-safe `EvidenceId` propagation and the canonical `src/game/narrative/` schema, ten dossiers/voice cards, 30 evidence threads, private threads, fallback carriers, 41 endings, and deterministic story/case-ending engine APIs.
+- Added throwing graph validation for 30/30 reveal coverage, valid IDs/targets, fallback routing, ending selection, reopening, cross-NPC effects, and repeatable transitions.
+- Production build, focused ESLint, canonical/legacy graph tests, authored-dialogue audit, simulation smoke test, and LLM-plan test pass. `Game` interview integration remains intentionally deferred.
+
+## Case Journal evidence-card alignment (2026-07-21)
+
+- Converted evidence cards and their detail regions to vertical flex layouts, anchoring each “Possible sources” block to the bottom so paired cards align consistently despite differing description lengths.
+- Production build, focused ESLint, diff check, and the mandated browser client pass succeeded. A targeted two-card fixture with deliberately uneven description lengths confirmed matching card bottoms and bottom-anchored source regions with zero browser errors; `output/journal-source-alignment/evidence.png` was visually inspected.
+
+## Narrative-first LLM redesign: implementation and verification (2026-07-21)
+
+- Replaced the live full-interview LLM planner with persistent deterministic story state and presentation-only beat rendering. Authored beats appear immediately; validated LLM text may replace only the visible NPC line, emotion, and immutable choice labels.
+- Added strict local validation, one temperature-zero content repair, provider capability profiles, short deadlines, deterministic fallback, validated response caching, in-flight deduplication, negative caching, and stale-result guards.
+- Live interviews now carry trust, pressure, cross-NPC events, persistent thread progress, 41 authored personal endings, and six whole-case outcomes with explicit publish/seal/destroy archive disposition.
+- Dead or shut-down NPC evidence threads reroute to pre-seeded Journal records. Runtime and graph tests prove a reachable reveal for every one of the 30 archetype-evidence associations.
+- Final verification passes: production build/typecheck, focused ESLint, diff check, canonical narrative graph, live narrative integration, LLM beat reliability, authored dialogue, legacy story graph, and simulation smoke tests.
+- Browser verification visually inspected live gameplay, a dead-NPC recovered evidence path, accusation/archive selection, and the narrative ending screen. The mandated web-game client also completed and produced deterministic state output; the Cursor browser supplied the visual captures because the client run entered the setup screen rather than gameplay.
+
+## GPT-OSS beat truncation correction (2026-07-21)
+
+- Raised the Groq GPT-OSS beat output ceiling from 220 to 768 tokens. Groq counts hidden reasoning against `max_tokens` even with `include_reasoning=false`; the previous ceiling left too little room for complete presentation JSON and produced HTTP 200 responses with `finish_reason=length`.
+- Kept authored dialogue limits, low reasoning effort, strict local validation, one repair attempt, and fallback behavior unchanged. Updated the request-shape regression and prompt architecture contract.
+- Focused LLM renderer tests, production build/typecheck, focused ESLint, and the mandated browser client pass. The browser client reached the title state with deterministic text output and no reported browser error artifact.
+- Follow-up: complete `finish_reason=stop` JSON was still rejected when a valid single-sentence option label ended in a period. Removed that style-only rejection while retaining the one-sentence label limit, added regression coverage, and reran the LLM renderer suite, build/typecheck, focused ESLint, and browser smoke test successfully.
+- Follow-up: Groq output using the natural emotion synonym `concerned` was rejected because the prompt omitted the six-value UI enum, causing a second repair request and accelerating the 8,000 TPM limit. Prompt version `mm-beat-2` now states the exact enum in generation and repair, while a conservative synonym map normalizes harmless alternatives such as `concerned` to `worried`.
+- Groq GPT-OSS now parses short retry delays from either `Retry-After` or the provider error body and retries one rate-limited generation when the wait fits inside a 12-second profile deadline. A final 429 still falls back and enters the provider negative cache. Regression coverage proves synonym normalization, unknown-emotion rejection, enum prompt delivery, and one-time 429 recovery; build/typecheck, focused ESLint, LLM renderer tests, and browser smoke state pass.
+- Token-usage follow-up: the provider no longer receives the full canonical validation packet. `buildBeatRenderPacket` projects only speaker-safe facts, immutable choices, non-empty safeguards, relevant cover claims and output limits; local IDs, versions, revisions, empty/default state and unused cover data stay local. The system prompt now serializes only active voice rules instead of all role/trust/pressure branches.
+- Live beat context allowlists are narrowed to names, rooms and times actually present in the authored beat, and repetition context is bounded to two NPC lines/six option labels. The measured Curator request is 1,584 total characters (749 system + 835 user), roughly 55–60% smaller than the prior live shape. GPT-OSS `max_tokens` is reduced from 768 to 512 while retaining more than twice the supplied successful completion's 226-token usage.
+- Added compact-packet, metadata-exclusion and prompt-size regression gates. Production build/typecheck, focused ESLint, LLM renderer tests and browser smoke state pass.
+
+## Investigation pose facing (2026-07-22)
+
+- The detective's authored investigation cells now mirror from the body's screen-relative side during the action, rather than inheriting the last movement flip. Bodies on either side therefore keep the detective visually facing the scene being examined.
+- Production build, focused world ESLint, and diff check pass. The mandated browser client completed without a browser error artifact; its title capture was visually inspected in `output/investigation-facing-runtime/`.
+
+## Dining table southward alignment (2026-07-22)
+
+- Shifted the front-facing banquet table 0.6 world units toward the Dining Hall's south wall while retaining x = 0, directly indexed to the chandelier's centerline.
+- Production build passes. The mandated browser client completed without reported browser errors; `output/dining-table-south-final/shot-0.png` was visually inspected and confirms the table sits farther south while remaining centered directly below the chandelier.
+
+## Dining banquet collision (2026-07-22)
+
+- Added one shared authored footprint for the complete banquet table-and-chairs arrangement. Both detective movement and NPC routing now reject positions inside the visible furniture bounds, expanded by actor radius.
+- The renderer consumes the same anchor and width constants, preventing future layout changes from desynchronizing the sprite and collider.
+- Initial live approach stopped the detective at `z = 2.74`, confirming collision but revealing excessive empty blocking space south of the front chairs.
+- Refined the footprint asymmetrically: north depth remains 1.15 units, while south depth is reduced to 0.2 units. With actor radius, the final southern stop line is approximately `z = 1.77`.
+- Production build and focused data ESLint pass. A direct runtime boundary probe confirms `z = 1.76` remains blocked and `z = 1.77` is walkable for the 0.42-unit actor radius. The mandated browser smoke capture completed with deterministic state output and no reported browser errors in `output/dining-table-collision-smoke/`.
+
+## Dining chandelier compositing (2026-07-22)
+
+- Preserved the chandelier/table centerline but made the Dining Hall chandelier ignore furniture depth while continuing to write no depth itself. Its existing high hanging-fixture render order now composites it over the banquet cutout; other room fixtures retain normal depth testing.
+- Production build and focused world ESLint pass. The mandated browser client completed with no reported browser errors; `output/dining-chandelier-over-table-final/shot-0.png` was visually inspected and confirms the chandelier now composites clearly over the table and chairs.
+Hallway wall-junction follow-up (current prompt): extended and recentered the short perpendicular entrance-return walls so they overlap the room-wall plane and the crown-moulding zone. This closes the former 0.12-world-unit longitudinal seam that could appear between room walls and hallway architecture at some camera angles.
+- Verification: production build and focused hallway-wall ESLint pass. The mandated browser client completed, followed by targeted live gameplay captures of the Dining Hall's horizontal and vertical entrances. Both captures were visually inspected and show continuous wall returns beneath the crown moulding; `errors.json` reports zero console/page errors.
+
+## Animated Conservatory fountain (2026-07-22)
+
+- Generated a forward-facing elaborate four-frame fountain strip with a fixed carved-stone structure and looping variations in bubbles, falling streams, droplets, and basin ripples. Converted the green-screen master to a transparent, exactly divisible 1980x793 project sprite sheet.
+- Added a dedicated animation component at the Conservatory's exact local center and a matching basin collision footprint used by both detective movement and NPC routing.
+- Initial targeted captures confirmed distinct water frames but showed the fountain reading too small for a central hero furnishing. Increased its display height from 2.62 to 3.2 world units and expanded the basin footprint proportionally.
+- Production build and focused ESLint pass. The mandated browser client smoke test completed, followed by targeted settled Conservatory captures at `output/conservatory-fountain-final/frame-a.png` and `frame-b.png`; both were visually inspected and show the enlarged centered fountain with changing bubbling/flow frames. Browser errors are empty. A direct footprint probe confirms the basin center is blocked while positions just beyond its west and south edges remain walkable.
+
+## Compact conversation framing (2026-07-22)
+
+- The first compact capture showed the taller small-screen dialogue panel still covering the pair at a 1.5-right/1.2-up composition offset.
+- A second compact capture moved the pair upward but left the detective's lower body intersecting the panel edge. The final target is 3 world units left and 5.5 units south of the pair midpoint, pushing both sprites farther right and fully into the upper stage area.
+- Verification: production build, focused world ESLint, diff check, and the mandated browser client pass. Targeted 1024×700 coverage confirms the exact camera offset with zero browser errors; `output/conversation-camera-compact-final-2/interview-1024x700.png` was visually inspected and shows both full world sprites above the dialogue frame rather than behind it.

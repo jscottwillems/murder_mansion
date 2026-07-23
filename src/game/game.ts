@@ -1,33 +1,59 @@
 // Game orchestrator: loop, input, phases, interviews, accusation, endings,
 // optional LLM dialogue hookup, and the pub/sub store bridge for React.
 import type {
-  CollectedEvidence, EndInfo, Guest, InterviewState, Lead, LogLine, Phase,
-  QuestionOption, QuestionTopic, RoomId, Settings, Snapshot, TranscriptEntry,
+  CollectedEvidence, ConversationEmotion, EndInfo, EvidenceId, Guest, InterviewState, Lead, LogLine, Phase,
+  QuestionOption, RoomId, Settings, Snapshot, TranscriptEntry,
 } from './types'
-import { EVIDENCE_BY_ID, ROOM_BY_ID, ROOM_HALF, roomAt, roomCenter, roomOfPoint, canOccupy, fmtTime, NIGHT_LENGTH_MIN } from './data'
+import { ARCHETYPES, EVIDENCE_BY_ID, ROOMS, ROOM_BY_ID, ROOM_HALF, roomAt, roomCenter, roomOfPoint, canOccupy, fmtTime, NIGHT_LENGTH_MIN } from './data'
 import { Simulation } from './sim'
 import { MansionScene } from './world'
 import { Soundtrack } from './audio'
-import { llmConversationPlan, archetypeOf } from './llm'
-import type { AuthoredDialogueRoute } from './authoredDialogue'
-import { authoredChoice, authoredQuestionOptions, authoredRoutesForGuest } from './dialogueResolver'
+import { BeatVisibilityGuard, renderLegalBeat } from './llmBeatRenderer'
+import type { BeatPacketContext, BeatPresentation } from './llmPromptBuilder'
+import { DOSSIERS, NARRATIVE_THREADS } from './narrative/dossierStoryData'
+import { escalationTier, pickMoodGreeting } from './narrative/escalation'
+import {
+  applyStoryChoice,
+  evaluateCaseEnding,
+  getLegalBeat,
+  initializeNarrativeCase,
+  markCharacterUnavailable,
+  resumePausedThread,
+  setDisposition,
+  setNarrativeClock,
+} from './narrative/storyEngine'
+import type {
+  ArchetypeDossier,
+  ArchiveDisposition,
+  CaseEndingEvaluation,
+  CharacterNarrativeState,
+  LegalBeat,
+  NarrativeCaseState,
+  NarrativeThread,
+  StoryChoice,
+  ThreadStatus,
+} from './narrative/types'
+import type { RevealMechanism } from './dialogue/types'
 
 const SETTINGS_KEY = 'murder-mansion-settings'
 const PLAYER_SPEED = 4.4
 const ACTOR_RADIUS = 0.42
 
-type ThreadEffect = 'advance' | 'stall' | 'close'
-interface DialogueThread {
-  id: string
-  scriptId: string
-  topic: QuestionTopic
-  rootLabel: string
-  evidenceId?: string
-  stage: number
-  wrongTurns: number
-  status: 'unstarted' | 'active' | 'resolved' | 'exhausted'
-  offered: QuestionOption[]
-  effects: Record<string, ThreadEffect>
+/** Plain third-person phrasing of how an evidence association was established. */
+const MECHANISM_SUMMARY: Record<RevealMechanism, string> = {
+  comparison: 'the two samples match side by side',
+  reconstruction: 'the sequence only fits one way once you walk it back',
+  contradiction: 'their own account can’t be squared with it',
+  corroboration: 'a second, independent source backs it up',
+  bait: 'they corrected a false detail only the knowing would catch',
+  chronology: 'the timing pins it against the clock',
+  custody: 'the chain of hands that touched it holds',
+}
+
+function archetypeOf(guest: Guest) {
+  const archetype = ARCHETYPES.find(item => item.id === guest.archetypeId)
+  if (!archetype) throw new Error(`Unknown archetype ${guest.archetypeId}`)
+  return archetype
 }
 
 declare global {
@@ -43,7 +69,7 @@ const DEFAULT_SETTINGS: Settings = {
   llmProvider: 'groq',
   llmBaseUrl: 'https://api.groq.com/openai/v1',
   llmApiKey: '',
-  llmModel: 'llama-3.1-8b-instant',
+  llmModel: 'openai/gpt-oss-20b',
   speed: 1,
   bgmVolume: 0.7,
   sfxVolume: 0.7,
@@ -62,6 +88,12 @@ function loadSettings(): Settings {
         if (saved.bgmVolume === undefined) saved.bgmVolume = saved.volume
         if (saved.sfxVolume === undefined) saved.sfxVolume = saved.volume
         delete saved.volume
+      }
+      // Groq's former default supports JSON Object Mode but not the strict
+      // schema required by full interview plans. Migrate that preset to Groq's
+      // supported structured-output successor while preserving custom models.
+      if (saved.llmProvider === 'groq' && saved.llmModel === 'llama-3.1-8b-instant') {
+        saved.llmModel = 'openai/gpt-oss-20b'
       }
       return { ...DEFAULT_SETTINGS, ...saved }
     }
@@ -93,8 +125,11 @@ export class Game {
   private evidenceDiscoveryTimer: ReturnType<typeof setTimeout> | null = null
   private endInfo: EndInfo | null = null
   private interviewsHeld = 0
-  private dialogueThreads: Record<string, Record<string, DialogueThread>> = {}
-  private conversationPlans: Record<string, AuthoredDialogueRoute[]> = {}
+  private narrative: NarrativeCaseState | null = null
+  private beatRevision = 0
+  private beatVisibility = new BeatVisibilityGuard()
+  private recentNpcLines: string[] = []
+  private recentOptionLabels: string[] = []
   private interviewRequestN = 0
   private llmLive = false
   private lastTs = 0
@@ -110,11 +145,59 @@ export class Game {
       && (this.settings.llmProvider === 'ollama' || !!this.settings.llmApiKey)
   }
 
+  private personalEndingTitle(character: CharacterNarrativeState): string | undefined {
+    if (!character.flags.includes(`${character.archetypeId}:private-addressed`)) return undefined
+    const ending = [...DOSSIERS[character.archetypeId].endings].sort((left, right) =>
+      (character.endingScores[right.id] ?? 0) - (character.endingScores[left.id] ?? 0),
+    )[0]
+    return ending?.title
+  }
+
+  private recoveredNarrativeLeads(): Snapshot['narrative'] extends infer T
+    ? T extends { recoveredLeads: infer R } ? R : never
+    : never {
+    if (!this.narrative) return []
+    const recovered: Array<{
+      id: string
+      guestId: string
+      threadId: string
+      guestName: string
+      description: string
+      resolved: boolean
+    }> = []
+    for (const character of Object.values(this.narrative.characters)) {
+      if (!character.discovered) continue
+      const dossier = DOSSIERS[character.archetypeId]
+      const threads = [
+        ...Object.values(dossier.evidenceThreads).filter((thread): thread is NonNullable<typeof thread> => Boolean(thread)),
+        ...dossier.regularThreads,
+      ]
+      for (const thread of threads) {
+        if (thread.kind !== 'evidence') continue
+        for (const carrierId of thread.fallbackCarrierIds) {
+          const carrier = dossier.carriers.find(candidate => candidate.id === carrierId)
+          if (carrier && this.narrative.flags.includes(`carrier-active:${carrier.id}`)) {
+            recovered.push({
+              id: carrier.id,
+              guestId: character.guestId,
+              threadId: thread.id,
+              guestName: character.displayName,
+              description: carrier.description,
+              resolved: character.threadStatuses[thread.id] === 'resolved',
+            })
+          }
+        }
+      }
+    }
+    return recovered
+  }
+
   constructor(container: HTMLElement) {
     this.world = new MansionScene(container)
     this.world.onThunder = (i) => this.audio.thunder(i)
     this.world.addActor('player', 0x8a7a5a, 'Detective', true)
     this.world.focusRoom(this.playerRoom)
+    this.audio.setRoomAmbience(this.playerRoom)
     this.audio.setMuted(this.settings.muted)
     this.audio.setBgmVolume(this.settings.bgmVolume)
     this.audio.setSfxVolume(this.settings.sfxVolume)
@@ -184,6 +267,13 @@ export class Game {
     const sim = this.sim
     const guests = sim ? sim.guests.map(g => {
       const visible = g.alive && g.room === this.playerRoom
+      const character = this.narrative?.characters[g.id]
+      const threadCounts = character
+        ? Object.values(character.threadStatuses).reduce<Partial<Record<ThreadStatus, number>>>((counts, status) => {
+            counts[status] = (counts[status] ?? 0) + 1
+            return counts
+          }, {})
+        : {}
       return {
         id: g.id,
         name: g.name,
@@ -198,6 +288,12 @@ export class Game {
         roomName: visible ? ROOM_BY_ID[g.room].name : null,
         evidenceIds: g.evidenceIds,
         revealedEvidenceIds: g.revealedEvidenceIds,
+        narrative: character ? {
+          trust: character.trust,
+          pressure: character.pressure,
+          threadCounts,
+          personalEndingTitle: this.personalEndingTitle(character),
+        } : null,
       }
     }) : []
     const room = ROOM_BY_ID[this.playerRoom]
@@ -233,6 +329,13 @@ export class Game {
       endInfo: this.endInfo,
       llmActive: this.llmLive,
       caseSeed: sim?.seed ?? 0,
+      narrative: this.narrative ? {
+        act: this.narrative.act,
+        resolvedAssociations: this.narrative.revealedAssociations.length,
+        completedCircuits: Object.values(this.narrative.circuits).filter(circuit => circuit.completed).length,
+        totalCircuits: Object.keys(this.narrative.circuits).length,
+        recoveredLeads: this.recoveredNarrativeLeads(),
+      } : null,
       minimap: {
         playerRoom: this.playerRoom,
         visibleGuestRooms: sim
@@ -285,7 +388,15 @@ export class Game {
       case 'interview': this.endInterview(); break
       case 'settings': this.setPhase(this.settingsReturn === 'title' ? 'title' : 'paused'); break
       case 'howto': this.setPhase('title'); break
-      default: break
+      case 'title':
+      case 'setup':
+      case 'won':
+      case 'lost':
+        break
+      default: {
+        const exhaustive: never = this.phase
+        throw new Error(`Unhandled phase: ${exhaustive}`)
+      }
     }
   }
 
@@ -317,6 +428,7 @@ export class Game {
     const evidence = EVIDENCE_BY_ID[body.evidenceId]
     if (!evidence) return
     body.evidenceInvestigated = true
+    this.syncNarrativeBodyDiscovery(body)
     this.world.faceActorAt('player', body.x, body.z)
     this.world.playActorAction('player', 'investigate')
     this.world.replaceBodyWithOutline(body.id, body.x, body.z)
@@ -341,6 +453,23 @@ export class Game {
     this.audio.evidenceDiscovered()
     this.showEvidenceDiscovery(evidence.id, evidence.label, body.name, 'physical')
     this.pushLog(`Evidence collected — ${evidence.label}. Added to your journal.`, 'info')
+  }
+
+  private syncNarrativeBodyDiscovery(body: Guest) {
+    if (!this.narrative) return
+    const character = this.narrative.characters[body.id]
+    if (!character) return
+    const wasUnavailable = !character.alive
+    if (!wasUnavailable) this.narrative = markCharacterUnavailable(this.narrative, body.id, 'death')
+    this.narrative.characters[body.id].discovered = true
+    if (!wasUnavailable) {
+      this.pushLead(
+        'discovery',
+        body.name,
+        `Recovered records and pre-seeded carriers now preserve unresolved lines from ${body.name}.`,
+        true,
+      )
+    }
   }
 
   private computeHint(): string | null {
@@ -374,8 +503,11 @@ export class Game {
     }
     this.endInfo = null
     this.interviewsHeld = 0
-    this.dialogueThreads = {}
-    this.conversationPlans = {}
+    this.narrative = null
+    this.beatRevision = 0
+    this.beatVisibility.invalidate()
+    this.recentNpcLines = []
+    this.recentOptionLabels = []
     this.interviewRequestN++
 
     this.sim = new Simulation(seed, {
@@ -383,9 +515,11 @@ export class Game {
       lead: (kind, source, text) => this.pushLead(kind, source, text),
       guestDied: (g) => {
         this.world.setActorDead(g.id, g.x, g.z)
+        if (this.narrative) this.narrative = markCharacterUnavailable(this.narrative, g.id, 'death')
       },
       bodyDiscovered: (g) => {
         this.world.markBodyRoom(g.deathRoom!)
+        this.syncNarrativeBodyDiscovery(g)
       },
       overheard: (_who, text) => this.pushLog(text, 'rumor'),
     })
@@ -396,14 +530,23 @@ export class Game {
       this.world.addActor(g.id, g.colorNum, g.name, false, g.archetypeId)
     }
     const openingVictim = this.sim.createOpeningCrime()
+    this.narrative = initializeNarrativeCase({
+      caseSeed: this.sim.seed,
+      guests: this.sim.guests,
+      openingVictimId: openingVictim.id,
+    })
+    this.narrative = markCharacterUnavailable(this.narrative, openingVictim.id, 'death')
+    this.narrative.characters[openingVictim.id].discovered = true
     this.world.resetRoomLights()
 
     // player starts in the Dining Hall (center of the mansion)
     this.playerRoom = 'dining'
-    const c = { x: 0, z: 2 }
+    // Start south of the banquet collider, facing into the Dining Hall.
+    const c = { x: 0, z: 3 }
     this.px = c.x
     this.pz = c.z
     this.world.focusRoom(this.playerRoom)
+    this.audio.setRoomAmbience(this.playerRoom)
 
     const openingRoom = ROOM_BY_ID[openingVictim.deathRoom!].name
     this.pushLog(`${openingVictim.name} was found dead in the ${openingRoom}. You were summoned before the storm cut the roads.`, 'danger')
@@ -440,269 +583,407 @@ export class Game {
   // ------------------------------------------------------------- interviews
 
   startInterview(guestId: string) {
-    if (!this.sim || this.phase !== 'playing') return
+    if (!this.sim || !this.narrative || this.phase !== 'playing') return
     const g = this.sim.byId(guestId)
     if (!g || !g.alive) return
     this.audio.ensure()
     g.interviewed = true
     this.interviewsHeld++
-    if (this.llmConfigured() && !this.conversationPlans[g.id]) {
-      const requestN = ++this.interviewRequestN
-      this.interview = {
-        guestId,
-        questions: [],
-        lastQuestion: '',
-        lastAnswer: 'Planning this conversation…',
-        emotion: 'thoughtful',
-        thinking: true,
-        concluded: false,
-        activeThreadId: null,
-        threadStatus: 'topics',
-        responseSource: 'llm',
-      }
-      this.phase = 'interview'
-      this.audio.onGameMinute(this.sim.clockMin, this.settings.speed, false)
-      this.emit()
-      const sim = this.sim
-      llmConversationPlan(
-        { baseUrl: this.settings.llmBaseUrl, apiKey: this.settings.llmApiKey, model: this.settings.llmModel },
-        g,
-        {
-          clockMin: sim.clockMin,
-          roomName: ROOM_BY_ID[this.playerRoom].name,
-          knownVictims: sim.victims().map(victim => victim.name),
-          caseEvents: this.caseEventsFor(g),
-          otherGuests: sim.aliveGuests().filter(other => other.id !== g.id).map(other => other.name),
-          evidence: g.evidenceIds.map(id => EVIDENCE_BY_ID[id]).filter(Boolean),
-        },
-      ).then(plan => {
-        if (!this.interview || this.interview.guestId !== g.id || requestN !== this.interviewRequestN) return
-        if (plan) {
-          this.conversationPlans[g.id] = plan
-          this.llmLive = true
-        } else {
-          this.conversationPlans[g.id] = authoredRoutesForGuest(g)
-          this.llmLive = false
-        }
-        delete this.dialogueThreads[g.id]
-        this.interview = {
-          ...this.interview,
-          questions: this.buildRootQuestions(g),
-          lastAnswer: `“${this.pickGreet(g)}”`,
-          emotion: 'neutral',
-          thinking: false,
-          responseSource: plan ? 'llm' : 'fallback',
-        }
-        this.emit()
-      }).catch(() => {
-        if (!this.interview || this.interview.guestId !== g.id || requestN !== this.interviewRequestN) return
-        this.conversationPlans[g.id] = authoredRoutesForGuest(g)
-        this.llmLive = false
-        delete this.dialogueThreads[g.id]
-        this.interview = {
-          ...this.interview,
-          questions: this.buildRootQuestions(g),
-          lastAnswer: `“${this.pickGreet(g)}”`,
-          emotion: 'neutral',
-          thinking: false,
-          responseSource: 'fallback',
-        }
-        this.emit()
-      })
-      return
-    }
-    const active = Object.values(this.ensureGuestThreads(g)).find(thread => thread.status === 'active')
+    const character = this.narrative.characters[g.id]
+    const activeThread = Object.entries(character.threadStatuses)
+      .find(([, status]) => status === 'active')?.[0] ?? null
+    const activeBeat = activeThread ? getLegalBeat(this.narrative, g.id, activeThread) : null
     this.interview = {
       guestId,
-      questions: active?.offered.length ? active.offered : this.buildRootQuestions(g),
+      questions: activeBeat ? this.choiceOptions(activeBeat) : this.buildRootQuestions(g),
       lastQuestion: '',
       lastAnswer: `“${this.pickGreet(g)}”`,
       emotion: 'neutral',
       thinking: false,
       concluded: false,
-      activeThreadId: active?.id ?? null,
-      threadStatus: active ? 'active' : 'topics',
-      responseSource: this.llmConfigured()
-        ? (this.llmLive ? 'llm' : 'fallback')
-        : 'builtin',
+      conclusion: null,
+      activeThreadId: activeThread,
+      threadStatus: activeThread ? 'active' : 'topics',
+      responseSource: 'builtin',
+      trust: character.trust,
+      pressure: character.pressure,
+      personalEndingTitle: this.personalEndingTitle(character),
     }
     this.phase = 'interview'
     this.audio.onGameMinute(this.sim.clockMin, this.settings.speed, false)
     this.emit()
+    if (activeBeat && activeThread) this.renderVisibleBeat(g, activeThread, activeBeat, '')
   }
 
   private pickGreet(g: Guest): string {
-    const a = archetypeOf(g)
-    return a.greet[Math.floor(Math.random() * a.greet.length)]
+    // Tone follows the body count: the same guest greets the detective very
+    // differently in the composed first hour than in the desperate small hours.
+    const tier = escalationTier(this.sim?.bodiesFound() ?? 0)
+    const role = this.narrative?.characters[g.id]?.roleMode ?? 'innocent'
+    return pickMoodGreeting(g.archetypeId, tier, role, Math.random)
   }
 
-  private ensureGuestThreads(g: Guest): Record<string, DialogueThread> {
-    if (this.dialogueThreads[g.id]) return this.dialogueThreads[g.id]
-    const threads: Record<string, DialogueThread> = {}
-    this.routesForGuest(g).forEach(route => {
-      const id = `thread:${route.id}`
-      threads[id] = {
-        id, scriptId: route.id, topic: route.topic, rootLabel: route.rootQuestion,
-        evidenceId: route.evidenceId,
-        stage: 0, wrongTurns: 0, status: 'unstarted', offered: [], effects: {},
-      }
-    })
-    this.dialogueThreads[g.id] = threads
-    return threads
-  }
-
-  private routesForGuest(g: Guest): AuthoredDialogueRoute[] {
-    return this.conversationPlans[g.id] ?? authoredRoutesForGuest(g)
+  /**
+   * Evidence types the detective has physically recovered from a body. Reveal
+   * threads for a type are only worth asking about once such a trace exists,
+   * so this set gates which evidence topics an NPC will engage.
+   */
+  private discoveredPhysicalEvidenceIds(): Set<EvidenceId> {
+    return new Set(this.evidence.map(item => item.evidenceId))
   }
 
   private buildRootQuestions(g: Guest): QuestionOption[] {
-    return Object.values(this.ensureGuestThreads(g)).map(thread => ({
+    if (!this.narrative) return []
+    const character = this.narrative.characters[g.id]
+    const dossier = DOSSIERS[g.archetypeId]
+    const discovered = this.discoveredPhysicalEvidenceIds()
+    // An evidence reveal thread surfaces for *every* guest once the trace has
+    // been recovered from a body — not only the guests tied to it — so the
+    // player cannot narrow the field by which NPCs gained new dialogue. Only the
+    // tied owners resolve into a recorded association; the rest reach a no-reveal
+    // dead end. Until at least one trace is found, guests offer regular rapport
+    // threads instead; the moment evidence unlocks, those "get to know them"
+    // topics are replaced by the evidence topics for all guests alike.
+    const availableEvidence = Object.values(dossier.evidenceThreads)
+      .filter((thread): thread is NonNullable<typeof thread> => Boolean(thread))
+      .filter(thread => discovered.has(thread.evidenceId))
+    const threads = availableEvidence.length > 0
+      ? [...availableEvidence, ...this.personalFillThreads(g, dossier, character, availableEvidence.length)]
+      : dossier.regularThreads
+    return threads.map(thread => {
+      const status = character.threadStatuses[thread.id]
+      return {
       id: `root:${thread.id}`,
       topic: thread.topic,
-      label: thread.status === 'resolved' ? `${thread.rootLabel} — resolved`
-        : thread.status === 'exhausted' ? `${thread.rootLabel} — no further lead`
-          : thread.rootLabel,
+      label: status === 'resolved' ? `${thread.rootLabel} — association recorded`
+        : status === 'paused' ? `${thread.rootLabel} — resume`
+          : status === 'rerouted' ? `${thread.rootLabel} — recovered route`
+            : status === 'closed-personal' ? `${thread.rootLabel} — externally rerouted`
+              : status === 'spent' ? `${thread.rootLabel} — concluded`
+                : thread.rootLabel,
       kind: 'root',
-      disabled: thread.status === 'resolved' || thread.status === 'exhausted',
-    }))
-  }
-
-  private authoredRoute(g: Guest, thread: DialogueThread): AuthoredDialogueRoute | undefined {
-    return this.routesForGuest(g).find(route => route.id === thread.scriptId)
-  }
-
-  private authoredBranchChoices(thread: DialogueThread, route: AuthoredDialogueRoute): QuestionOption[] {
-    const idPrefix = `${thread.id}:s${thread.stage}:w${thread.wrongTurns}`
-    const options = authoredQuestionOptions(route, thread.stage, idPrefix)
-    const specs = options.map((option, index) => ({
-      option,
-      effect: (['advance', 'stall', 'close'] as ThreadEffect[])[index],
-    }))
-    // Rotate by stable thread/stage data so the productive option is not fixed
-    // to the same screen position across every conversation.
-    const offset = (thread.id.length + thread.stage + thread.wrongTurns) % specs.length
-    const rotated = [...specs.slice(offset), ...specs.slice(0, offset)]
-    thread.effects = {}
-    thread.offered = rotated.map(spec => {
-      thread.effects[spec.option.id] = spec.effect
-      return spec.option
+      disabled: status === 'resolved' || status === 'spent',
+      }
     })
-    return thread.offered
+  }
+
+  /**
+   * Once evidence topics appear they no longer replace the personal threads;
+   * instead we top the menu up with personal options so it always offers at
+   * least a handful of things to ask. The pool (rapport + personal asides) is
+   * larger than what is shown and ordered by a per-run, per-guest seed, so the
+   * personal filler differs every run while staying stable within a single case.
+   */
+  private personalFillThreads(
+    g: Guest,
+    dossier: ArchetypeDossier,
+    character: CharacterNarrativeState,
+    evidenceCount: number,
+  ): NarrativeThread[] {
+    const MIN_ROOT_OPTIONS = 4
+    const PERSONAL_TARGET = 3
+    const isActionable = (thread: NarrativeThread): boolean => {
+      const status = character.threadStatuses[thread.id]
+      return status === 'open' || status === 'active' || status === 'paused' || status === 'rerouted'
+    }
+    const pool = [...dossier.regularThreads, ...dossier.bonusPersonalThreads]
+    const actionable = this.seededPersonalOrder(pool, g.id).filter(isActionable)
+    const want = Math.max(MIN_ROOT_OPTIONS - evidenceCount, PERSONAL_TARGET)
+    return actionable.slice(0, want)
+  }
+
+  /**
+   * Deterministic per-run, per-guest shuffle. The order is fixed for a given
+   * case seed and guest, so the personal menu stays stable across a night while
+   * varying between playthroughs.
+   */
+  private seededPersonalOrder<T extends { id: string }>(pool: readonly T[], guestId: string): T[] {
+    let state = 2166136261 >>> 0
+    const mix = (text: string): void => {
+      for (let index = 0; index < text.length; index++) {
+        state ^= text.charCodeAt(index)
+        state = Math.imul(state, 16777619) >>> 0
+      }
+    }
+    mix(String(this.sim?.seed ?? 0))
+    mix(':')
+    mix(guestId)
+    const next = (): number => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+      return state / 4294967296
+    }
+    const arr = [...pool]
+    for (let index = arr.length - 1; index > 0; index--) {
+      const swap = Math.floor(next() * (index + 1))
+      ;[arr[index], arr[swap]] = [arr[swap], arr[index]]
+    }
+    return arr
   }
 
   returnToInterviewTopics() {
-    if (!this.interview || this.interview.thinking || !this.sim) return
+    if (!this.interview || !this.sim) return
     const g = this.sim.byId(this.interview.guestId)
     if (!g) return
+    this.beatVisibility.invalidate()
+    this.interviewRequestN++
     this.interview = {
       ...this.interview,
       activeThreadId: null,
       threadStatus: 'topics',
       concluded: false,
+      conclusion: null,
       questions: this.buildRootQuestions(g),
     }
     this.emit()
   }
 
-  private caseEventsFor(g: Guest): string[] {
-    if (!this.sim) return []
-    const events: string[] = []
-    if (g.talkedWith.length) events.push(`You spoke with ${g.talkedWith.slice(-5).join(', ')}.`)
-    for (const rumor of g.knowledge.slice(-5)) events.push(`You learned: ${rumor.text}.`)
-    for (const victim of this.sim.victims().slice(-3)) {
-      events.push(`${victim.name}'s body was discovered in the ${ROOM_BY_ID[victim.deathRoom!].name}.`)
-    }
-    for (const entry of (this.transcripts[g.id] ?? []).slice(-4)) {
-      events.push(`The detective previously asked "${entry.q}"; you answered: ${entry.a}`)
-    }
-    return events
+  private choiceOptions(beat: LegalBeat, presentation?: BeatPresentation): QuestionOption[] {
+    return beat.choices.map(choice => ({
+      id: choice.id,
+      topic: NARRATIVE_THREADS[beat.node.threadId]?.topic ?? 'follow_up',
+      label: presentation?.options.find(option => option.choiceId === choice.id)?.label ?? choice.label,
+      kind: 'branch',
+      intent: choice.intent,
+    }))
   }
 
   ask(questionId: string) {
-    if (!this.sim || !this.interview || this.interview.thinking) return
+    if (!this.sim || !this.narrative || !this.interview) return
     const g = this.sim.byId(this.interview.guestId)
     if (!g) return
     const q = this.interview.questions.find(option => option.id === questionId)
     if (!q || q.disabled) return
-    const threads = this.ensureGuestThreads(g)
-    const thread = q.kind === 'root'
-      ? threads[questionId.slice('root:'.length)]
-      : (this.interview.activeThreadId ? threads[this.interview.activeThreadId] : undefined)
-    if (!thread || thread.status === 'resolved' || thread.status === 'exhausted') return
-    const route = this.authoredRoute(g, thread)
-    if (!route) return
-
-    const selectedEffect: ThreadEffect | 'root' = q.kind === 'root' ? 'root' : thread.effects[q.id]
-    if (!selectedEffect) return
-    const selectedStage = thread.stage
-    const authoredBeat = selectedEffect === 'root'
-      ? { text: route.openingResponse, emotion: route.openingEmotion }
-      : (() => {
-          const choice = authoredChoice(route, selectedStage, selectedEffect)
-          return { text: choice.response, emotion: choice.emotion }
-        })()
-    thread.status = 'active'
-    thread.offered = []
-    const terminalSuccess = selectedEffect === 'advance' && thread.stage + 1 >= 2
-    if (selectedEffect === 'advance') thread.stage++
-    if (selectedEffect === 'stall') thread.wrongTurns++
-    const terminalFailure = selectedEffect === 'close' || (selectedEffect === 'stall' && thread.wrongTurns >= 2)
-    const terminal = terminalSuccess || terminalFailure
-    const evidenceCue = terminalSuccess && thread.evidenceId ? EVIDENCE_BY_ID[thread.evidenceId] : undefined
-    const fallbackChoices = terminal ? [] : this.authoredBranchChoices(thread, route)
-    const requestN = ++this.interviewRequestN
-    this.interview = {
-      ...this.interview,
-      activeThreadId: thread.id,
-      threadStatus: 'active',
-      thinking: true,
-      lastQuestion: q.label,
-      questions: fallbackChoices,
+    if (q.kind === 'root') {
+      const threadId = questionId.slice('root:'.length)
+      const thread = NARRATIVE_THREADS[threadId]
+      if (thread?.kind === 'evidence' && !this.discoveredPhysicalEvidenceIds().has(thread.evidenceId)) return
+      const status = this.narrative.characters[g.id].threadStatuses[threadId]
+      if (status === 'paused') this.narrative = resumePausedThread(this.narrative, g.id, threadId)
+      const beat = getLegalBeat(this.narrative, g.id, threadId)
+      if (beat) this.renderVisibleBeat(g, threadId, beat, q.label)
+      return
     }
-    this.emit()
-
-    const applyAnswer = (
-      answer: string,
-      leadList: { source: string; text: string }[],
-      emotion: InterviewState['emotion'],
-      renderedChoices: QuestionOption[],
-    ) => {
-      if (!this.interview || this.interview.guestId !== g.id || requestN !== this.interviewRequestN) return
-      for (const l of leadList) this.pushLead('interview', l.source, l.text, true)
-      const entry: TranscriptEntry = { atMin: this.sim!.clockMin, q: q.label, a: answer }
-      this.transcripts = {
-        ...this.transcripts,
-        [g.id]: [...(this.transcripts[g.id] ?? []), entry],
-      }
-      if (terminalSuccess) {
-        thread.status = 'resolved'
-        if (evidenceCue) this.revealGuestEvidence(g, evidenceCue.id)
-      } else if (terminalFailure) {
-        thread.status = 'exhausted'
-      } else {
-        thread.status = 'active'
-        thread.offered = renderedChoices
-      }
-      this.interview = {
-        ...this.interview,
-        thinking: false,
-        lastAnswer: terminal ? 'nothing more to discuss right now' : (answer.startsWith('“') ? answer : `“${answer}”`),
-        emotion: terminal ? 'neutral' : emotion,
-        concluded: terminal,
-        threadStatus: terminalSuccess ? 'resolved' : terminalFailure ? 'exhausted' : 'active',
-        questions: terminal ? [] : renderedChoices,
-      }
-      this.emit()
+    const threadId = this.interview.activeThreadId
+    if (!threadId) return
+    const before = this.narrative
+    const beforeAssociations = new Set(before.revealedAssociations)
+    const selected = getLegalBeat(before, g.id, threadId)?.choices.find(choice => choice.id === questionId)
+    if (!selected) return
+    this.beatVisibility.invalidate()
+    this.interviewRequestN++
+    this.narrative = applyStoryChoice(before, g.id, threadId, selected.id)
+    const statusAfterChoice = this.narrative.characters[g.id].threadStatuses[threadId]
+    if (statusAfterChoice === 'closed-personal') {
+      this.narrative = markCharacterUnavailable(this.narrative, g.id, 'shutdown')
     }
-
-    // Both modes now play from an immutable plan. Built-in plans are authored
-    // locally; LLM plans are generated once at interview start and persisted.
-    setTimeout(() => {
-      applyAnswer(authoredBeat.text, [], authoredBeat.emotion, fallbackChoices)
-    }, 350)
+    for (const association of this.narrative.revealedAssociations) {
+      if (beforeAssociations.has(association)) continue
+      const [archetypeId, evidenceId] = association.split(':')
+      if (archetypeId === g.archetypeId && EVIDENCE_BY_ID[evidenceId as EvidenceId]) {
+        this.revealGuestEvidence(g, evidenceId as EvidenceId)
+      }
+    }
+    const nextBeat = getLegalBeat(this.narrative, g.id, threadId)
+    if (nextBeat) {
+      this.renderVisibleBeat(g, threadId, nextBeat, q.label)
+      return
+    }
+    const status = this.narrative.characters[g.id].threadStatuses[threadId]
+    this.finishNarrativeThread(g, threadId, selected, status, q.label)
   }
 
-  private revealGuestEvidence(g: Guest, evidenceId: string) {
+  private renderVisibleBeat(g: Guest, threadId: string, beat: LegalBeat, questionLabel: string) {
+    if (!this.narrative || !this.interview) return
+    const revision = ++this.beatRevision
+    const beatKey = this.beatVisibility.show(g.id, threadId, beat.node.id, revision)
+    const character = this.narrative.characters[g.id]
+    const authored: BeatPresentation = {
+      npcLine: beat.node.text,
+      emotion: beat.node.emotion,
+      options: beat.choices.map(choice => ({ choiceId: choice.id, label: choice.label })),
+    }
+    const context = this.beatPacketContext(beat, revision)
+    this.interview = {
+      ...this.interview,
+      activeThreadId: threadId,
+      threadStatus: character.threadStatuses[threadId],
+      lastQuestion: questionLabel,
+      lastAnswer: `“${authored.npcLine}”`,
+      emotion: authored.emotion,
+      questions: this.choiceOptions(beat, authored),
+      thinking: false,
+      concluded: authored.options.length === 0,
+      conclusion: authored.options.length === 0
+        ? this.conclusionFor(g, threadId, character.threadStatuses[threadId])
+        : null,
+      responseSource: 'builtin',
+      trust: character.trust,
+      pressure: character.pressure,
+      personalEndingTitle: this.personalEndingTitle(character),
+    }
+    this.recordTranscript(g, questionLabel, authored.npcLine)
+    this.rememberPresentation(authored)
+    this.emit()
+    if (!this.llmConfigured()) return
+    const stateAtRequest = this.narrative
+    void renderLegalBeat({
+      config: {
+        provider: this.settings.llmProvider,
+        baseUrl: this.settings.llmBaseUrl,
+        apiKey: this.settings.llmApiKey,
+        model: this.settings.llmModel,
+      },
+      legalBeat: beat,
+      state: stateAtRequest,
+      guest: g,
+      context,
+    }).then(result => {
+      if (!this.beatVisibility.isCurrent(beatKey) || !this.interview || this.interview.guestId !== g.id) return
+      if (this.narrative !== stateAtRequest) return
+      this.llmLive = result.source === 'llm' || result.source === 'repair'
+      this.interview = {
+        ...this.interview,
+        lastAnswer: `“${result.presentation.npcLine}”`,
+        emotion: result.presentation.emotion,
+        questions: this.choiceOptions(beat, result.presentation),
+        responseSource: result.source,
+      }
+      this.rememberPresentation(result.presentation)
+      this.replaceLatestTranscript(g.id, result.presentation.npcLine)
+      this.emit()
+    }).catch(() => undefined)
+  }
+
+  private beatPacketContext(beat: LegalBeat, revision: number): BeatPacketContext {
+    const authoredText = [
+      beat.node.text,
+      ...beat.choices.map(choice => choice.label),
+    ].join(' ').normalize('NFC').toLocaleLowerCase()
+    const mentioned = (value: string) => authoredText.includes(value.normalize('NFC').toLocaleLowerCase())
+    const properNouns = (this.sim
+      ? [...this.sim.guests.map(guest => guest.name), 'Sir Edgar Rooke', 'Celia', 'June Bell', 'Lady Vale', 'Blue Case', 'Bentley', 'Mercy Box']
+      : []).filter(mentioned)
+    const rooms = [...ROOMS.map(room => room.name), 'west service passage'].filter(mentioned)
+    const times = ['10:40 PM', '11:00 PM', '11:10 PM', '11:20 PM', '11:30 PM', '11:35 PM', '11:42 PM', '11:55 PM', '12:00 AM', '12:10 AM', 'midnight', 'dawn', 'sunrise'].filter(mentioned)
+    return {
+      beatRevision: revision,
+      allowedProperNouns: properNouns,
+      allowedRooms: rooms,
+      allowedTimes: times,
+      recentNpcLines: this.recentNpcLines.slice(-2),
+      recentOptionLabels: this.recentOptionLabels.slice(-6),
+    }
+  }
+
+  private rememberPresentation(presentation: BeatPresentation) {
+    this.recentNpcLines = [...this.recentNpcLines, presentation.npcLine].slice(-12)
+    this.recentOptionLabels = [...this.recentOptionLabels, ...presentation.options.map(option => option.label)].slice(-24)
+  }
+
+  private recordTranscript(g: Guest, question: string, answer: string) {
+    if (!question) return
+    const entry: TranscriptEntry = { atMin: this.sim?.clockMin ?? 0, q: question, a: answer }
+    this.transcripts = { ...this.transcripts, [g.id]: [...(this.transcripts[g.id] ?? []), entry] }
+  }
+
+  private replaceLatestTranscript(guestId: string, answer: string) {
+    const entries = [...(this.transcripts[guestId] ?? [])]
+    const latest = entries.at(-1)
+    if (!latest) return
+    entries[entries.length - 1] = { ...latest, a: answer }
+    this.transcripts = { ...this.transcripts, [guestId]: entries }
+  }
+
+  private finishNarrativeThread(g: Guest, threadId: string, choice: StoryChoice, status: ThreadStatus, question: string) {
+    if (!this.interview || !this.narrative) return
+    const character = this.narrative.characters[g.id]
+    // A bespoke, thread-specific wrap-up takes precedence over the generic
+    // status/intent lines so no two threads conclude on the same words.
+    const closing = choice.closing
+      ? { line: choice.closing.line, emotion: choice.closing.emotion }
+      : this.closingLineFor(g, status, choice.intent)
+    const baseConclusion = this.conclusionFor(g, threadId, status, choice.intent)
+    const conclusion = choice.closing?.summary && baseConclusion
+      ? { ...baseConclusion, summary: choice.closing.summary }
+      : baseConclusion
+    this.interview = {
+      ...this.interview,
+      activeThreadId: threadId,
+      threadStatus: status,
+      lastQuestion: question,
+      lastAnswer: `“${closing.line}”`,
+      emotion: closing.emotion,
+      questions: [],
+      concluded: true,
+      conclusion,
+      responseSource: 'builtin',
+      trust: character.trust,
+      pressure: character.pressure,
+      personalEndingTitle: this.personalEndingTitle(character),
+    }
+    this.recordTranscript(g, question, closing.line)
+    this.emit()
+  }
+
+  /** A final in-character statement from the guest that closes the thread meaningfully. */
+  private closingLineFor(_g: Guest, status: ThreadStatus, intent?: StoryChoice['intent']): { line: string; emotion: ConversationEmotion } {
+    if (status === 'closed-personal') {
+      return { line: `That is as far as I will go, and no further. Do not raise it with me again.`, emotion: 'angry' }
+    }
+    if (status === 'paused' || intent === 'withdraw') {
+      return { line: `Then we will leave it there for now. I have told you what I can bear to, Detective.`, emotion: 'worried' }
+    }
+    if (status === 'rerouted') {
+      return { line: `I have said all I intend to say. If you need more, you will have to find it without my help.`, emotion: 'suspicious' }
+    }
+    if (status === 'resolved' || status === 'spent') {
+      return { line: `There. That is the whole of it — every last detail. Make of it what you will.`, emotion: 'thoughtful' }
+    }
+    return { line: `That is everything I can tell you on the matter. The rest is for the record to settle.`, emotion: 'neutral' }
+  }
+
+  private conclusionFor(g: Guest, threadId: string, status: ThreadStatus, intent?: StoryChoice['intent']): InterviewState['conclusion'] {
+    const thread = NARRATIVE_THREADS[threadId]
+    if (thread?.kind === 'evidence' && status === 'resolved') {
+      const label = EVIDENCE_BY_ID[thread.evidenceId]?.label ?? 'This trace'
+      const how = thread.revealMechanism ? MECHANISM_SUMMARY[thread.revealMechanism] : 'the details line up'
+      return {
+        kind: 'evidence',
+        evidenceId: thread.evidenceId,
+        summary: `${label} now links to ${g.name} — ${how}. It places them, not proves them guilty.`,
+      }
+    }
+    // Evidence threads that end without a reveal clear this guest of the trace:
+    // the investigative act came up empty, so nothing is recorded against them.
+    if (thread?.kind === 'evidence' && status === 'spent') {
+      const label = EVIDENCE_BY_ID[thread.evidenceId]?.label ?? 'This trace'
+      return {
+        kind: 'cleared',
+        evidenceId: thread.evidenceId,
+        summary: `${label} does not link to ${g.name} — the comparison comes up empty. No association is recorded against them.`,
+      }
+    }
+    if (status === 'paused' || intent === 'withdraw') {
+      return { kind: 'withdrawn', summary: `You leave this subject without erasing its progress. ${g.name} may be approached again.` }
+    }
+    if (status === 'closed-personal') {
+      return { kind: 'closed', summary: `${g.name} has shut down this personal route. External corroboration remains available.` }
+    }
+    if (status === 'rerouted') {
+      return { kind: 'rerouted', summary: `${g.name}'s testimony is unavailable; a pre-seeded artifact or confidant now carries the unresolved fact.` }
+    }
+    // Personal asides are colour, not case material — they conclude as a note in
+    // the record rather than a testable "subject."
+    if (threadId.includes(':aside:')) {
+      return { kind: 'information', summary: `A personal aside from ${g.name} — noted for colour. It settles nothing about the case.` }
+    }
+    if (status === 'resolved' || status === 'spent') {
+      return { kind: 'resolved', summary: `This subject is concluded. Its testable details remain in the case record.` }
+    }
+    return { kind: 'information', summary: `This detail can be checked against the case record without establishing guilt.` }
+  }
+
+  private revealGuestEvidence(g: Guest, evidenceId: EvidenceId) {
     if (g.revealedEvidenceIds.includes(evidenceId)) return
     const evidence = EVIDENCE_BY_ID[evidenceId]
     if (!evidence) return
@@ -713,7 +994,33 @@ export class Game {
     this.pushLog(`Evidence association discovered — ${g.name}: ${evidence.label}.`, 'info')
   }
 
-  private showEvidenceDiscovery(evidenceId: string, label: string, guestName: string, kind: 'association' | 'physical') {
+  recoverNarrativeFallback(guestId: string, threadId: string) {
+    if (!this.narrative || !this.sim) return
+    const guest = this.sim.byId(guestId)
+    const beat = getLegalBeat(this.narrative, guestId, threadId)
+    if (!guest || !beat?.node.deathSafe || !beat.choices[0]) return
+    const beforeAssociations = new Set(this.narrative.revealedAssociations)
+    this.narrative = applyStoryChoice(this.narrative, guestId, threadId, beat.choices[0].id)
+    for (const association of this.narrative.revealedAssociations) {
+      if (beforeAssociations.has(association)) continue
+      const [archetypeId, evidenceId] = association.split(':')
+      if (archetypeId === guest.archetypeId && EVIDENCE_BY_ID[evidenceId as EvidenceId]) {
+        this.revealGuestEvidence(guest, evidenceId as EvidenceId)
+      }
+    }
+    const thread = NARRATIVE_THREADS[threadId]
+    this.pushLead(
+      'evidence',
+      `Recovered record — ${guest.name}`,
+      thread?.kind === 'evidence'
+        ? `${EVIDENCE_BY_ID[thread.evidenceId]?.label ?? 'A trace'} still links to ${guest.name} through a recovered record — ${thread.revealMechanism ? MECHANISM_SUMMARY[thread.revealMechanism] : 'the details line up'}. It does not establish guilt.`
+        : `A pre-seeded record preserves part of ${guest.name}'s unfinished account.`,
+      true,
+    )
+    this.emit()
+  }
+
+  private showEvidenceDiscovery(evidenceId: EvidenceId, label: string, guestName: string, kind: 'association' | 'physical') {
     this.evidenceDiscovery = {
       id: ++this.evidenceDiscoveryN,
       guestName,
@@ -733,6 +1040,7 @@ export class Game {
   endInterview() {
     if (this.phase !== 'interview') return
     this.interviewRequestN++
+    this.beatVisibility.invalidate()
     this.interview = null
     this.phase = 'playing'
     this.audio.onGameMinute(this.sim?.clockMin ?? 0, this.settings.speed, true)
@@ -741,8 +1049,8 @@ export class Game {
 
   // ------------------------------------------------------------- accusation
 
-  accuse(guestId: string) {
-    if (!this.sim) return
+  accuse(guestId: string, disposition: ArchiveDisposition = 'seal') {
+    if (!this.sim || !this.narrative) return
     const sim = this.sim
     const accused = sim.byId(guestId)
     const killer = sim.byId(sim.killerId)
@@ -754,28 +1062,60 @@ export class Game {
       bodiesFound: sim.bodiesFound(),
     }
     this.audio.stinger('accuse')
-    if (accused.isKiller) {
-      this.endInfo = {
-        outcome: 'win',
-        killerName: killer.name,
-        killerArchetype: archetypeOf(killer).name,
-        accusedName: accused.name,
-        stats,
-      }
-      this.phase = 'won'
-      setTimeout(() => this.audio.stinger('win'), 900)
-    } else {
-      this.endInfo = {
-        outcome: 'wrong',
-        killerName: killer.name,
-        killerArchetype: archetypeOf(killer).name,
-        accusedName: accused.name,
-        stats,
-      }
-      this.phase = 'lost'
-      setTimeout(() => this.audio.stinger('lose'), 900)
-    }
+    this.narrative = setDisposition(this.narrative, disposition)
+    const evaluation = evaluateCaseEnding(this.narrative, {
+      accusedGuestId: accused.id,
+      suspectedGuestId: accused.id,
+      disposition,
+      attackPrevented: this.narrative.counterTrapSucceeded,
+      trapCaughtGuestId: this.narrative.counterTrapSucceeded ? accused.id : null,
+    })
+    this.endInfo = this.buildEndInfo(
+      evaluation,
+      accused.isKiller ? 'win' : 'wrong',
+      stats,
+      killer,
+      accused.name,
+    )
+    this.phase = accused.isKiller ? 'won' : 'lost'
+    setTimeout(() => this.audio.stinger(accused.isKiller ? 'win' : 'lose'), 900)
     this.emit()
+  }
+
+  private buildEndInfo(
+    evaluation: CaseEndingEvaluation,
+    outcome: EndInfo['outcome'],
+    stats: EndInfo['stats'],
+    killer: Guest,
+    accusedName?: string,
+  ): EndInfo {
+    const personalEpilogues = Object.entries(evaluation.personalEndingIds).map(([guestId, endingId]) => {
+      const character = this.narrative!.characters[guestId]
+      const baseId = endingId.replace(/:legacy$/, '')
+      const ending = DOSSIERS[character.archetypeId].endings.find(candidate => candidate.id === baseId)
+      const legacy = endingId.endsWith(':legacy')
+      const unresolved = baseId === `${character.archetypeId}:ending:unresolved`
+      return {
+        guestName: character.displayName,
+        title: ending ? `${ending.title}${legacy ? ' — Legacy' : ''}` : `Unresolved${legacy ? ' — Legacy' : ''}`,
+        text: ending?.text ?? (unresolved && legacy
+          ? `${character.displayName} died before their private stakes were addressed. Seeded artifacts preserve case facts, but no personal resolution was earned.`
+          : `${character.displayName}'s private stakes were never addressed, so the night closes without inventing a personal resolution.`),
+      }
+    })
+    return {
+      outcome,
+      narrativeOutcome: evaluation.outcome,
+      disposition: evaluation.disposition,
+      proof: evaluation.proof,
+      missingProof: evaluation.missingProof,
+      circuitCount: evaluation.corroboratedCircuitCount,
+      personalEpilogues,
+      killerName: killer.name,
+      killerArchetype: archetypeOf(killer).name,
+      accusedName,
+      stats,
+    }
   }
 
   // ------------------------------------------------------------- loop
@@ -831,11 +1171,13 @@ export class Game {
       this.guestRevealOpacity = 0
       sim.playerRoom = r
       this.world.focusRoom(r)
+      this.audio.setRoomAmbience(r)
       // Record newly reported bodies, then play the sting the first time the
       // detective personally enters a room containing each body. This also
       // covers the opening victim and bodies an NPC reported first.
       const found = sim.playerDiscovers(r)
       for (const body of found) {
+        this.syncNarrativeBodyDiscovery(body)
         this.world.markBodyRoom(body.deathRoom!)
         this.pushLog(`You found ${body.name}'s body.`, 'danger')
         this.pushLead('discovery', 'You', `You discovered ${body.name}'s body in the ${ROOM_BY_ID[r].name} (~${fmtTime(body.diedAtMin)}).`)
@@ -863,16 +1205,12 @@ export class Game {
   private advanceSimulation(dt: number, movementLockedGuestId?: string) {
     const sim = this.sim!
     sim.advance(dt, this.settings.speed, movementLockedGuestId)
+    if (this.narrative) this.narrative = setNarrativeClock(this.narrative, sim.clockMin)
 
     // endings
     if (sim.clockMin >= NIGHT_LENGTH_MIN) {
       const killer = sim.byId(sim.killerId)!
-      this.endInfo = {
-        outcome: 'sunrise',
-        killerName: killer.name,
-        killerArchetype: archetypeOf(killer).name,
-        stats: { interviews: this.interviewsHeld, leads: this.leads.length, timeMin: sim.clockMin, bodiesFound: sim.bodiesFound() },
-      }
+      this.endInfo = this.buildSilenceEndInfo('sunrise', killer)
       this.audio.stinger('lose')
       this.phase = 'lost'
       this.emit()
@@ -880,16 +1218,30 @@ export class Game {
     }
     if (sim.allDead()) {
       const killer = sim.byId(sim.killerId)!
-      this.endInfo = {
-        outcome: 'wiped',
-        killerName: killer.name,
-        killerArchetype: archetypeOf(killer).name,
-        stats: { interviews: this.interviewsHeld, leads: this.leads.length, timeMin: sim.clockMin, bodiesFound: sim.bodiesFound() },
-      }
+      this.endInfo = this.buildSilenceEndInfo('wiped', killer)
       this.audio.stinger('lose')
       this.phase = 'lost'
       this.emit()
     }
+  }
+
+  private buildSilenceEndInfo(outcome: 'sunrise' | 'wiped', killer: Guest): EndInfo {
+    if (!this.narrative || !this.sim) throw new Error('Cannot end an uninitialized case')
+    const disposition: ArchiveDisposition = this.narrative.disposition ?? 'seal'
+    this.narrative = setDisposition(this.narrative, disposition)
+    const evaluation = evaluateCaseEnding(this.narrative, {
+      accusedGuestId: null,
+      suspectedGuestId: null,
+      disposition,
+      attackPrevented: false,
+      trapCaughtGuestId: null,
+    })
+    return this.buildEndInfo(evaluation, outcome, {
+      interviews: this.interviewsHeld,
+      leads: this.leads.length,
+      timeMin: this.sim.clockMin,
+      bodiesFound: this.sim.bodiesFound(),
+    }, killer)
   }
 
   private syncActors() {
@@ -1012,6 +1364,7 @@ export class Game {
         guest: guest?.name,
         archetype: guest?.archetypeId,
         answer: this.interview!.lastAnswer,
+        conclusion: this.interview!.conclusion,
         choices: this.interview!.questions.map(q => q.label),
         concluded: this.interview!.concluded,
       }

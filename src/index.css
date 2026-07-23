@@ -165,12 +165,17 @@
     content: '';
     position: absolute;
     z-index: -1;
-    inset: 4%;
-    background: rgba(13, 12, 18, 0.97);
+    inset: 6%;
+    padding: 2rem;
+    background: rgba(13, 12, 18, 0.8);
   }
 
   .gothic-frame--chat::before {
-    inset: 3.5%;
+    inset: 10% 7%;
+  }
+
+  .dialogue-window-content {
+    padding: 11% 15%;
   }
 
   .gothic-frame > :not(.gothic-frame-sprite) {
@@ -189,25 +194,28 @@
     user-select: none;
   }
 
+  .gothic-frame--chat > .gothic-frame-sprite {
+    inset: 1.25%;
+    width: 97.5%;
+    height: 97.5%;
+  }
+
   .hud-gothic-map-frame {
     display: flex;
     overflow: hidden;
-    padding: 34px;
-    background: rgba(7, 6, 10, 0.88);
+    padding: 14% 6%;
     filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.72));
   }
 
   .hud-gothic-action-frame {
     overflow: hidden;
     padding: 18px;
-    background: rgba(7, 6, 10, 0.9);
     filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.65));
   }
 
   .title-gothic-frame,
   .hud-gothic-info-frame,
   .hud-gothic-feed-frame {
-    background: rgba(7, 6, 10, 0.86);
     filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.72));
   }
 
@@ -226,6 +234,27 @@
 
   .designer-frame-surface {
     isolation: isolate;
+  }
+
+  .designer-frame-surface::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 6%;
+    background: rgba(7, 6, 10, 0.9);
+  }
+
+  .title-gothic-frame::before {
+    inset: 5.5%;
+    background: rgba(7, 6, 10, 0.86);
+  }
+
+  .hud-gothic-action-frame::before {
+    background: rgba(7, 6, 10, 0.6);
+  }
+
+  .hud-gothic-map-frame::before {
+    background: rgba(7, 6, 10, 0.68);
   }
 
   .designer-frame-surface > :not(.gothic-frame-sprite) {

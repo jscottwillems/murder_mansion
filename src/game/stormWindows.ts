@@ -40,6 +40,7 @@ export interface StormWindowHandles {
 
 const DEFAULT_WALL_HEIGHT = 1.85
 const DEFAULT_WALL_THICKNESS = 0.35
+const DEFAULT_WINDOW_HEIGHT = 1.12
 const STATE_COLORS: Record<StormWindowState, number> = {
   'dark-rain': 0x101a2c,
   preflash: 0x263a5a,
@@ -104,9 +105,11 @@ function stateFor(level: number, time: number, phase: number): StormWindowState 
  */
 export function createStormWindow(roomGroup: THREE.Group, options: StormWindowOptions): StormWindowHandles {
   const width = options.width ?? 2.2
-  const height = options.height ?? 1.12
-  const sillHeight = options.sillHeight ?? 0.59
   const wallHeight = options.wallHeight ?? DEFAULT_WALL_HEIGHT
+  // Grow the default glass with the architecture. Explicitly authored window
+  // heights remain exact overrides, while the sill keeps its established line.
+  const height = options.height ?? DEFAULT_WINDOW_HEIGHT * (wallHeight / DEFAULT_WALL_HEIGHT)
+  const sillHeight = options.sillHeight ?? 0.59
   const wallThickness = options.wallThickness ?? DEFAULT_WALL_THICKNESS
   const count = Math.max(6, Math.floor(options.rainStreaks ?? 22))
   const seed = options.seed ?? options.side.charCodeAt(0) * 7919
@@ -185,8 +188,10 @@ export function updateStormWindow(window: StormWindowHandles, time: number, ligh
   const state = stateFor(level, time, window.phase)
   window.state = state
   window.materials.sky.color.setHex(STATE_COLORS[state])
-  window.materials.sky.opacity = state === 'dark-rain' ? 0.9 : 1
-  window.materials.sky.transparent = state === 'dark-rain'
+  // The room wall is continuous behind this inset plane. Keep the sky backing
+  // opaque so the masonry/wallpaper cannot ghost through the dark glass.
+  window.materials.sky.opacity = 1
+  window.materials.sky.transparent = false
   window.materials.lightning.opacity = state === 'flash' ? 0.78 + level * 0.22 : 0
   window.materials.rain.opacity = state === 'flash' ? 0.82 : state === 'preflash' ? 0.63 : 0.5
   window.flashLight.intensity = state === 'preflash' ? 0.7 : level * 13

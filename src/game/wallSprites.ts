@@ -3,7 +3,8 @@ import type { RoomId } from './types'
 
 const TEXTURE_WIDTH = 128
 const TEXTURE_HEIGHT = 64
-const textureCache = new Map<RoomId, THREE.CanvasTexture>()
+const textureCache = new Map<RoomId, THREE.Texture>()
+let exteriorTexture: THREE.Texture | null = null
 
 type WallPainter = (ctx: CanvasRenderingContext2D) => void
 
@@ -167,9 +168,24 @@ const PAINTERS: Record<RoomId, WallPainter> = {
 }
 
 /** Returns one shared, repeating pixel-art wall texture per room. */
-export function getWallTexture(room: RoomId): THREE.CanvasTexture {
+export function getWallTexture(room: RoomId): THREE.Texture {
   const cached = textureCache.get(room)
   if (cached) return cached
+
+  if (room === 'conservatory') {
+    const texture = new THREE.TextureLoader().load(
+      `${import.meta.env.BASE_URL}assets/walls/conservatory-wall.png`,
+    )
+    texture.name = `wall-${room}`
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.wrapS = THREE.RepeatWrapping
+    texture.wrapT = THREE.RepeatWrapping
+    texture.magFilter = THREE.NearestFilter
+    texture.minFilter = THREE.LinearMipmapLinearFilter
+    texture.generateMipmaps = true
+    textureCache.set(room, texture)
+    return texture
+  }
 
   const canvas = document.createElement('canvas')
   canvas.width = TEXTURE_WIDTH
@@ -193,9 +209,27 @@ export function getWallTexture(room: RoomId): THREE.CanvasTexture {
   return texture
 }
 
+/** Shared wooden siding used only on the outward-facing side of room walls. */
+export function getExteriorWallTexture(): THREE.Texture {
+  if (exteriorTexture) return exteriorTexture
+
+  exteriorTexture = new THREE.TextureLoader().load(
+    `${import.meta.env.BASE_URL}assets/walls/exterior-shiplap.png`,
+  )
+  exteriorTexture.name = 'wall-exterior-shiplap'
+  exteriorTexture.colorSpace = THREE.SRGBColorSpace
+  exteriorTexture.wrapS = THREE.RepeatWrapping
+  exteriorTexture.wrapT = THREE.RepeatWrapping
+  exteriorTexture.magFilter = THREE.NearestFilter
+  exteriorTexture.minFilter = THREE.LinearMipmapLinearFilter
+  exteriorTexture.generateMipmaps = true
+  return exteriorTexture
+}
+
 /** Disposes generated GPU textures, primarily for renderer teardown or hot reload. */
 export function disposeWallTextures() {
   for (const texture of textureCache.values()) texture.dispose()
   textureCache.clear()
+  exteriorTexture?.dispose()
+  exteriorTexture = null
 }
-

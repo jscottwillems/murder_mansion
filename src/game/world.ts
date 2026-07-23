@@ -3,11 +3,13 @@
 // rain, lightning, dust motes, lamplight.
 import * as THREE from 'three'
 import type { RoomId } from './types'
-import { ROOMS, ROOM_HALF, ROOM_STEP, PASS_HALF, roomCenter } from './data'
+import { DINING_BANQUET_FOOTPRINT, ROOMS, ROOM_HALF, ROOM_STEP, PASS_HALF, roomCenter } from './data'
 import { atlasFrame, CHARACTER_ATLAS, NPC_ATLAS_V3 } from './characterAtlas'
-import { getWallTexture, disposeWallTextures } from './wallSprites'
+import { getExteriorWallTexture, getWallTexture, disposeWallTextures } from './wallSprites'
 import { createStormWindow, updateStormWindows, type ExteriorWall, type StormWindowHandles } from './stormWindows'
 import { createCellarSconces, type CellarSconces } from './cellarSconces'
+import { createConservatoryFountain, type ConservatoryFountain } from './conservatoryFountain'
+import { createStudyFireplace, type StudyFireplace } from './studyFireplace'
 import { disposeHallwayTextures, getHallwayTexture, hallwayConnectionBetween, HALLWAY_CONNECTIONS, type HallwayVariant } from './hallwaySprites'
 import { createHallwayWalls, type HallwayWalls, type HallwayWallStyle } from './hallwayWalls'
 
@@ -31,6 +33,7 @@ interface Actor {
   outlined: boolean
   spriteRoot: THREE.Group | null
   spriteMaterial: THREE.MeshBasicMaterial | null
+  shadow: THREE.Mesh | null
   spriteFlip: number
   spriteScale: number
   spriteAtlas: boolean
@@ -54,8 +57,25 @@ interface CeilingInsect {
   kind: 'fly' | 'moth'
 }
 
+interface OccludingWall {
+  mesh: THREE.Mesh
+  materials: THREE.MeshStandardMaterial[]
+  edgeMaterial: THREE.LineBasicMaterial
+  opacity: number
+  occluded: boolean
+}
+
+interface OccludingFixture {
+  sprite: THREE.Sprite
+  material: THREE.SpriteMaterial
+  opacity: number
+  occluded: boolean
+}
+
 const PIXEL_SCALE = 0.58 // render-target resolution fraction
-const WALL_H = 1.85
+// Character cutouts are 2.45 units tall. Keep the shared room/hallway wall
+// line above them so doorway crowns frame actors instead of crossing their heads.
+const WALL_H = 2.8
 const WALL_T = 0.35
 // A lower, more forward isometric view keeps the full-body portrait sprites
 // readable instead of visually foreshortening them against the floor.
@@ -66,7 +86,12 @@ const ROOM_EDGE_FOCUS_START = 0.52
 const ROOM_EDGE_FOCUS_END = 1.1
 const ROOM_EDGE_PLAYER_WEIGHT = 0.72
 const PASSAGE_FOCUS_HALF = PASS_HALF - 0.15
-const CONVERSATION_FOCUS_X_OFFSET = -0.75
+const CONVERSATION_FOCUS_X_OFFSET = -3
+const CONVERSATION_FOCUS_Z_OFFSET = 5.5
+const OCCLUDED_WALL_OPACITY = 0.18
+const WALL_FADE_SPEED = 8
+const OCCLUDED_FIXTURE_OPACITY = 0.2
+const FIXTURE_FADE_SPEED = 9
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)))
@@ -91,8 +116,13 @@ export class MansionScene {
   private edgeMat = new THREE.LineBasicMaterial({ color: 0x08070a, transparent: true, opacity: 0.42 })
   private roomLights = new Map<RoomId, THREE.PointLight[]>()
   private stormWindows: StormWindowHandles[] = []
+  private studyFireplace: StudyFireplace | null = null
   private cellarSconces: CellarSconces | null = null
+  private conservatoryFountain: ConservatoryFountain | null = null
   private hallwayWalls: HallwayWalls[] = []
+  private southernWalls: OccludingWall[] = []
+  private hangingFixtures: OccludingFixture[] = []
+  private wallRaycaster = new THREE.Raycaster()
   private ceilingInsects: CeilingInsect[] = []
   private materialCache = new Map<string, THREE.MeshStandardMaterial>()
   private floorTextureCache = new Map<string, THREE.Texture>()
@@ -159,8 +189,15 @@ export class MansionScene {
     this.renderer.dispose()
     this.rt.dispose()
     this.edgeMat.dispose()
+    for (const wall of this.southernWalls) {
+      for (const material of wall.materials) material.dispose()
+      wall.edgeMaterial.dispose()
+    }
+    for (const fixture of this.hangingFixtures) fixture.material.dispose()
     disposeWallTextures()
     disposeHallwayTextures()
+    this.studyFireplace?.dispose()
+    this.conservatoryFountain?.dispose()
     for (const hallway of this.hallwayWalls) hallway.dispose()
     this.container.removeChild(this.renderer.domElement)
     this.container.removeChild(this.labelLayer)
@@ -238,9 +275,18 @@ export class MansionScene {
 
       // walls with door gaps
       this.buildWalls(g, r.id, r.col, r.row)
-      this.buildStormWindows(g, r.col, r.row)
+      this.buildStormWindows(g, r.id, r.col, r.row)
 
       this.buildRoomLighting(g, r.id, r.lightColor, r.lightIntensity)
+
+      if (r.id === 'study') this.buildStudyDesk(g)
+
+      if (r.id === 'dining') this.buildDiningFurniture(g)
+
+      if (r.id === 'conservatory') {
+        this.conservatoryFountain = createConservatoryFountain()
+        g.add(this.conservatoryFountain.group)
+      }
 
       if (r.id === 'cellar') {
         this.cellarSconces = createCellarSconces()
@@ -314,13 +360,18 @@ export class MansionScene {
     }))
   }
 
-  private buildStormWindows(g: THREE.Group, col: number, row: number) {
+  private buildStormWindows(g: THREE.Group, room: RoomId, col: number, row: number) {
     const sides: ExteriorWall[] = []
     if (row === 0) sides.push('north')
     if (row === 2) sides.push('south')
     if (col === 0) sides.push('west')
     if (col === 2) sides.push('east')
     for (const [index, side] of sides.entries()) {
+      if (room === 'study' && side === 'north') {
+        this.studyFireplace = createStudyFireplace(WALL_T)
+        g.add(this.studyFireplace.group)
+        continue
+      }
       this.stormWindows.push(createStormWindow(g, { side, wallHeight: WALL_H, wallThickness: WALL_T, seed: col * 101 + row * 17 + index * 7919 }))
     }
   }
@@ -328,7 +379,9 @@ export class MansionScene {
   /** Authored practicals keep each room's pools of light tied to its purpose. */
   private buildRoomLighting(g: THREE.Group, room: RoomId, color: number, intensity: number) {
     const layouts: Record<RoomId, Array<[number, number, number]>> = {
-      study: [[0, -0.85, 1.2]],
+      // Keep the pendant clear of the grand fireplace's silhouette from the
+      // game's primary camera angle.
+      study: [[-1.85, -0.6, 0.35], [1.85, -0.6, 0.35]],
       gallery: [[0, -0.7, 1.15]],
       conservatory: [[-2.1, 1.4, 0.72], [2.15, -1.45, 0.68]],
       kitchen: [[-2.2, -1.8, 0.72], [2.25, 2.0, 0.66]],
@@ -373,13 +426,138 @@ export class MansionScene {
     texture.colorSpace = THREE.SRGBColorSpace
     texture.minFilter = THREE.LinearMipmapLinearFilter
     texture.magFilter = THREE.NearestFilter
-    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, alphaTest: 0.04, toneMapped: false })
+    const overlaysDiningTable = asset === 'dining-ceiling-chandelier'
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      alphaTest: 0.04,
+      toneMapped: false,
+      depthTest: !overlaysDiningTable,
+      depthWrite: false,
+    })
     const sprite = new THREE.Sprite(material)
     sprite.scale.set(height, height, 1)
     sprite.position.set(x, y, z)
     sprite.center.set(0.5, 0.08)
-    sprite.renderOrder = 3
+    // Hanging fixtures need to composite in front of actor cutouts when their
+    // camera-space silhouettes overlap. The occlusion pass below then fades
+    // only the obstructing fixture so the character remains readable.
+    sprite.renderOrder = 5
     g.add(sprite)
+    this.hangingFixtures.push({ sprite, material, opacity: 1, occluded: false })
+  }
+
+  /** The Study's main work surface is a single authored cutout, grounded near
+   * the north wall so its detailed desktop remains readable from the game camera. */
+  private buildStudyDesk(g: THREE.Group) {
+    const height = 1.9
+    const width = height * (1620 / 971)
+    const texture = new THREE.TextureLoader().load(
+      `${import.meta.env.BASE_URL}assets/decor/sprites/study/partners-desk.png`,
+    )
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.minFilter = THREE.LinearMipmapLinearFilter
+    texture.magFilter = THREE.NearestFilter
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      alphaTest: 0.04,
+      toneMapped: false,
+      side: THREE.DoubleSide,
+    })
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material)
+    plane.name = 'study-partners-desk'
+    plane.position.y = height / 2
+    plane.renderOrder = 2
+
+    // Lock the art to the game's authored isometric viewing angle. Unlike a
+    // THREE.Sprite, this plane does not swivel as the camera tracks the player.
+    const fixedFurniture = new THREE.Group()
+    fixedFurniture.position.set(-2.75, 0.025, -2.35)
+    fixedFurniture.rotation.x = -Math.atan2(CAMERA_HEIGHT, CAMERA_Z_OFFSET)
+    fixedFurniture.add(plane)
+    g.add(fixedFurniture)
+
+    const shadowCanvas = document.createElement('canvas')
+    shadowCanvas.width = 128
+    shadowCanvas.height = 64
+    const ctx = shadowCanvas.getContext('2d')!
+    const gradient = ctx.createRadialGradient(64, 32, 4, 64, 32, 61)
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0.94)')
+    gradient.addColorStop(0.62, 'rgba(0, 0, 0, 0.58)')
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, 128, 64)
+    const shadowTexture = new THREE.CanvasTexture(shadowCanvas)
+    const shadow = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.25, 1.45),
+      new THREE.MeshBasicMaterial({
+        map: shadowTexture,
+        transparent: true,
+        opacity: 0.92,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    )
+    shadow.name = 'study-partners-desk-shadow'
+    shadow.rotation.x = -Math.PI / 2
+    shadow.position.set(-2.75, 0.018, -2.72)
+    shadow.renderOrder = 1
+    g.add(shadow)
+  }
+
+  /** The dining room's two hero furnishings are authored as one-view cutouts.
+   * Keeping them on fixed planes preserves the painted isometric perspective
+   * while the camera follows the detective around the room. */
+  private buildDiningFurniture(g: THREE.Group) {
+    const addFixedCutout = (
+      asset: string,
+      name: string,
+      width: number,
+      height: number,
+      x: number,
+      z: number,
+      renderOrder = 1,
+      tiltToFloor = true,
+    ) => {
+      const texture = new THREE.TextureLoader().load(
+        `${import.meta.env.BASE_URL}assets/decor/sprites/dining/${asset}.png`,
+      )
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.minFilter = THREE.LinearMipmapLinearFilter
+      texture.magFilter = THREE.NearestFilter
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.04,
+        toneMapped: false,
+        side: THREE.DoubleSide,
+      })
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material)
+      plane.name = name
+      plane.position.y = height / 2
+      plane.renderOrder = renderOrder
+
+      const fixedFurniture = new THREE.Group()
+      fixedFurniture.position.set(x, 0.025, z)
+      if (tiltToFloor) fixedFurniture.rotation.x = -Math.atan2(CAMERA_HEIGHT, CAMERA_Z_OFFSET)
+      fixedFurniture.add(plane)
+      g.add(fixedFurniture)
+    }
+
+    // Keep the banquet's x center indexed to the chandelier while setting the
+    // furniture slightly south so the north-side guests retain circulation.
+    addFixedCutout(
+      'banquet-table-chairs',
+      'dining-banquet-table',
+      DINING_BANQUET_FOOTPRINT.halfWidth * 2,
+      3.6,
+      DINING_BANQUET_FOOTPRINT.x,
+      DINING_BANQUET_FOOTPRINT.z,
+      2,
+      false,
+    )
+    addFixedCutout('grandfather-clock-v2', 'dining-grandfather-clock', 1.22, 2.58, 3.62, -4.05, 2, false)
   }
 
   private buildCeilingInsects(g: THREE.Group, kind: 'fly' | 'moth', x: number, y: number, z: number, count: number) {
@@ -414,17 +592,35 @@ export class MansionScene {
   }
 
   private buildWalls(g: THREE.Group, room: RoomId, col: number, row: number) {
-    const m = new THREE.MeshStandardMaterial({
+    const sharedMaterial = new THREE.MeshStandardMaterial({
       map: getWallTexture(room),
       color: 0xffffff,
       roughness: 0.88,
       metalness: 0.04,
     })
+    const sharedExteriorMaterial = new THREE.MeshStandardMaterial({
+      map: getExteriorWallTexture(),
+      color: 0xffffff,
+      roughness: 0.94,
+      metalness: 0.01,
+    })
     const gap = PASS_HALF + 0.6 // door half-width
-    const mk = (w: number, d: number, x: number, z: number) => {
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(w, WALL_H, d), m)
+    const mk = (w: number, d: number, x: number, z: number, outsideFace: 0 | 1 | 4 | 5, southern = false) => {
+      const interior = southern ? sharedMaterial.clone() : sharedMaterial
+      const exterior = southern ? sharedExteriorMaterial.clone() : sharedExteriorMaterial
+      const materials = Array<THREE.MeshStandardMaterial>(6).fill(interior)
+      materials[outsideFace] = exterior
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(w, WALL_H, d), materials)
       wall.position.set(x, WALL_H / 2, z)
-      this.addBoxEdges(wall)
+      if (southern) {
+        interior.transparent = true
+        exterior.transparent = true
+        const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x08070a, transparent: true, opacity: 0.42 })
+        wall.add(new THREE.LineSegments(new THREE.EdgesGeometry(wall.geometry), edgeMaterial))
+        this.southernWalls.push({ mesh: wall, materials: [interior, exterior], edgeMaterial, opacity: 1, occluded: false })
+      } else {
+        this.addBoxEdges(wall)
+      }
       g.add(wall)
     }
     const L = ROOM_HALF
@@ -438,21 +634,23 @@ export class MansionScene {
     for (const s of sides) {
       if (s.horiz) {
         const z = s.sign * L
+        const outsideFace = s.sign < 0 ? 5 : 4
         if (s.has) {
           const seg = L - gap
-          mk(seg, WALL_T, -(gap + seg / 2), z)
-          mk(seg, WALL_T, gap + seg / 2, z)
+          mk(seg, WALL_T, -(gap + seg / 2), z, outsideFace, s.sign > 0)
+          mk(seg, WALL_T, gap + seg / 2, z, outsideFace, s.sign > 0)
         } else {
-          mk(L * 2, WALL_T, 0, z)
+          mk(L * 2, WALL_T, 0, z, outsideFace, s.sign > 0)
         }
       } else {
         const x = s.sign * L
+        const outsideFace = s.sign < 0 ? 1 : 0
         if (s.has) {
           const seg = L - gap
-          mk(WALL_T, seg, x, -(gap + seg / 2))
-          mk(WALL_T, seg, x, gap + seg / 2)
+          mk(WALL_T, seg, x, -(gap + seg / 2), outsideFace)
+          mk(WALL_T, seg, x, gap + seg / 2, outsideFace)
         } else {
-          mk(WALL_T, L * 2, x, 0)
+          mk(WALL_T, L * 2, x, 0, outsideFace)
         }
       }
     }
@@ -653,6 +851,8 @@ export class MansionScene {
     }
     let spriteRoot: THREE.Group | null = null
     let spriteMaterial: THREE.MeshBasicMaterial | null = null
+    let actorShadow: THREE.Mesh | null = null
+    const spriteScale = isDetective ? 1 : (NPC_ATLAS_V3.scaleByArchetype[archetypeId ?? ''] ?? 1)
     if (isDetective || archetypeId) {
       // The portrait cutouts are the actual full-body character art used by the
       // journal. Keep the old geometry assembled (the animation API still
@@ -690,14 +890,19 @@ export class MansionScene {
       sprite.position.y = 2.45 / 2 + 0.01 - npcBaselineOffset
       sprite.renderOrder = 4
       spriteRoot.add(sprite)
-      const shadow = new THREE.Mesh(
+      actorShadow = new THREE.Mesh(
         new THREE.CircleGeometry(0.43, 16),
         new THREE.MeshBasicMaterial({ color: 0x050407, transparent: true, opacity: 0.42, depthWrite: false }),
       )
-      shadow.scale.y = 0.42
-      shadow.rotation.x = -Math.PI / 2
-      shadow.position.y = 0.018
-      spriteRoot.add(shadow)
+      // Keep the floor shadow in actor space. The portrait root continually
+      // billboards toward the camera and flips for directional art; parenting
+      // the shadow there makes its floor registration vary with those visual
+      // transforms as the camera tracks north/south through a room.
+      actorShadow.scale.set(spriteScale, spriteScale * 0.42, 1)
+      actorShadow.rotation.x = -Math.PI / 2
+      actorShadow.position.y = 0.018
+      actorShadow.renderOrder = 3
+      group.add(actorShadow)
       group.add(spriteRoot)
     }
     this.scene.add(group)
@@ -707,9 +912,8 @@ export class MansionScene {
     label.style.cssText = `position:absolute;transform:translate(-50%,-100%);font:600 11px Georgia,serif;color:${isDetective ? '#e8d8a0' : '#d8d0c0'};text-shadow:0 1px 3px #000,0 0 6px #000;white-space:nowrap;letter-spacing:0.04em;`
     this.labelLayer.appendChild(label)
 
-    const spriteScale = isDetective ? 1 : (NPC_ATLAS_V3.scaleByArchetype[archetypeId ?? ''] ?? 1)
     if (spriteRoot) spriteRoot.scale.set(spriteScale, spriteScale, 1)
-    this.actors.set(id, { group, body, head, label, walking: false, dead: false, bob: Math.random() * Math.PI * 2, leftArm, rightArm, leftLeg, rightLeg, prop, idleKind, facingY: 0, targetFacingY: 0, outline, outlined: false, spriteRoot, spriteMaterial, spriteFlip: 1, spriteScale, spriteAtlas: true, spriteKind: isDetective ? 'detective' : 'npc', spriteRows: isDetective ? CHARACTER_ATLAS.detectiveRows : NPC_ATLAS_V3.rowsPerAtlas, spriteFrame: 0, defaultForward: !isDetective, action: null, actionStartedAt: 0, actionUntil: 0 })
+    this.actors.set(id, { group, body, head, label, walking: false, dead: false, bob: Math.random() * Math.PI * 2, leftArm, rightArm, leftLeg, rightLeg, prop, idleKind, facingY: 0, targetFacingY: 0, outline, outlined: false, spriteRoot, spriteMaterial, shadow: actorShadow, spriteFlip: 1, spriteScale, spriteAtlas: true, spriteKind: isDetective ? 'detective' : 'npc', spriteRows: isDetective ? CHARACTER_ATLAS.detectiveRows : NPC_ATLAS_V3.rowsPerAtlas, spriteFrame: 0, defaultForward: !isDetective, action: null, actionStartedAt: 0, actionUntil: 0 })
   }
 
   removeAllActors() {
@@ -745,8 +949,7 @@ export class MansionScene {
     if (a.spriteKind === 'npc' && a.spriteMaterial) {
       const reveal = Math.max(0, Math.min(1, opacity))
       a.spriteMaterial.opacity = reveal
-      const shadow = a.spriteRoot?.children[1] as THREE.Mesh | undefined
-      if (shadow?.material instanceof THREE.MeshBasicMaterial) shadow.material.opacity = 0.42 * reveal
+      if (a.shadow?.material instanceof THREE.MeshBasicMaterial) a.shadow.material.opacity = 0.42 * reveal
       a.label.style.opacity = String(reveal)
     }
   }
@@ -793,10 +996,11 @@ export class MansionScene {
       a.group.rotation.set(0, 0, 0)
       a.spriteRoot.rotation.set(-Math.PI / 2, 0, 0)
       a.spriteRoot.position.y = 0.04
-      a.spriteRoot.scale.set(1.15 * a.spriteScale, 1.15 * a.spriteScale, 1)
+      const actionScale = NPC_ATLAS_V3.actionScaleByArchetype[a.idleKind] ?? 1
+      a.spriteRoot.scale.set(1.15 * actionScale * a.spriteScale, 1.15 * actionScale * a.spriteScale, 1)
       const art = a.spriteRoot.children[0]
       art.position.set(0, 0, 0)
-      if (a.spriteRoot.children[1]) a.spriteRoot.children[1].visible = false
+      if (a.shadow) a.shadow.visible = false
     } else if (a.spriteMaterial) {
       a.spriteMaterial.color.setHex(0x787878)
       a.spriteMaterial.opacity = 0.72
@@ -875,7 +1079,7 @@ export class MansionScene {
     this.camTarget.set(
       (playerX + guestX) * 0.5 + CONVERSATION_FOCUS_X_OFFSET,
       0,
-      (playerZ + guestZ) * 0.5,
+      (playerZ + guestZ) * 0.5 + CONVERSATION_FOCUS_Z_OFFSET,
     )
   }
 
@@ -884,6 +1088,107 @@ export class MansionScene {
       desiredFocus: { x: this.camTarget.x, z: this.camTarget.z },
       lookAt: { x: this.camLook.x, z: this.camLook.z },
       position: { x: this.camPos.x, y: this.camPos.y, z: this.camPos.z },
+      fadedSouthernWalls: this.southernWalls.filter(wall => wall.opacity < 0.99).map(wall => ({
+        x: Number(wall.mesh.getWorldPosition(new THREE.Vector3()).x.toFixed(2)),
+        z: Number(wall.mesh.getWorldPosition(new THREE.Vector3()).z.toFixed(2)),
+        opacity: Number(wall.opacity.toFixed(2)),
+      })),
+      fadedHangingLights: this.hangingFixtures.filter(fixture => fixture.opacity < 0.99).map(fixture => ({
+        x: Number(fixture.sprite.getWorldPosition(new THREE.Vector3()).x.toFixed(2)),
+        z: Number(fixture.sprite.getWorldPosition(new THREE.Vector3()).z.toFixed(2)),
+        opacity: Number(fixture.opacity.toFixed(2)),
+      })),
+    }
+  }
+
+  private updateSouthernWallOpacity(dt: number) {
+    for (const wall of this.southernWalls) wall.occluded = false
+
+    const wallMeshes = this.southernWalls.map(wall => wall.mesh)
+    const target = new THREE.Vector3()
+    const direction = new THREE.Vector3()
+    for (const actor of this.actors.values()) {
+      if (!actor.group.visible) continue
+      actor.group.getWorldPosition(target)
+      // Test the grounded portion of each cutout: the foreground wall first
+      // hides a character's feet/lower body as they approach it.
+      target.y += actor.dead ? 0.08 : 0.28
+      direction.copy(target).sub(this.camera.position)
+      const actorDistance = direction.length()
+      this.wallRaycaster.set(this.camera.position, direction.normalize())
+      this.wallRaycaster.far = Math.max(0, actorDistance - 0.05)
+      for (const hit of this.wallRaycaster.intersectObjects(wallMeshes, false)) {
+        const wall = this.southernWalls.find(candidate => candidate.mesh === hit.object)
+        if (wall) wall.occluded = true
+      }
+    }
+
+    const blend = 1 - Math.exp(-dt * WALL_FADE_SPEED)
+    for (const wall of this.southernWalls) {
+      const targetOpacity = wall.occluded ? OCCLUDED_WALL_OPACITY : 1
+      wall.opacity = THREE.MathUtils.lerp(wall.opacity, targetOpacity, blend)
+      if (Math.abs(wall.opacity - targetOpacity) < 0.005) wall.opacity = targetOpacity
+      for (const material of wall.materials) {
+        material.opacity = wall.opacity
+        material.depthWrite = wall.opacity > 0.98
+      }
+      wall.edgeMaterial.opacity = 0.42 * wall.opacity
+    }
+  }
+
+  private updateHangingFixtureOpacity(dt: number) {
+    for (const fixture of this.hangingFixtures) fixture.occluded = false
+
+    const cameraRight = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0)
+    const cameraUp = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1)
+    const world = new THREE.Vector3()
+    const corner = new THREE.Vector3()
+    const projected = new THREE.Vector3()
+    for (const actor of this.actors.values()) {
+      if (!actor.group.visible || actor.dead) continue
+      actor.group.getWorldPosition(world)
+
+      // Compare the projected head/shoulder box with the fixture's projected
+      // billboard bounds. This matches what the player sees on screen instead
+      // of treating the whole character body as one sightline.
+      let headMinX = Infinity; let headMaxX = -Infinity
+      let headMinY = Infinity; let headMaxY = -Infinity
+      for (const xOffset of [-0.22, 0.22]) {
+        for (const yOffset of [1.68, 2.35]) {
+          projected.copy(world).add(new THREE.Vector3(xOffset, yOffset, 0)).project(this.camera)
+          headMinX = Math.min(headMinX, projected.x); headMaxX = Math.max(headMaxX, projected.x)
+          headMinY = Math.min(headMinY, projected.y); headMaxY = Math.max(headMaxY, projected.y)
+        }
+      }
+
+      const actorDistance = this.camera.position.distanceTo(world)
+      for (const fixture of this.hangingFixtures) {
+        fixture.sprite.getWorldPosition(corner)
+        if (this.camera.position.distanceTo(corner) >= actorDistance) continue
+        let fixtureMinX = Infinity; let fixtureMaxX = -Infinity
+        let fixtureMinY = Infinity; let fixtureMaxY = -Infinity
+        for (const u of [0, 1]) {
+          for (const v of [0, 1]) {
+            projected.copy(corner)
+              .addScaledVector(cameraRight, (u - fixture.sprite.center.x) * fixture.sprite.scale.x)
+              .addScaledVector(cameraUp, (v - fixture.sprite.center.y) * fixture.sprite.scale.y)
+              .project(this.camera)
+            fixtureMinX = Math.min(fixtureMinX, projected.x); fixtureMaxX = Math.max(fixtureMaxX, projected.x)
+            fixtureMinY = Math.min(fixtureMinY, projected.y); fixtureMaxY = Math.max(fixtureMaxY, projected.y)
+          }
+        }
+        if (headMaxX >= fixtureMinX && headMinX <= fixtureMaxX
+          && headMaxY >= fixtureMinY && headMinY <= fixtureMaxY) fixture.occluded = true
+      }
+    }
+
+    const blend = 1 - Math.exp(-dt * FIXTURE_FADE_SPEED)
+    for (const fixture of this.hangingFixtures) {
+      const targetOpacity = fixture.occluded ? OCCLUDED_FIXTURE_OPACITY : 1
+      fixture.opacity = THREE.MathUtils.lerp(fixture.opacity, targetOpacity, blend)
+      if (Math.abs(fixture.opacity - targetOpacity) < 0.005) fixture.opacity = targetOpacity
+      fixture.material.opacity = fixture.opacity
+      fixture.material.depthWrite = fixture.opacity > 0.98
     }
   }
 
@@ -897,6 +1202,9 @@ export class MansionScene {
     this.camLook.lerp(this.camTarget, 1 - Math.exp(-dt * 3.4))
     this.camera.position.copy(this.camPos)
     this.camera.lookAt(this.camLook.x, 0.6, this.camLook.z)
+    this.camera.updateMatrixWorld()
+    this.updateSouthernWallOpacity(dt)
+    this.updateHangingFixtureOpacity(dt)
 
     // rain fall
     const rp = this.rain.geometry.getAttribute('position') as THREE.BufferAttribute
@@ -934,6 +1242,8 @@ export class MansionScene {
     this.moon.intensity = 0.33 + lightningLevel * 1.25
     this.ambient.intensity = 1.08 + lightningLevel * 0.28
     updateStormWindows(this.stormWindows, this.time, lightningLevel)
+    this.studyFireplace?.update(this.time)
+    this.conservatoryFountain?.update(this.time)
     this.cellarSconces?.update(this.time)
 
     for (const insect of this.ceilingInsects) {
@@ -977,6 +1287,16 @@ export class MansionScene {
         }
         if (a.spriteAtlas) {
           if (a.spriteKind === 'detective' && a.action && this.time < a.actionUntil) {
+            // The authored investigation cells face screen-left. Mirror them
+            // whenever the faced target lies to the detective's screen-right,
+            // so the pose always turns toward the body instead of inheriting
+            // the flip from the detective's previous movement.
+            const cameraYaw = Math.atan2(
+              this.camera.position.x - a.group.position.x,
+              this.camera.position.z - a.group.position.z,
+            )
+            const targetScreenX = Math.sin(cameraYaw - a.facingY)
+            if (Math.abs(targetScreenX) > 0.001) a.spriteFlip = targetScreenX > 0 ? -1 : 1
             // The rebuilt atlas registers the kneeling pose at a deliberately
             // shorter physical height, so the full investigate sequence no
             // longer produces the old oversized crouch/pop.

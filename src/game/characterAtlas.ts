@@ -30,6 +30,14 @@ export const NPC_ATLAS_V3 = {
   scaleByArchetype: {
     curator: 0.92,
   } as Readonly<Record<string, number>>,
+  actionScaleByArchetype: {
+    // These face-down poses fill far more of their cells than the matching
+    // upright silhouettes. Counter the shared 1.15 floor-pose enlargement so
+    // each body and chalk outline retains its character's standing footprint.
+    antiquarian: 0.86,
+    chauffeur: 0.86,
+    debutante: 0.86,
+  } as Readonly<Record<string, number>>,
 } as const
 
 export function atlasFrame(row: number, column: number): number {

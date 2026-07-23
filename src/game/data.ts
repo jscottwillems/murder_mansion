@@ -1,5 +1,5 @@
 // Static game data: rooms, archetypes, names, dialogue voices
-import type { RoomId } from './types'
+import type { ArchetypeId, EvidenceId, RoomId } from './types'
 
 export interface RoomDef {
   id: RoomId
@@ -36,6 +36,24 @@ export function roomAt(col: number, row: number): RoomDef | null {
 export const ROOM_HALF = 5          // room interior half-size
 export const ROOM_STEP = 13         // distance between room centers
 export const PASS_HALF = 1.5        // passage half-width
+
+// Shared authored footprint for the Dining Hall's horizontal banquet set.
+// Rendering and movement both consume this anchor so the visible furniture
+// and its collision bounds cannot drift apart during layout refinements.
+export const DINING_BANQUET_FOOTPRINT = {
+  x: 0,
+  z: 1.15,
+  halfWidth: 2.7,
+  northDepth: 1.15,
+  southDepth: 0.2,
+} as const
+
+export const CONSERVATORY_FOUNTAIN_FOOTPRINT = {
+  x: 0,
+  z: 0,
+  halfWidth: 1.05,
+  halfDepth: 0.78,
+} as const
 
 export function roomCenter(id: RoomId): { x: number; z: number } {
   const r = ROOM_BY_ID[id]
@@ -87,18 +105,52 @@ export function isWalkable(x: number, z: number): boolean {
 }
 
 export function canOccupy(x: number, z: number, radius: number): boolean {
-  void radius
-  return isWalkable(x, z)
+  if (!isWalkable(x, z)) return false
+
+  // Broad Study desk in the northwest corner. Expand its floor footprint by
+  // the actor radius so both the detective and guests stop at the visible edge.
+  const studyCenter = roomCenter('study')
+  const desk = {
+    x: studyCenter.x - 2.75,
+    z: studyCenter.z - 2.35,
+    halfWidth: 1.55,
+    halfDepth: 0.72,
+  }
+  const northWallWalkLimit = studyCenter.z - (ROOM_HALF - 0.55)
+  if (
+    Math.abs(x - desk.x) <= desk.halfWidth + radius
+    && z >= northWallWalkLimit
+    && z <= desk.z + desk.halfDepth + radius
+  ) return false
+
+  // The banquet sprite includes the table and its surrounding chairs, so the
+  // collider covers the complete arrangement rather than only the tabletop.
+  if (
+    Math.abs(x - DINING_BANQUET_FOOTPRINT.x) <= DINING_BANQUET_FOOTPRINT.halfWidth + radius
+    && z >= DINING_BANQUET_FOOTPRINT.z - DINING_BANQUET_FOOTPRINT.northDepth - radius
+    && z <= DINING_BANQUET_FOOTPRINT.z + DINING_BANQUET_FOOTPRINT.southDepth + radius
+  ) return false
+
+  const conservatoryCenter = roomCenter('conservatory')
+  if (
+    Math.abs(x - (conservatoryCenter.x + CONSERVATORY_FOUNTAIN_FOOTPRINT.x)) <= CONSERVATORY_FOUNTAIN_FOOTPRINT.halfWidth + radius
+    && Math.abs(z - (conservatoryCenter.z + CONSERVATORY_FOUNTAIN_FOOTPRINT.z)) <= CONSERVATORY_FOUNTAIN_FOOTPRINT.halfDepth + radius
+  ) return false
+
+  return true
 }
 
 // ---------------------------------------------------------------- archetypes
 
 export interface Archetype {
-  id: string
+  id: ArchetypeId
   name: string
-  trait: string
-  quirk: string
-  voice: string          // description used in LLM prompts
+  promptSheet: {
+    trait: string
+    quirk: string
+    voice: string
+    reactionStyle: string
+  }
   greet: string[]
   timeline: string[]     // "{room}" and "{time}" placeholders
   suspicion: string[]    // "{name}" placeholder
@@ -111,8 +163,8 @@ export interface Archetype {
 
 export const ARCHETYPES: Archetype[] = [
   {
-    id: 'columnist', name: 'Society Columnist', trait: 'Knows everyone’s business', quirk: 'Collects secrets like cufflinks',
-    voice: 'Catty, epigrammatic, always hinting she knows more than she says.',
+    id: 'columnist', name: 'Society Columnist',
+    promptSheet: { trait: 'Knows everyone’s business', quirk: 'Collects secrets like cufflinks', voice: 'Catty, epigrammatic, always hinting she knows more than she says.', reactionStyle: 'Become suspicious or angry when challenged; use surprised for genuinely fresh gossip or a revelation.' },
     greet: ['Darling, you simply must tell me what you’ve seen.', 'I write about people, detective. Tonight is… material.'],
     timeline: ['At {time}? Holding court in the {room}, naturally.', 'I was in the {room} around {time}, being fascinating.'],
     suspicion: ['If you want my professional opinion — and you do — watch {name}.', '{name} has been performing innocence all evening. Badly.'],
@@ -123,8 +175,8 @@ export const ARCHETYPES: Archetype[] = [
     rumorPhrase: ['A little bird — all right, a large bird — saw {name} in the {room} near {time}.', 'Don’t quote me, but {name} was skulking in the {room} around {time}.'],
   },
   {
-    id: 'surgeon', name: 'Retired Surgeon', trait: 'Reads bodies like charts', quirk: 'Still washes his hands constantly',
-    voice: 'Precise, clinical, quietly arrogant; describes everything anatomically.',
+    id: 'surgeon', name: 'Retired Surgeon',
+    promptSheet: { trait: 'Reads bodies like charts', quirk: 'Still washes his hands constantly', voice: 'Precise, clinical, quietly arrogant; describes everything anatomically.', reactionStyle: 'Use thoughtful for precise recall, suspicious for flawed premises, and angry when your expertise or integrity is repeatedly questioned.' },
     greet: ['Mind where you step, detective. Evidence bruises easily.', 'I retired to stop seeing death. It followed me here.'],
     timeline: ['At {time} I was in the {room}. I keep exacting track of time. Habit.', 'I believe I was in the {room} at {time}. I don’t guess; I recall.'],
     suspicion: ['I dislike speculating. But {name}’s hands are… restless.', '{name} asked me earlier which artery is quickest. Make of that what you will.'],
@@ -135,8 +187,8 @@ export const ARCHETYPES: Archetype[] = [
     rumorPhrase: ['I noted {name} entering the {room} at approximately {time}. I note everything.', '{name} passed through the {room} near {time}. Their gait was agitated.'],
   },
   {
-    id: 'curator', name: 'Greenhouse Curator', trait: 'Calm, observant, patient', quirk: 'Talks to plants when nervous',
-    voice: 'Soft-spoken, botanical metaphors, unhurried, notices small details.',
+    id: 'curator', name: 'Greenhouse Curator',
+    promptSheet: { trait: 'Calm, observant, patient', quirk: 'Talks to plants when nervous', voice: 'Soft-spoken, botanical metaphors, unhurried, notices small details.', reactionStyle: 'Use thoughtful while observing, worried around death or danger, and angry when persistent pressure breaks your patience.' },
     greet: ['The storm is good for the ferns, at least.', 'You look like a man who hasn’t watered anything in years, detective.'],
     timeline: ['Around {time} I was in the {room}. The night jasmine was just opening.', 'At {time}? In the {room}, I believe. Plants keep me punctual.'],
     suspicion: ['People wilt before they lie. {name} is wilting.', 'I’d keep an eye on {name}. Something’s growing in them that shouldn’t be.'],
@@ -147,8 +199,8 @@ export const ARCHETYPES: Archetype[] = [
     rumorPhrase: ['I saw {name} in the {room} around {time}, moving like a weed at night.', '{name}? The {room}, near {time}. I remember because the door slammed.'],
   },
   {
-    id: 'magician', name: 'Stage Magician', trait: 'Misdirection is a lifestyle', quirk: 'Never stops palming coins',
-    voice: 'Theatrical, playful, answers questions with flourishes and half-answers.',
+    id: 'magician', name: 'Stage Magician',
+    promptSheet: { trait: 'Misdirection is a lifestyle', quirk: 'Never stops palming coins', voice: 'Theatrical, playful, answers questions with flourishes and half-answers.', reactionStyle: 'Use suspicious when guarding a secret, surprised for a genuine reveal, and angry when the detective ignores a boundary.' },
     greet: ['Detective! For my next trick, I’ll make your suspects disappear.', 'Nothing up my sleeve. Anymore.'],
     timeline: ['At {time} I was in the {room}, astonishing absolutely no one.', 'The {room}, at {time}. Or was it an illusion? It was not.'],
     suspicion: ['Watch {name}’s left hand. Always the left hand.', '{name} does a vanishing act every time the lights flicker. Curious!'],
@@ -159,8 +211,8 @@ export const ARCHETYPES: Archetype[] = [
     rumorPhrase: ['I glimpsed {name} in the {room} at {time} — then again, I glimpse many things.', '{name} was in the {room} around {time}. Presto! A clue.'],
   },
   {
-    id: 'correspondent', name: 'War Correspondent', trait: 'Fearless, blunt, sleepless', quirk: 'Counts exits in every room',
-    voice: 'Clipped, sardonic, cables-style sentences. Dark humor.',
+    id: 'correspondent', name: 'War Correspondent',
+    promptSheet: { trait: 'Fearless, blunt, sleepless', quirk: 'Counts exits in every room', voice: 'Clipped, sardonic, cables-style sentences. Dark humor.', reactionStyle: 'Use suspicious while evaluating claims, worried for credible danger, and angry under repeated or insulting pressure.' },
     greet: ['One mansion. Ten suspects. Worse odds than the front.', 'File this under: terrible weekend.'],
     timeline: ['{time} — {room}. Logged it. I log everything.', 'I was in the {room} at {time}. Two exits, one window. Noted.'],
     suspicion: ['My money’s on {name}. Nerves like that don’t come from bridge.', '{name} flinched at the thunder before it struck. Think about that.'],
@@ -171,8 +223,8 @@ export const ARCHETYPES: Archetype[] = [
     rumorPhrase: ['Source — reliable-ish — puts {name} in the {room} at {time}.', 'Eyes on: {name}, {room}, around {time}. Unverified. As always.'],
   },
   {
-    id: 'accountant', name: 'Estate Accountant', trait: 'Follows the money', quirk: 'Recounts the silverware',
-    voice: 'Dry, precise, mildly resentful; everything is an entry in a ledger.',
+    id: 'accountant', name: 'Estate Accountant',
+    promptSheet: { trait: 'Follows the money', quirk: 'Recounts the silverware', voice: 'Dry, precise, mildly resentful; everything is an entry in a ledger.', reactionStyle: 'Use thoughtful for details, worried when money implicates you, and angry when accused or repeatedly interrogated.' },
     greet: ['This estate’s books don’t balance, detective. People rarely do either.', 'I count things when I’m nervous. I am up to four hundred.'],
     timeline: ['At {time} I was in the {room}. I have it itemized.', 'The {room}, {time}. Debit: one hour of my life.'],
     suspicion: ['{name}’s finances are a swamp. Swamps hide bodies.', 'If motive were money — it usually is — audit {name}.'],
@@ -183,8 +235,8 @@ export const ARCHETYPES: Archetype[] = [
     rumorPhrase: ['My records — mental ones — show {name} in the {room} at {time}.', '{name} entered the {room} near {time}. I noted the floorboard creak.'],
   },
   {
-    id: 'vocalist', name: 'Jazz Vocalist', trait: 'Reads the room’s mood', quirk: 'Hums when lying — or is it when nervous?',
-    voice: 'Lyrical, smoky, speaks in rhythm; half-sighs her sentences.',
+    id: 'vocalist', name: 'Jazz Vocalist',
+    promptSheet: { trait: 'Reads the room’s mood', quirk: 'Hums when lying — or is it when nervous?', voice: 'Lyrical, smoky, speaks in rhythm; half-sighs her sentences.', reactionStyle: 'Use thoughtful for memories, worried around victims or threats, and angry when intimate subjects are pushed after you resist.' },
     greet: ['This house has a blue note in it tonight, sugar.', 'You got a heartbeat like a brush on a snare, detective.'],
     timeline: ['’Round {time} I was in the {room}, hummin’ to the rain.', 'At {time}? The {room}. The acoustics there forgive everything.'],
     suspicion: ['{name}’s song changed key tonight. You hear it too, don’t you?', 'I don’t accuse, honey. But {name} is hummin’ a guilty tune.'],
@@ -195,8 +247,8 @@ export const ARCHETYPES: Archetype[] = [
     rumorPhrase: ['Word drifted through the {room} — {name} was there ’round {time}.', 'I heard {name} pass the {room} at {time}. Heavy steps for a light soul.'],
   },
   {
-    id: 'antiquarian', name: 'Antiquarian', trait: 'Knows the mansion’s history', quirk: 'Touches everything, apologizes to objects',
-    voice: 'Fussy, erudite, digressive; every answer comes with provenance.',
+    id: 'antiquarian', name: 'Antiquarian',
+    promptSheet: { trait: 'Knows the mansion’s history', quirk: 'Touches everything, apologizes to objects', voice: 'Fussy, erudite, digressive; every answer comes with provenance.', reactionStyle: 'Use thoughtful for history, worried when implicated, surprised by new discoveries, and angry when accused or disrespected.' },
     greet: ['This house predates the storm by two centuries. It will outlast us all. Possibly tonight.', 'Careful with the Ming. And the Georgian. And me.'],
     timeline: ['At {time} I was cataloguing — mentally — the {room}.', 'The {room} at {time}. The provenance of my whereabouts is impeccable.'],
     suspicion: ['{name} asked the price of the Etruscan dagger. Odd small talk.', 'In my considered opinion, {name} handles history too carelessly.'],
@@ -207,8 +259,8 @@ export const ARCHETYPES: Archetype[] = [
     rumorPhrase: ['Records — mine, just now — place {name} in the {room} at {time}.', '{name} was examining the {room}’s collection around {time}. Without gloves.'],
   },
   {
-    id: 'chauffeur', name: 'Off-Duty Chauffeur', trait: 'Sees everything, says little', quirk: 'Keeps polishing his cap',
-    voice: 'Terse, dry, streetwise; long pauses, short sentences.',
+    id: 'chauffeur', name: 'Off-Duty Chauffeur',
+    promptSheet: { trait: 'Sees everything, says little', quirk: 'Keeps polishing his cap', voice: 'Terse, dry, streetwise; long pauses, short sentences.', reactionStyle: 'Use suspicious when withholding information and angry when the detective keeps pushing after a terse refusal.' },
     greet: ['Detective.', 'Rain’s bad. Roads are worse. Nobody’s leaving.'],
     timeline: ['{time}. {room}. That’s all.', 'Was in the {room} at {time}. Keepin’ warm.'],
     suspicion: ['{name} tips badly. Guilty people tip badly.', 'Watch {name}. That’s all I’ll say.'],
@@ -219,8 +271,8 @@ export const ARCHETYPES: Archetype[] = [
     rumorPhrase: ['Saw {name} in the {room}. ’Bout {time}.', '{name}. {room}. {time}. Make of it what you want.'],
   },
   {
-    id: 'debutante', name: 'Debutante', trait: 'Underestimated by everyone', quirk: 'Twirls her pearls while thinking',
-    voice: 'Breathy, seemingly naive, unexpectedly sharp observations slip out.',
+    id: 'debutante', name: 'Debutante',
+    promptSheet: { trait: 'Underestimated by everyone', quirk: 'Twirls her pearls while thinking', voice: 'Breathy, seemingly naive, unexpectedly sharp observations slip out.', reactionStyle: 'Use surprised for revelations, worried when frightened or implicated, suspicious when underestimated, and angry when patronized or cornered.' },
     greet: ['Isn’t this all just ghastly and thrilling?', 'Daddy says I talk too much. Do you think I talk too much, detective?'],
     timeline: ['At {time} I was in the {room}, just dying of boredom. Figuratively! Figuratively.', 'Let me think… {time}… oh! The {room}. Definitely.'],
     suspicion: ['This is probably silly, but {name} keeps smiling at nothing.', 'I shouldn’t say… but {name} asked where the telephones were. There aren’t any!'],
@@ -232,34 +284,41 @@ export const ARCHETYPES: Archetype[] = [
   },
 ]
 
+export const ARCHETYPE_BY_ID = Object.fromEntries(
+  ARCHETYPES.map(archetype => [archetype.id, archetype]),
+) as Record<ArchetypeId, Archetype>
+
 // Every archetype can leave exactly three scene traces. Each trace deliberately
 // overlaps three professions, so an examination narrows the field without
 // identifying the murderer on its own.
 export interface SceneEvidence {
-  id: string
+  id: EvidenceId
   label: string
   description: string
-  archetypeIds: string[]
+  archetypeIds: ArchetypeId[]
 }
 
+// Three guests can be tied to each trace every case, but which three shuffles
+// per case (see Simulation.setup), so these descriptions stay neutral about
+// origin — an examination narrows the field without naming a profession.
 export const SCENE_EVIDENCE: SceneEvidence[] = [
-  { id: 'ink-fiber', label: 'Ink-stained paper fiber', description: 'A torn paper fiber carries dense blue-black ink of the sort used for notes, copy, or ledgers.', archetypeIds: ['columnist', 'correspondent', 'accountant'] },
-  { id: 'antiseptic', label: 'Sharp chemical trace', description: 'A clean, medicinal-smelling residue could be antiseptic, plant treatment, or automotive solvent.', archetypeIds: ['surgeon', 'curator', 'chauffeur'] },
-  { id: 'fine-earth', label: 'Fine mineral dust', description: 'Pale grit at the scene resembles potting medium, dust from an old collection, or powder from formal shoes.', archetypeIds: ['curator', 'antiquarian', 'debutante'] },
-  { id: 'black-wool', label: 'Black wool thread', description: 'A short black thread could have come from stagewear, a heavy field coat, or a driver’s uniform.', archetypeIds: ['magician', 'correspondent', 'chauffeur'] },
-  { id: 'metal-polish', label: 'Metal-polish residue', description: 'A waxy metallic smear is consistent with polished silver, antique brass, or automobile fittings.', archetypeIds: ['accountant', 'antiquarian', 'chauffeur'] },
-  { id: 'floral-perfume', label: 'Floral perfume trace', description: 'A lingering floral scent suits fashionable society, the stage, or a formal debut.', archetypeIds: ['columnist', 'vocalist', 'debutante'] },
-  { id: 'face-powder', label: 'Ivory face powder', description: 'Fine cosmetic powder could come from theatrical makeup, a vocalist’s dressing kit, or a debutante’s compact.', archetypeIds: ['magician', 'vocalist', 'debutante'] },
-  { id: 'blade-oil', label: 'Precision oil', description: 'A drop of light machine oil is used on surgical instruments, stage mechanisms, and calculating machines.', archetypeIds: ['surgeon', 'magician', 'accountant'] },
-  { id: 'wax-resin', label: 'Amber wax residue', description: 'A brittle amber fleck resembles medical sealing wax, restoration resin, or a musician’s performance wax.', archetypeIds: ['surgeon', 'antiquarian', 'vocalist'] },
-  { id: 'torn-note', label: 'Torn shorthand note', description: 'The fragment uses hurried marks associated with gossip notes, greenhouse records, or field reporting.', archetypeIds: ['columnist', 'curator', 'correspondent'] },
+  { id: 'ink-fiber', label: 'Ink-stained paper fiber', description: 'A torn paper fiber is soaked with dense blue-black writing ink.', archetypeIds: ['columnist', 'correspondent', 'accountant'] },
+  { id: 'antiseptic', label: 'Sharp chemical trace', description: 'A clean, sharp, medicinal-smelling chemical residue that lingers on cloth.', archetypeIds: ['surgeon', 'curator', 'chauffeur'] },
+  { id: 'fine-earth', label: 'Fine mineral dust', description: 'Pale mineral grit, dry as chalk and far finer than garden soil.', archetypeIds: ['curator', 'antiquarian', 'debutante'] },
+  { id: 'black-wool', label: 'Black wool thread', description: 'A short length of coarse black wool thread, freshly frayed.', archetypeIds: ['magician', 'correspondent', 'chauffeur'] },
+  { id: 'metal-polish', label: 'Metal-polish residue', description: 'A waxy metallic smear of the kind left by freshly polished metal.', archetypeIds: ['accountant', 'antiquarian', 'chauffeur'] },
+  { id: 'floral-perfume', label: 'Floral perfume trace', description: 'A lingering, expensive floral perfume that outlasts the wearer.', archetypeIds: ['columnist', 'vocalist', 'debutante'] },
+  { id: 'face-powder', label: 'Ivory face powder', description: 'Fine ivory cosmetic face powder that clings to collars and cuffs.', archetypeIds: ['magician', 'vocalist', 'debutante'] },
+  { id: 'blade-oil', label: 'Precision oil', description: 'A drop of light, fine machine oil of the sort used on precision mechanisms.', archetypeIds: ['surgeon', 'magician', 'accountant'] },
+  { id: 'wax-resin', label: 'Amber wax residue', description: 'A brittle amber fleck of sealing wax or hardened resin.', archetypeIds: ['surgeon', 'antiquarian', 'vocalist'] },
+  { id: 'torn-note', label: 'Torn shorthand note', description: 'A torn paper fragment covered in hurried, cramped shorthand marks.', archetypeIds: ['columnist', 'curator', 'correspondent'] },
 ]
 
-export const EVIDENCE_BY_ID = Object.fromEntries(SCENE_EVIDENCE.map(e => [e.id, e])) as Record<string, SceneEvidence>
+export const EVIDENCE_BY_ID = Object.fromEntries(SCENE_EVIDENCE.map(e => [e.id, e])) as Record<EvidenceId, SceneEvidence>
 
 // Built-in interview lines imply an association without naming the journal
 // evidence or explaining why it matters. One may be appended on a reveal roll.
-export const BUILTIN_EVIDENCE_HINTS: Record<string, string[]> = {
+export const BUILTIN_EVIDENCE_HINTS: Record<EvidenceId, string[]> = {
   'ink-fiber': [
     'I had to blot my fingers earlier; that blue-black ink gets everywhere.',
     'There is probably still a dark smudge on my cuff from my writing.',
@@ -304,14 +363,14 @@ export const BUILTIN_EVIDENCE_HINTS: Record<string, string[]> = {
 
 export const EVIDENCE_BY_ARCHETYPE = Object.fromEntries(
   ARCHETYPES.map(a => [a.id, SCENE_EVIDENCE.filter(e => e.archetypeIds.includes(a.id))]),
-) as Record<string, SceneEvidence[]>
+) as Record<ArchetypeId, SceneEvidence[]>
 
 export type GuestGender = 'female' | 'male'
 
 // These genders describe the established character sprites/models. Keeping the
 // mapping beside the name pools prevents a randomized case from pairing a guest
 // with a name that does not match their character design.
-export const ARCHETYPE_GENDER: Record<string, GuestGender> = {
+export const ARCHETYPE_GENDER: Record<ArchetypeId, GuestGender> = {
   columnist: 'female',
   surgeon: 'male',
   curator: 'female',

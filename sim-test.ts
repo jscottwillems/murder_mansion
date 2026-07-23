@@ -1,8 +1,7 @@
 // Headless smoke test for the simulation (run with node after esbuild bundling)
 import { Simulation } from './src/game/sim'
-import { SCENE_EVIDENCE, NIGHT_LENGTH_MIN } from './src/game/data'
+import { SCENE_EVIDENCE, NIGHT_LENGTH_MIN, canOccupy } from './src/game/data'
 import type { QuestionTopic } from './src/game/types'
-import { parseInterviewAnswer } from './src/game/llm'
 
 let deaths = 0
 let discoveries = 0
@@ -43,12 +42,6 @@ for (const evidence of SCENE_EVIDENCE) {
   console.assert(!result.answer.toLowerCase().includes(evidence.label.toLowerCase()), `built-in ${evidence.id} clue must not state the journal label`)
 }
 
-const evidenceTagged = parseInterviewAnswer('I keep a little bottle for cleaning the tools; the odor does linger. [thoughtful] [continue] [evidence]')
-console.assert(evidenceTagged.text.includes('little bottle') && !evidenceTagged.text.includes('[evidence]'), 'evidence control tag should be stripped from dialogue')
-console.assert(evidenceTagged.evidenceMentioned, 'evidence control tag should confirm an incorporated clue')
-const noEvidenceTagged = parseInterviewAnswer('I was in the gallery all evening. [neutral] [closed] [no-evidence]')
-console.assert(!noEvidenceTagged.evidenceMentioned && noEvidenceTagged.concluded, 'no-evidence answers should not unlock journal evidence')
-
 const evidenceSim = new Simulation(54321, {
   log: () => {}, lead: () => {}, guestDied: () => {}, bodyDiscovered: () => {}, overheard: () => {},
 })
@@ -70,6 +63,38 @@ console.assert(evidenceKiller.room !== 'study', 'killer must teleport out of the
 console.assert(evidenceKiller.room !== evidenceSim.playerRoom, 'killer must not teleport into the detective room')
 console.assert(evidenceKiller.state === 'idle', 'killer must arrive immediately instead of walking from the scene')
 console.assert(evidenceSim['paths'][evidenceKiller.id] === undefined, 'killer must not retain a route from the murder scene')
+
+// A route crossing the Dining Hall must proactively bend around the full
+// banquet-and-chairs footprint rather than side-step against it indefinitely.
+const navigationSim = new Simulation(11223, {
+  log: () => {}, lead: () => {}, guestDied: () => {}, bodyDiscovered: () => {}, overheard: () => {},
+})
+const navigator = navigationSim.guests.find(g => !g.isKiller)!
+navigator.x = 3.8
+navigator.z = 0
+navigator.room = 'dining'
+navigator.nextDecisionMin = Number.POSITIVE_INFINITY
+const furnitureRoute = navigationSim['navigationPath'](navigator.x, navigator.z, -3.8, 0, 'dining')
+console.assert(furnitureRoute.length >= 2, 'banquet crossing should include a furniture-avoidance waypoint')
+let routeX = navigator.x
+let routeZ = navigator.z
+for (const waypoint of furnitureRoute) {
+  const distance = Math.hypot(waypoint.x - routeX, waypoint.z - routeZ)
+  for (let sample = 1; sample <= Math.ceil(distance / 0.1); sample++) {
+    const t = sample / Math.ceil(distance / 0.1)
+    console.assert(
+      canOccupy(routeX + (waypoint.x - routeX) * t, routeZ + (waypoint.z - routeZ) * t, 0.42),
+      'planned NPC route must preserve actor clearance from furniture',
+    )
+  }
+  routeX = waypoint.x
+  routeZ = waypoint.z
+}
+navigationSim['paths'][navigator.id] = furnitureRoute
+navigator.state = 'walk'
+for (let i = 0; i < 400 && navigationSim['paths'][navigator.id]?.length; i++) navigationSim.advance(0.05, 0)
+console.assert(navigationSim['paths'][navigator.id]?.length === 0, 'NPC should finish a furniture-avoidance route without looping')
+console.assert(Math.hypot(navigator.x + 3.8, navigator.z) < 0.05, 'NPC should arrive at the routed destination')
 
 // The killer must share a room with a victim for five uninterrupted real
 // seconds, while still respecting detective presence and crowd limits.

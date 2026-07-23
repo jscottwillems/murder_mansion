@@ -3,9 +3,11 @@ import type { Game } from '@/game/game'
 import type { Snapshot } from '@/game/types'
 import { GothicFrame } from '@/ui/GothicFrame'
 import { GuestPortrait } from '@/ui/GuestPortrait'
+import type { ArchiveDisposition } from '@/game/narrative/types'
 
 export function AccuseModal({ game, snap }: { game: Game; snap: Snapshot }) {
   const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [disposition, setDisposition] = useState<ArchiveDisposition>('seal')
   const suspects = snap.guests.filter(g => g.alive)
   const confirmed = suspects.find(g => g.id === confirmId)
 
@@ -57,12 +59,27 @@ export function AccuseModal({ game, snap }: { game: Game; snap: Snapshot }) {
               </div>
             </div>
             <div className="mx-auto mt-5 flex max-w-md gap-2">
+              <div className="w-full">
+                <div className="mb-2 text-center text-[10px] uppercase tracking-widest text-[#8a8478]">Final archive disposition</div>
+                <div className="mb-3 grid grid-cols-3 gap-2">
+                  {(['publish', 'seal', 'destroy'] as const).map(value => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setDisposition(value)}
+                      className={`rounded border px-2 py-1.5 font-serif text-xs capitalize ${disposition === value ? 'border-[#c9a227] bg-[#c9a227]/15 text-[#e8d8a0]' : 'border-[#3a352a] text-[#8a8478]'}`}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
               <button
-                onClick={() => game.accuse(confirmed.id)}
-                className="flex-1 rounded border border-[#e86a5a] bg-[#e86a5a]/20 px-4 py-2 font-serif text-sm text-[#e86a5a] transition-colors hover:bg-[#e86a5a]/40"
+                onClick={() => game.accuse(confirmed.id, disposition)}
+                className="w-full rounded border border-[#e86a5a] bg-[#e86a5a]/20 px-4 py-2 font-serif text-sm text-[#e86a5a] transition-colors hover:bg-[#e86a5a]/40"
               >
-                Make the Accusation
+                Accuse and {disposition} the archive
               </button>
+              </div>
               <button
                 onClick={() => setConfirmId(null)}
                 className="rounded border border-[#3a352a] px-4 py-2 font-serif text-sm text-[#8a8478] hover:text-[#e8d8a0]"

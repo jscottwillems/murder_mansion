@@ -8,6 +8,8 @@ const HOUR_CHIME_URL = new URL('../../chime.m4a', import.meta.url).href
 const RAIN_URL = new URL('../../rain.mp3', import.meta.url).href
 const FOOTSTEPS_URL = new URL('../../footsteps.mp3', import.meta.url).href
 const TEXT_BLIP_URL = new URL('../../text-blip.mp3', import.meta.url).href
+const FIRE_URL = new URL('../../fire.mp3', import.meta.url).href
+const STUDY_FIRE_GAIN = 0.44
 
 export class Soundtrack {
   private ctx: AudioContext | null = null
@@ -27,6 +29,9 @@ export class Soundtrack {
   private hourChimeSource: MediaElementAudioSourceNode | null = null
   private rainLoop: HTMLAudioElement | null = null
   private rainSource: MediaElementAudioSourceNode | null = null
+  private fireLoop: HTMLAudioElement | null = null
+  private fireSource: MediaElementAudioSourceNode | null = null
+  private fireGain: GainNode | null = null
   private footstepsLoop: HTMLAudioElement | null = null
   private footstepsSource: MediaElementAudioSourceNode | null = null
   private textBlipLoop: HTMLAudioElement | null = null
@@ -40,6 +45,8 @@ export class Soundtrack {
   private clockShouldRun = false
   private playerShouldWalk = false
   private dialogueShouldBlip = false
+  private fireShouldRun = false
+  private fireFadeTimer: ReturnType<typeof setTimeout> | null = null
   private lastGameMinute: number | null = null
 
   /** Must be called from a user gesture at least once. */
@@ -48,6 +55,7 @@ export class Soundtrack {
       if (this.ctx.state === 'suspended') void this.ctx.resume()
       if (this.soundtrack?.paused) void this.soundtrack.play().catch(() => undefined)
       if (this.rainLoop?.paused) void this.rainLoop.play().catch(() => undefined)
+      if (this.fireShouldRun && this.fireLoop?.paused) void this.fireLoop.play().catch(() => undefined)
       if (this.clockShouldRun && this.clockLoop?.paused) void this.clockLoop.play().catch(() => undefined)
       if (this.playerShouldWalk && this.footstepsLoop?.paused) void this.footstepsLoop.play().catch(() => undefined)
       if (this.dialogueShouldBlip && this.textBlipLoop?.paused) void this.textBlipLoop.play().catch(() => undefined)
@@ -85,7 +93,29 @@ export class Soundtrack {
     this.prepareFootsteps(ctx)
     this.prepareTextBlip(ctx)
     this.startRain(ctx)
+    this.prepareFireLoop(ctx)
     this.scheduleThunder()
+  }
+
+  private prepareFireLoop(ctx: AudioContext) {
+    if (!this.ambienceBus) return
+    const fire = new Audio(FIRE_URL)
+    fire.loop = true
+    fire.preload = 'auto'
+    fire.dataset.studyFire = 'true'
+
+    const lowpass = ctx.createBiquadFilter()
+    lowpass.type = 'lowpass'
+    lowpass.frequency.value = 4200
+    lowpass.Q.value = 0.18
+
+    const gain = ctx.createGain()
+    gain.gain.value = this.fireShouldRun ? STUDY_FIRE_GAIN : 0.0001
+    this.fireLoop = fire
+    this.fireGain = gain
+    this.fireSource = ctx.createMediaElementSource(fire)
+    this.fireSource.connect(lowpass).connect(gain).connect(this.ambienceBus)
+    if (this.fireShouldRun) void fire.play().catch(() => undefined)
   }
 
   private prepareTextBlip(ctx: AudioContext) {
@@ -427,6 +457,32 @@ export class Soundtrack {
     }
   }
 
+  /** Fade the fireplace recording in only while the detective occupies the Study. */
+  setRoomAmbience(room: string) {
+    const active = room === 'study'
+    if (active === this.fireShouldRun && (!active || (this.fireLoop && !this.fireLoop.paused))) return
+    this.fireShouldRun = active
+    if (this.fireFadeTimer) {
+      clearTimeout(this.fireFadeTimer)
+      this.fireFadeTimer = null
+    }
+    const ctx = this.ctx
+    const fire = this.fireLoop
+    const gain = this.fireGain
+    if (!ctx || !fire || !gain) return
+    gain.gain.cancelScheduledValues(ctx.currentTime)
+    gain.gain.setValueAtTime(Math.max(0.0001, gain.gain.value), ctx.currentTime)
+    gain.gain.setTargetAtTime(active ? STUDY_FIRE_GAIN : 0.0001, ctx.currentTime, active ? 0.22 : 0.34)
+    if (active) {
+      if (fire.paused) void fire.play().catch(() => undefined)
+      return
+    }
+    this.fireFadeTimer = setTimeout(() => {
+      if (!this.fireShouldRun && this.fireLoop && !this.fireLoop.paused) this.fireLoop.pause()
+      this.fireFadeTimer = null
+    }, 1500)
+  }
+
   setMuted(m: boolean) {
     this.muted = m
     if (this.ctx && this.master) {
@@ -454,6 +510,7 @@ export class Soundtrack {
 
   dispose() {
     if (this.thunderTimer) clearTimeout(this.thunderTimer)
+    if (this.fireFadeTimer) clearTimeout(this.fireFadeTimer)
     if (this.ctx) void this.ctx.close()
     if (this.soundtrack) {
       this.soundtrack.pause()
@@ -485,6 +542,11 @@ export class Soundtrack {
       this.rainLoop.removeAttribute('src')
       this.rainLoop.load()
     }
+    if (this.fireLoop) {
+      this.fireLoop.pause()
+      this.fireLoop.removeAttribute('src')
+      this.fireLoop.load()
+    }
     if (this.footstepsLoop) {
       this.footstepsLoop.pause()
       this.footstepsLoop.removeAttribute('src')
@@ -512,6 +574,9 @@ export class Soundtrack {
     this.hourChimeSource = null
     this.rainLoop = null
     this.rainSource = null
+    this.fireLoop = null
+    this.fireSource = null
+    this.fireGain = null
     this.footstepsLoop = null
     this.footstepsSource = null
     this.textBlipLoop = null

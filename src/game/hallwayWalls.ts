@@ -30,6 +30,8 @@ const TEXTURE_WIDTH = 160
 const TEXTURE_HEIGHT = 80
 const DEFAULT_WALL_HEIGHT = 1.85
 const PASSAGE_LENGTH = ROOM_STEP - ROOM_HALF * 2 + 0.6
+const ROOM_WALL_GAP = ROOM_STEP - ROOM_HALF * 2
+const ENTRANCE_OVERLAP = (PASSAGE_LENGTH - ROOM_WALL_GAP) / 2
 
 type Rgb = readonly [number, number, number]
 
@@ -193,20 +195,24 @@ export function createHallwayWalls(parent: THREE.Group, options: HallwayWallsOpt
     group.add(wall)
     walls.push(wall)
 
-    // Room door openings are wider than the passage lane. Short perpendicular
-    // returns at both ends close the visible half-unit notch and create a
-    // deliberate funnel into the 3-unit hallway without narrowing its path.
+    // Room door openings are wider than the passage lane. Perpendicular
+    // returns close the visible half-unit notch and create a deliberate funnel
+    // into the 3-unit hallway without narrowing its path. Extend each return
+    // back through the room-wall plane: centering the old wall-thickness piece
+    // beneath the crown left a small longitudinal seam at some camera angles.
     const doorwayHalf = PASS_HALF + 0.6
     const returnDepth = doorwayHalf - PASS_HALF
+    const returnTravelLength = ENTRANCE_OVERLAP + wallThickness
+    const returnTravelCenter = PASSAGE_LENGTH / 2 - ENTRANCE_OVERLAP / 2
     for (const end of [-1, 1] as const) {
       const returnGeometry = options.orientation === 'horizontal'
-        ? new THREE.BoxGeometry(wallThickness, wallHeight, returnDepth)
-        : new THREE.BoxGeometry(returnDepth, wallHeight, wallThickness)
+        ? new THREE.BoxGeometry(returnTravelLength, wallHeight, returnDepth)
+        : new THREE.BoxGeometry(returnDepth, wallHeight, returnTravelLength)
       const returnWall = new THREE.Mesh(returnGeometry, materials[side < 0 ? 0 : 1])
       returnWall.position.set(
-        options.orientation === 'horizontal' ? end * PASSAGE_LENGTH / 2 : side * (PASS_HALF + returnDepth / 2),
+        options.orientation === 'horizontal' ? end * returnTravelCenter : side * (PASS_HALF + returnDepth / 2),
         wallHeight / 2,
-        options.orientation === 'horizontal' ? side * (PASS_HALF + returnDepth / 2) : end * PASSAGE_LENGTH / 2,
+        options.orientation === 'horizontal' ? side * (PASS_HALF + returnDepth / 2) : end * returnTravelCenter,
       )
       group.add(returnWall)
       walls.push(returnWall)

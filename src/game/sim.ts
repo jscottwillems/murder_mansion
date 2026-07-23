@@ -1,10 +1,11 @@
 // Social simulation: guest movement, conversations, rumor exchange,
 // the murderer's logic, body discovery, suspicion tracking, interview answers.
 import type { Guest, Lead, LogLine, QuestionTopic, RoomId, Rumor } from './types'
+import { EVIDENCE_IDS, type EvidenceId } from './types'
 import {
   ROOMS, ROOM_BY_ID, GUEST_NAMES_BY_GENDER, ARCHETYPE_GENDER, GUEST_COLORS, ARCHETYPES,
-  adjacentRooms, roomCenter, roomOfPoint, hexToNum,
-  fmtTime, pick, fill, makeRng, NIGHT_LENGTH_MIN, canOccupy, EVIDENCE_BY_ARCHETYPE, BUILTIN_EVIDENCE_HINTS,
+  roomCenter, roomOfPoint, hexToNum,
+  fmtTime, pick, fill, makeRng, NIGHT_LENGTH_MIN, canOccupy, BUILTIN_EVIDENCE_HINTS,
 } from './data'
 
 export interface SimEvents {
@@ -21,6 +22,8 @@ const ACTOR_RADIUS = 0.42
 const STUCK_RECOVERY_SECONDS = 0.65
 const DETOUR_DISTANCE = ACTOR_RADIUS * 2.5
 const NPC_WALK_SPEED = 1.55
+const NAV_GRID = 0.5
+const NAV_SAMPLE_STEP = ACTOR_RADIUS * 0.45
 const MURDER_COLOCATION_SECONDS = 5
 const ROOM_PREFERENCES: Record<string, RoomId[]> = {
   columnist: ['ballroom', 'suite', 'dining'],
@@ -80,8 +83,25 @@ export class Simulation {
     }
     const nextName = { female: 0, male: 0 }
     const occupied: { x: number; z: number }[] = []
-    // Shuffle the ten balanced three-trace profiles between identities each
-    // case. This preserves three owners per trace while defeating memorization.
+    // Shuffle which evidence traces attach to which guest each case. A random
+    // permutation of the ten traces plus three distinct rotational offsets keeps
+    // the deduction balanced — every trace has exactly three owners and every
+    // guest owns three distinct traces — while defeating memorization. Because
+    // any guest can end up with any trace, every archetype authors a reveal
+    // thread for every trace.
+    const evidenceOrder = [...EVIDENCE_IDS]
+    for (let i = evidenceOrder.length - 1; i > 0; i--) {
+      const j = Math.floor(this.rng() * (i + 1))
+      ;[evidenceOrder[i], evidenceOrder[j]] = [evidenceOrder[j], evidenceOrder[i]]
+    }
+    const offsets = Array.from({ length: evidenceOrder.length }, (_, k) => k)
+    for (let i = offsets.length - 1; i > 0; i--) {
+      const j = Math.floor(this.rng() * (i + 1))
+      ;[offsets[i], offsets[j]] = [offsets[j], offsets[i]]
+    }
+    const evidenceOffsets = offsets.slice(0, 3)
+    const evidenceFor = (index: number): EvidenceId[] =>
+      evidenceOffsets.map(offset => evidenceOrder[(index + offset) % evidenceOrder.length])
     this.guests = archetypes.map((a, i) => {
       const gender = ARCHETYPE_GENDER[a.id]
       const name = namesByGender[gender][nextName[gender]++]
@@ -121,10 +141,9 @@ export class Simulation {
         bodyFound: false,
         evidenceId: null,
         evidenceInvestigated: false,
-        // Evidence associations belong to the established profession/character
-        // and feed its authored interview threads. Names, locations, behavior,
-        // and murderer identity still vary per case.
-        evidenceIds: EVIDENCE_BY_ARCHETYPE[a.id].map(e => e.id),
+        // The three traces this guest can be associated with this case, drawn
+        // from the shuffled balanced assignment above.
+        evidenceIds: evidenceFor(i),
         revealedEvidenceIds: [],
         diedAtMin: 0,
         deathRoom: null,
@@ -349,8 +368,16 @@ export class Simulation {
   }
 
   private tryMurder(killer: Guest): boolean {
-    if (this.playerRoom === killer.room || this.clockMin < killer.killCooldownUntilMin) return false
-    const others = this.guestsInRoom(killer.room).filter(o => o.id !== killer.id)
+    // No killings in hallways: the murderer must physically stand inside a
+    // real room, not a connecting passage. roomOfPoint returns null for the
+    // corridors between rooms, where the stale killer.room value would
+    // otherwise let a kill slip through.
+    const killerRoom = roomOfPoint(killer.x, killer.z)
+    if (killerRoom === null) return false
+    if (this.playerRoom === killerRoom || this.clockMin < killer.killCooldownUntilMin) return false
+    // Victims must also be physically present in that room, so a guest merely
+    // passing through the passage cannot be attacked.
+    const others = this.aliveGuests().filter(o => o.id !== killer.id && roomOfPoint(o.x, o.z) === killerRoom)
     // One target is required; a second guest is the maximum allowed witness.
     if (others.length < 1 || others.length > 2) return false
     const eligibleVictims = others.filter(victim =>
@@ -365,10 +392,15 @@ export class Simulation {
   private updateMurderColocation(dtReal: number) {
     const killer = this.byId(this.killerId)
     if (!killer?.alive) return
+    // Only time spent together inside a real room counts toward a murder.
+    // While either party is in a hallway, roomOfPoint is null (or differs),
+    // so the timer resets and no kill can build up in a passage.
+    const killerRoom = roomOfPoint(killer.x, killer.z)
     for (const victim of this.guests) {
       if (!victim.alive || victim.id === killer.id) continue
       const key = this.murderColocationKey(killer, victim)
-      this.murderColocationSeconds[key] = victim.room === killer.room
+      const together = killerRoom !== null && roomOfPoint(victim.x, victim.z) === killerRoom
+      this.murderColocationSeconds[key] = together
         ? (this.murderColocationSeconds[key] ?? 0) + Math.max(0, dtReal)
         : 0
     }
@@ -444,7 +476,13 @@ export class Simulation {
     const recent = (this.recentRooms[g.id] ??= [])
     recent.unshift(g.room)
     if (recent.length > 2) recent.length = 2
-    const path = this.planPath(g.room, room)
+    const path = this.planPath(g.room, room, g.x, g.z)
+    if (path.length === 0) {
+      delete this.paths[g.id]
+      g.state = 'idle'
+      g.nextDecisionMin = this.clockMin + 2 + this.rng() * 3
+      return
+    }
     this.paths[g.id] = path
     delete this.movementRecovery[g.id]
     g.state = 'walk'
@@ -480,47 +518,151 @@ export class Simulation {
     g.nextDecisionMin = this.clockMin
   }
 
-  /** BFS across room adjacency, waypoints at door midpoints. */
-  private planPath(from: RoomId, to: RoomId): Waypoint[] {
-    if (from === to) return []
-    const prev = new Map<RoomId, RoomId | null>()
-    prev.set(from, null)
-    const q: RoomId[] = [from]
-    while (q.length) {
-      const cur = q.shift()!
-      if (cur === to) break
-      for (const n of adjacentRooms(cur)) {
-        if (!prev.has(n)) {
-          prev.set(n, cur)
-          q.push(n)
+  /**
+   * Clearance-aware A* over the mansion floor. Unlike the old sequence of
+   * door and room-center waypoints, this route accounts for furniture before
+   * an NPC starts walking, so large footprints cannot create oscillating
+   * side-step loops.
+   */
+  private navigationPath(startX: number, startZ: number, endX: number, endZ: number, room: RoomId): Waypoint[] {
+    const clear = (x: number, z: number) => canOccupy(x, z, ACTOR_RADIUS)
+    const segmentClear = (ax: number, az: number, bx: number, bz: number) => {
+      const distance = Math.hypot(bx - ax, bz - az)
+      const samples = Math.max(1, Math.ceil(distance / NAV_SAMPLE_STEP))
+      for (let i = 1; i <= samples; i++) {
+        const t = i / samples
+        if (!clear(ax + (bx - ax) * t, az + (bz - az) * t)) return false
+      }
+      return true
+    }
+    if (segmentClear(startX, startZ, endX, endZ)) return [{ x: endX, z: endZ, room }]
+
+    const minCoord = -18
+    const maxCoord = 18
+    const toCoord = (index: number) => minCoord + index * NAV_GRID
+    const gridCount = Math.round((maxCoord - minCoord) / NAV_GRID) + 1
+    const key = (ix: number, iz: number) => iz * gridCount + ix
+    const coords = (nodeKey: number) => ({ ix: nodeKey % gridCount, iz: Math.floor(nodeKey / gridCount) })
+    const open: { key: number; score: number }[] = []
+    const costs = new Map<number, number>()
+    const cameFrom = new Map<number, number>()
+    const closed = new Set<number>()
+    const push = (item: { key: number; score: number }) => {
+      open.push(item)
+      let child = open.length - 1
+      while (child > 0) {
+        const parent = Math.floor((child - 1) / 2)
+        if (open[parent].score <= item.score) break
+        open[child] = open[parent]
+        child = parent
+      }
+      open[child] = item
+    }
+    const pop = () => {
+      const first = open[0]
+      const last = open.pop()!
+      if (open.length) {
+        let parent = 0
+        while (true) {
+          const left = parent * 2 + 1
+          if (left >= open.length) break
+          const right = left + 1
+          const child = right < open.length && open[right].score < open[left].score ? right : left
+          if (open[child].score >= last.score) break
+          open[parent] = open[child]
+          parent = child
         }
+        open[parent] = last
+      }
+      return first
+    }
+
+    // Seed every nearby grid point visible from the actor's exact position.
+    const startIx = Math.round((startX - minCoord) / NAV_GRID)
+    const startIz = Math.round((startZ - minCoord) / NAV_GRID)
+    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+      const ix = startIx + dx
+      const iz = startIz + dz
+      if (ix < 0 || iz < 0 || ix >= gridCount || iz >= gridCount) continue
+      const x = toCoord(ix)
+      const z = toCoord(iz)
+      if (!clear(x, z) || !segmentClear(startX, startZ, x, z)) continue
+      const nodeKey = key(ix, iz)
+      const cost = Math.hypot(x - startX, z - startZ)
+      costs.set(nodeKey, cost)
+      push({ key: nodeKey, score: cost + Math.hypot(endX - x, endZ - z) })
+    }
+
+    let goalKey: number | null = null
+    const directions = [-1, 0, 1].flatMap(dx => [-1, 0, 1].map(dz => [dx, dz] as const)).filter(([dx, dz]) => dx || dz)
+    while (open.length) {
+      const current = pop()
+      if (closed.has(current.key)) continue
+      closed.add(current.key)
+      const { ix, iz } = coords(current.key)
+      const x = toCoord(ix)
+      const z = toCoord(iz)
+      if (Math.hypot(endX - x, endZ - z) <= NAV_GRID * 2 && segmentClear(x, z, endX, endZ)) {
+        goalKey = current.key
+        break
+      }
+      for (const [dx, dz] of directions) {
+        const nx = ix + dx
+        const nz = iz + dz
+        if (nx < 0 || nz < 0 || nx >= gridCount || nz >= gridCount) continue
+        const nextX = toCoord(nx)
+        const nextZ = toCoord(nz)
+        if (!clear(nextX, nextZ) || !segmentClear(x, z, nextX, nextZ)) continue
+        const nextKey = key(nx, nz)
+        if (closed.has(nextKey)) continue
+        const nextCost = costs.get(current.key)! + Math.hypot(dx, dz) * NAV_GRID
+        if (nextCost >= (costs.get(nextKey) ?? Number.POSITIVE_INFINITY)) continue
+        costs.set(nextKey, nextCost)
+        cameFrom.set(nextKey, current.key)
+        push({ key: nextKey, score: nextCost + Math.hypot(endX - nextX, endZ - nextZ) })
       }
     }
-    if (!prev.has(to)) return []
-    const rooms: RoomId[] = []
-    let cur: RoomId | null = to
-    while (cur) {
-      rooms.unshift(cur)
-      cur = prev.get(cur) ?? null
+    if (goalKey === null) return []
+
+    const points: { x: number; z: number }[] = []
+    for (let current: number | undefined = goalKey; current !== undefined; current = cameFrom.get(current)) {
+      const { ix, iz } = coords(current)
+      points.unshift({ x: toCoord(ix), z: toCoord(iz) })
     }
-    const wps: Waypoint[] = []
-    for (let i = 0; i < rooms.length; i++) {
-      const c = roomCenter(rooms[i])
-      if (i > 0) {
-        const p = roomCenter(rooms[i - 1])
-        wps.push({ x: (c.x + p.x) / 2, z: (c.z + p.z) / 2, room: rooms[i] }) // door midpoint
-      }
-      let x = c.x
-      let z = c.z
-      for (let tries = 0; tries < 30; tries++) {
-        const sx = c.x + (this.rng() - 0.5) * 7
-        const sz = c.z + (this.rng() - 0.5) * 7
-        if (canOccupy(sx, sz, ACTOR_RADIUS)) { x = sx; z = sz; break }
-      }
-      wps.push({ x, z, room: rooms[i] })
+    points.push({ x: endX, z: endZ })
+
+    // Remove grid stair-steps wherever a longer segment has full clearance.
+    const smoothed: Waypoint[] = []
+    let ax = startX
+    let az = startZ
+    for (let i = 0; i < points.length;) {
+      let furthest = i
+      while (furthest + 1 < points.length && segmentClear(ax, az, points[furthest + 1].x, points[furthest + 1].z)) furthest++
+      const point = points[furthest]
+      smoothed.push({ ...point, room })
+      ax = point.x
+      az = point.z
+      i = furthest + 1
     }
-    wps.shift() // drop current-room waypoint
-    return wps
+    return smoothed
+  }
+
+  /** Choose a safe destination, then route to it around walls and furniture. */
+  private planPath(from: RoomId, to: RoomId, startX = roomCenter(from).x, startZ = roomCenter(from).z): Waypoint[] {
+    if (from === to) return []
+    const c = roomCenter(to)
+    const destinations: { x: number; z: number }[] = []
+    for (let tries = 0; tries < 40; tries++) {
+      const x = c.x + (this.rng() - 0.5) * 7
+      const z = c.z + (this.rng() - 0.5) * 7
+      if (canOccupy(x, z, ACTOR_RADIUS)) destinations.push({ x, z })
+      if (destinations.length >= 6) break
+    }
+    for (const destination of destinations) {
+      const path = this.navigationPath(startX, startZ, destination.x, destination.z, to)
+      if (path.length) return path
+    }
+    return []
   }
 
   // ------------------------------------------------------------- conversations & rumors
@@ -614,7 +756,7 @@ export class Simulation {
 
   // ------------------------------------------------------------- interviews
 
-  answerQuestion(g: Guest, topic: QuestionTopic, playerRoom: RoomId, evidenceCueId?: string): { answer: string; leads: { source: string; text: string }[] } {
+  answerQuestion(g: Guest, topic: QuestionTopic, playerRoom: RoomId, evidenceCueId?: EvidenceId): { answer: string; leads: { source: string; text: string }[] } {
     const a = this.arch(g)
     const leads: { source: string; text: string }[] = []
     const vars = {

@@ -30,7 +30,7 @@ export function HUD({ game, snap }: { game: Game; snap: Snapshot }) {
   return (
     <div className="pointer-events-none absolute inset-0 select-none">
       {/* top-left: clock + room */}
-      <div className="designer-frame-surface hud-gothic-info-frame absolute left-4 top-4 backdrop-blur-sm">
+      <div className="designer-frame-surface hud-gothic-info-frame absolute left-4 top-4">
         <GothicFrame />
         <div className="font-serif text-2xl tracking-wide text-[#e8d8a0]">{snap.clockText}</div>
         <div className="mt-1 h-1 w-40 overflow-hidden rounded bg-[#242220]">

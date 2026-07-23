@@ -49,6 +49,25 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
         <div className="mx-16 mb-24 mt-6 min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain sm:mx-36 sm:mb-36">
           {tab === 'leads' && (
             <div className="space-y-2">
+              {snap.narrative && (
+                <div className="rounded border border-[#3a352a] bg-[#c9a227]/5 px-3 py-2 text-xs text-[#b9ad8d]">
+                  Act {snap.narrative.act} · {snap.narrative.resolvedAssociations}/30 associations · {snap.narrative.completedCircuits}/{snap.narrative.totalCircuits} circuits corroborated
+                </div>
+              )}
+              {snap.narrative?.recoveredLeads.map(lead => (
+                <div key={lead.id} className="rounded border border-[#4a4635] bg-black/30 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-wider text-[#c9a227]">Recovered fallback · {lead.guestName}</div>
+                  <div className="mt-0.5 text-sm text-[#d8d0c0]">{lead.description}</div>
+                  <button
+                    type="button"
+                    disabled={lead.resolved}
+                    onClick={() => game.recoverNarrativeFallback(lead.guestId, lead.threadId)}
+                    className="mt-2 rounded border border-[#4a4635] px-2 py-1 text-[10px] uppercase tracking-wider text-[#c9b98a] hover:border-[#c9a227] disabled:opacity-40"
+                  >
+                    {lead.resolved ? 'Association recovered' : 'Examine recovered record'}
+                  </button>
+                </div>
+              ))}
               {snap.leads.length === 0 && <div className="text-sm italic text-[#6a6458]">No leads yet. Interview guests, eavesdrop on conversations.</div>}
               {[...snap.leads].reverse().map(l => (
                 <div key={l.id} className="rounded border border-[#242220] bg-black/30 px-3 py-2">
@@ -75,7 +94,7 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
               )}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {[...snap.evidence].reverse().map(item => (
-                  <article key={item.id} className="overflow-hidden rounded border border-[#3b3528] bg-black/35">
+                  <article key={item.id} className="flex flex-col overflow-hidden rounded border border-[#3b3528] bg-black/35">
                     <div className="flex gap-3 p-3">
                       <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded border border-[#4b4330] bg-[#111016] shadow-inner">
                         <img
@@ -90,11 +109,13 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
                         <div className="mt-1 text-[10px] text-[#6f695e]">{fmtMin(item.atMin)} · {item.source}</div>
                       </div>
                     </div>
-                    <div className="border-t border-[#2a2822] px-3 py-2.5">
+                    <div className="flex flex-1 flex-col border-t border-[#2a2822] px-3 py-2.5">
                       <p className="text-xs leading-relaxed text-[#c7c0b3]">{item.description}</p>
-                      <div className="mt-2 text-[10px] uppercase tracking-wider text-[#6a6458]">Possible sources</div>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {item.candidateNames.map(name => <Badge key={name} text={name} tone="info" />)}
+                      <div className="mt-auto pt-2">
+                        <div className="text-[10px] uppercase tracking-wider text-[#6a6458]">Possible sources</div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {item.candidateNames.map(name => <Badge key={name} text={name} tone="info" />)}
+                        </div>
                       </div>
                     </div>
                   </article>
@@ -122,7 +143,13 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
                         {g.visible && <Badge text="Visible" tone="gold" />}
                         {g.recentlyActive && !g.visible && <Badge text="Recently Active" tone="dim" />}
                         {g.roomName && <Badge text={g.roomName} tone="dim" />}
+                        {g.narrative && <Badge text={`Trust ${g.narrative.trust}`} tone="info" />}
+                        {g.narrative && <Badge text={`Pressure ${g.narrative.pressure}`} tone={g.narrative.pressure >= 5 ? 'bad' : 'dim'} />}
+                        {g.narrative && <Badge text={`${g.narrative.threadCounts.resolved ?? 0} resolved`} tone="ok" />}
                       </div>
+                      {g.narrative?.personalEndingTitle && (
+                        <div className="mt-1 text-[10px] text-[#c9a227]">Ending earned: {g.narrative.personalEndingTitle}</div>
+                      )}
                       {g.alive && (
                         <>
                           <div className="mt-2 flex items-center gap-2">
@@ -137,10 +164,10 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
                           {confirmId === g.id ? (
                             <div className="mt-2 flex gap-2">
                               <button
-                                onClick={() => { setConfirmId(null); game.accuse(g.id) }}
+                                onClick={() => { setConfirmId(null); game.setPhase('accuse') }}
                                 className="flex-1 rounded border border-[#e86a5a] bg-[#e86a5a]/20 px-2 py-1 font-serif text-xs text-[#e86a5a] hover:bg-[#e86a5a]/40"
                               >
-                                Confirm Accusation
+                                Choose Final Decision
                               </button>
                               <button
                                 onClick={() => setConfirmId(null)}

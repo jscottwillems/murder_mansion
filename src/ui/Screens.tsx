@@ -1,10 +1,15 @@
 import type { ReactNode } from 'react'
 import type { Game } from '@/game/game'
 import type { Settings, Snapshot } from '@/game/types'
+import type { ArchiveDisposition, CaseOutcome } from '@/game/narrative/types'
 import { GothicFrame } from '@/ui/GothicFrame'
+import { INTENT_COLORS, INTENT_LEGEND } from '@/ui/intents'
 
 const serifBtn =
   'w-72 rounded border border-[#3a352a] bg-black/60 px-6 py-3 font-serif text-lg text-[#c9b98a] transition-colors hover:border-[#c9a227] hover:text-[#e8d8a0]'
+
+// Temporarily disabled: LLM dialogue mode is hidden from the setup and settings UI.
+const LLM_ENABLED = false
 
 export function TitleScreen({ game }: { game: Game }) {
   return (
@@ -40,7 +45,7 @@ export function CaseSetupScreen({ game, snap }: { game: Game; snap: Snapshot }) 
   const llmReady = s.llmProvider === 'ollama' || Boolean(s.llmApiKey)
   const selectProvider = (provider: Settings['llmProvider']) => {
     if (provider === 'groq') {
-      game.updateSettings({ llmProvider: provider, llmBaseUrl: 'https://api.groq.com/openai/v1', llmModel: 'llama-3.1-8b-instant' })
+      game.updateSettings({ llmProvider: provider, llmBaseUrl: 'https://api.groq.com/openai/v1', llmModel: 'openai/gpt-oss-20b' })
     } else if (provider === 'ollama') {
       game.updateSettings({ llmProvider: provider, llmBaseUrl: 'http://localhost:11434/v1', llmModel: 'llama3.2' })
     } else {
@@ -49,14 +54,14 @@ export function CaseSetupScreen({ game, snap }: { game: Game; snap: Snapshot }) 
   }
 
   return (
-    <Overlay ornate>
+    <Overlay ornate taller>
       <div className="text-xs uppercase tracking-[0.35em] text-[#8a8478]">Before the case begins</div>
       <h2 className="mt-2 font-serif text-3xl text-[#e8d8a0]">Choose the guests' minds</h2>
       <p className="mt-2 max-w-lg text-center font-serif text-sm italic leading-relaxed text-[#8a8478]">
         Movement and case logic always run locally. This choice controls interview dialogue.
       </p>
 
-      <div className="mt-6 grid w-full max-w-lg grid-cols-2 gap-3">
+      <div className={`mt-6 grid w-full max-w-lg gap-3 ${LLM_ENABLED ? 'grid-cols-2' : 'grid-cols-1'}`}>
         <button
           type="button"
           aria-pressed={director === 'builtin'}
@@ -66,18 +71,20 @@ export function CaseSetupScreen({ game, snap }: { game: Game; snap: Snapshot }) 
           <div className="font-serif text-lg text-[#e8d8a0]">Built-in Dialogue</div>
           <div className="mt-2 text-xs leading-relaxed text-[#8a8478]">Fast, reliable, and fully offline. Interviews stay grounded in this case.</div>
         </button>
-        <button
-          type="button"
-          aria-pressed={director === 'llm'}
-          onClick={() => game.updateSettings({ director: 'llm' })}
-          className={`rounded border p-5 text-left transition-colors ${director === 'llm' ? 'border-[#c9a227] bg-[#c9a227]/15' : 'border-[#3a352a] bg-black/40 hover:border-[#786a43]'}`}
-        >
-          <div className="font-serif text-lg text-[#e8d8a0]">LLM Dialogue</div>
-          <div className="mt-2 text-xs leading-relaxed text-[#8a8478]">The model is called only when you begin an interview; all NPC behavior remains local.</div>
-        </button>
+        {LLM_ENABLED && (
+          <button
+            type="button"
+            aria-pressed={director === 'llm'}
+            onClick={() => game.updateSettings({ director: 'llm' })}
+            className={`rounded border p-5 text-left transition-colors ${director === 'llm' ? 'border-[#c9a227] bg-[#c9a227]/15' : 'border-[#3a352a] bg-black/40 hover:border-[#786a43]'}`}
+          >
+            <div className="font-serif text-lg text-[#e8d8a0]">LLM Dialogue</div>
+            <div className="mt-2 text-xs leading-relaxed text-[#8a8478]">Authored beats appear instantly; the model may only rewrite the visible line and choice labels.</div>
+          </button>
+        )}
       </div>
 
-      {director === 'llm' && (
+      {LLM_ENABLED && director === 'llm' && (
         <div className="mt-4 w-full max-w-lg space-y-3 rounded border border-[#3a352a] bg-black/50 p-4 text-sm text-[#c9c0b0]">
           <div className="font-serif text-[#c9b98a]">Configure LLM</div>
           <div>
@@ -115,8 +122,11 @@ export function CaseSetupScreen({ game, snap }: { game: Game; snap: Snapshot }) 
 
       <button
         className={`${serifBtn} mt-6 disabled:cursor-not-allowed disabled:opacity-40`}
-        disabled={director === 'llm' && !llmReady}
-        onClick={() => game.startCase()}
+        disabled={LLM_ENABLED && director === 'llm' && !llmReady}
+        onClick={() => {
+          if (!LLM_ENABLED && director === 'llm') game.updateSettings({ director: 'builtin' })
+          game.startCase()
+        }}
       >
         Begin Case
       </button>
@@ -134,10 +144,25 @@ export function HowToPlay({ game }: { game: Game }) {
       <div className="mt-4 space-y-3 text-sm leading-relaxed text-[#c9c0b0]">
         <p><b className="text-[#c9a227]">The situation.</b> You are a detective trapped by a storm with ten guests until 6:00 AM. One of them — chosen at random each case — is the murderer.</p>
         <p><b className="text-[#c9a227]">Move & observe.</b> WASD / arrow keys to walk between the nine rooms. You can only see your current room. Guests wander, gossip, and trade rumors; linger in a room to overhear them.</p>
-        <p><b className="text-[#c9a227]">Interview.</b> Press <b>E</b> near a guest. Time stops while you talk, and the ticking clock pauses with it. You get four questions at a time — timelines, suspicions, rumors, alibis. Answers change as word spreads through the house.</p>
-        <p><b className="text-[#c9a227]">Mind the lies.</b> Some guests misremember. The killer deflects suspicion onto the innocent — and kills again when alone with someone, out of your sight.</p>
-        <p><b className="text-[#c9a227]">Journal.</b> Press <b>J</b> to review leads, guest status, and past interviews. Accuse from the Guests page when you're sure.</p>
-        <p><b className="text-[#c9a227]">Lose conditions.</b> Sunrise arrives, you accuse the wrong person, or no one is left alive.</p>
+        <p><b className="text-[#c9a227]">Interview.</b> Press <b>E</b> near a guest. Time stops while you talk. Choose a canonical subject, then decide how to approach it. Each response is edged with a color marking its intent — some options only appear once trust or pressure is high enough. Progress and relationship costs persist between visits.</p>
+        <div className="rounded border border-[#2a2822] bg-black/40 p-3">
+          <div className="mb-2 text-xs uppercase tracking-wider text-[#6a6458]">Response intent key</div>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2">
+            {INTENT_LEGEND.map(entry => (
+              <div key={entry.intent} className="flex items-center gap-2">
+                <span
+                  className="h-4 w-4 shrink-0 rounded-sm border-l-2 border"
+                  style={{ borderColor: INTENT_COLORS[entry.intent], backgroundColor: '#16151d' }}
+                />
+                <span className="text-[#e8d8a0]">{entry.label}</span>
+                <span className="text-xs text-[#8a8478]">— {entry.hint}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <p><b className="text-[#c9a227]">Build proof.</b> An association never proves guilt. A sound case needs material evidence, opportunity, and deception or motive. Closed or fatal testimony reroutes to pre-seeded records and confidants in the journal.</p>
+        <p><b className="text-[#c9a227]">Journal.</b> Press <b>J</b> to review leads, recovered routes, trust, pressure, thread outcomes, evidence associations, and cross-thread circuit progress.</p>
+        <p><b className="text-[#c9a227]">Decide the ending.</b> When accusing, also choose whether to publish, seal, or destroy the Blue Case archive. Proof, circuit progress, relationships, and that disposition shape the case and personal epilogues.</p>
       </div>
       <button className={`${serifBtn} mt-6`} onClick={() => game.setPhase('title')}>Back</button>
     </Overlay>
@@ -148,7 +173,7 @@ export function SettingsScreen({ game, snap }: { game: Game; snap: Snapshot }) {
   const s = snap.settings
   const selectProvider = (provider: Settings['llmProvider']) => {
     if (provider === 'groq') {
-      game.updateSettings({ llmProvider: provider, llmBaseUrl: 'https://api.groq.com/openai/v1', llmModel: 'llama-3.1-8b-instant' })
+      game.updateSettings({ llmProvider: provider, llmBaseUrl: 'https://api.groq.com/openai/v1', llmModel: 'openai/gpt-oss-20b' })
     } else if (provider === 'ollama') {
       game.updateSettings({ llmProvider: provider, llmBaseUrl: 'http://localhost:11434/v1', llmModel: 'llama3.2' })
     } else {
@@ -163,7 +188,7 @@ export function SettingsScreen({ game, snap }: { game: Game; snap: Snapshot }) {
         <div>
           <div className="mb-1 font-serif text-[#c9b98a]">Interview Dialogue</div>
           <div className="flex gap-2">
-            {(['builtin', 'llm'] as const).map(m => (
+            {(LLM_ENABLED ? (['builtin', 'llm'] as const) : (['builtin'] as const)).map(m => (
               <button
                 key={m}
                 onClick={() => game.updateSettings({ director: m })}
@@ -174,11 +199,13 @@ export function SettingsScreen({ game, snap }: { game: Game; snap: Snapshot }) {
             ))}
           </div>
           <p className="mt-1 text-xs italic text-[#6a6458]">
-            NPC movement, conversations, and murder logic always run locally. LLM mode makes one request when an interview begins and falls back to authored dialogue if it fails.
+            {LLM_ENABLED
+              ? 'NPC movement and narrative consequences always run locally. LLM mode renders one already-legal beat at a time; authored dialogue appears immediately and remains the fallback.'
+              : 'NPC movement and narrative consequences always run locally. Interviews use built-in authored dialogue.'}
           </p>
         </div>
 
-        {s.director === 'llm' && (
+        {LLM_ENABLED && s.director === 'llm' && (
           <div className="space-y-2 rounded border border-[#2a2822] bg-black/40 p-3">
             <div>
               <div className="mb-1 text-xs uppercase tracking-wider text-[#6a6458]">Provider</div>
@@ -281,23 +308,36 @@ export function PauseMenu({ game }: { game: Game }) {
 export function EndScreen({ game, snap }: { game: Game; snap: Snapshot }) {
   const e = snap.endInfo
   if (!e) return null
-  const win = e.outcome === 'win'
-  const title = {
-    win: 'CASE CLOSED',
-    wrong: 'YOU WERE PLAYED',
-    sunrise: 'THE KILLER WALKS FREE',
-    wiped: 'A HOUSE OF THE DEAD',
-  }[e.outcome]
-  const body = {
-    win: `You named ${e.accusedName} — and you were right. ${e.killerName}, the ${e.killerArchetype}, breaks under the accusation as the storm finally begins to ease.`,
-    wrong: `You accused ${e.accusedName}, an innocent. Behind you, ${e.killerName} the ${e.killerArchetype} allows themselves the smallest of smiles.`,
-    sunrise: `The sun rises on the mansion. The roads clear. ${e.killerName} the ${e.killerArchetype} thanks you for a fascinating evening and is never seen again.`,
-    wiped: `By dawn there was no one left to accuse. ${e.killerName} the ${e.killerArchetype} simply walked out into the morning.`,
-  }[e.outcome]
+  const win = e.narrativeOutcome === 'complete-public-exposure'
+    || e.narrativeOutcome === 'correct-culprit-scandal-sealed'
+    || e.narrativeOutcome === 'counter-trap-prevented-attack'
+  const outcomeCopy: Record<CaseOutcome, { title: string; body: string }> = {
+    'complete-public-exposure': { title: 'THE WHOLE HOUSE ANSWERS', body: 'The culprit and the machinery behind the Blue Case are established on a complete public record.' },
+    'correct-culprit-scandal-sealed': { title: 'THE CULPRIT, NOT THE SYSTEM', body: 'The murderer is proved, but the wider conspiracy remains sealed or insufficiently corroborated.' },
+    'counter-trap-prevented-attack': { title: 'CAUGHT IN THE ACT', body: 'A prepared counter-trap prevents another attack and binds the culprit to the recovered material.' },
+    'correct-suspicion-without-proof': { title: 'THE RIGHT NAME, A BROKEN CASE', body: 'Your suspicion is correct, but the record lacks a proof leg needed for a secure conviction.' },
+    'wrong-accusation': { title: 'YOU WERE PLAYED', body: `You accused ${e.accusedName}, while ${e.killerName} the ${e.killerArchetype} survived the fracture.` },
+    'house-of-silence': { title: 'HOUSE OF SILENCE', body: 'Dawn arrives without a proved accusation or successful trap. Partial truths leave with the survivors.' },
+  }
+  const dispositionCopy: Record<ArchiveDisposition, string> = {
+    publish: 'The Blue Case record is released to press and public authority.',
+    seal: 'Murder proof is released while the wider archive is placed under seal.',
+    destroy: 'The leverage originals are destroyed, narrowing prosecution while ending their immediate power.',
+  }
+  const copy = outcomeCopy[e.narrativeOutcome]
   return (
     <Overlay>
-      <h2 className={`font-serif text-4xl tracking-wide ${win ? 'text-[#c9a227]' : 'text-[#e86a5a]'}`}>{title}</h2>
-      <p className="mt-4 max-w-md text-center font-serif text-sm italic leading-relaxed text-[#c9c0b0]">{body}</p>
+      <h2 className={`font-serif text-4xl tracking-wide ${win ? 'text-[#c9a227]' : 'text-[#e86a5a]'}`}>{copy.title}</h2>
+      <p className="mt-4 max-w-md text-center font-serif text-sm italic leading-relaxed text-[#c9c0b0]">{copy.body}</p>
+      <p className="mt-2 max-w-md text-center text-xs text-[#9d927c]">{dispositionCopy[e.disposition]}</p>
+      <div className="mt-3 text-center text-[10px] uppercase tracking-wider text-[#8a8478]">
+        Proof: {Object.entries(e.proof).filter(([, present]) => present).map(([category]) => category).join(', ') || 'none'}
+        {e.missingProof.length ? ` · Missing: ${e.missingProof.join(', ')}` : ''}
+        {` · Circuits: ${e.circuitCount}/4`}
+      </div>
+      <div className="mt-3 max-h-28 w-full max-w-xl overflow-y-auto rounded border border-[#2a2822] bg-black/30 p-2 text-xs text-[#b9b0a0]">
+        {e.personalEpilogues.map(item => <div key={item.guestName}><span className="text-[#c9a227]">{item.guestName} — {item.title}:</span> {item.text}</div>)}
+      </div>
       <div className="mt-5 grid grid-cols-4 gap-3 text-center">
         <Stat label="Time" value={fmtClock(e.stats.timeMin)} />
         <Stat label="Interviews" value={String(e.stats.interviews)} />
@@ -321,14 +361,14 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-function Overlay({ children, ornate = false }: { children: ReactNode; ornate?: boolean }) {
+function Overlay({ children, ornate = false, taller = false }: { children: ReactNode; ornate?: boolean; taller?: boolean }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 p-6 backdrop-blur-sm">
       <div
         className={`${ornate ? 'gothic-frame gothic-frame--popup overflow-hidden px-28 pb-40 pt-44' : 'w-full max-w-2xl rounded border border-[#3a352a] bg-[#0d0c12]/95 p-8'} relative flex max-h-full flex-col items-center ${ornate ? '' : 'overflow-y-auto'}`}
         style={ornate ? {
-          width: 'min(58rem, 94vw, calc((100vh - 3rem) * 736 / 544))',
-          aspectRatio: '736 / 544',
+          width: `min(58rem, 94vw, calc((100vh - 3rem) * 736 / ${taller ? 568 : 544}))`,
+          aspectRatio: `736 / ${taller ? 568 : 544}`,
         } : undefined}
       >
         {ornate && <GothicFrame />}

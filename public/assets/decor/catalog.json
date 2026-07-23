@@ -1,9 +1,9 @@
 {
   "study": ["writing-desk", "leather-armchair", "banker-lamp", "globe", "decanter-table"],
   "gallery": ["ancestral-portrait", "marble-bust", "velvet-stanchions", "relic-display", "candelabrum"],
-  "conservatory": ["potted-monstera", "garden-bench", "orchid-stand", "tea-table", "birdbath"],
+  "conservatory": ["potted-monstera", "garden-bench", "orchid-stand", "tea-table", "birdbath", "animated-fountain"],
   "kitchen": ["butcher-block", "range-stove", "cookware-rack", "pastry-table", "provision-crate"],
-  "dining": ["silver-candelabra", "serving-trolley", "dining-chair", "decanter-stand", "grandfather-clock"],
+  "dining": ["silver-candelabra", "serving-trolley", "dining-chair", "decanter-stand", "grandfather-clock", "grandfather-clock-v2", "banquet-table-chairs"],
   "ballroom": ["cocktail-table", "lavender-settee", "gramophone", "potted-palm", "music-stand"],
   "cellar": ["barrel-rack", "wine-crate", "iron-lantern", "stoneware-jugs", "storage-chest"],
   "library": ["bookcase", "library-ladder", "reading-chair", "reading-table", "book-cart"],
