@@ -1,14 +1,16 @@
 // Noir audio mix: an authored looping score plus procedural ambience and cues.
 
-const SOUNDTRACK_URL = new URL('../../Midnight in the Static.mp3', import.meta.url).href
-const CLOCK_URL = new URL('../../ticktock.mp3', import.meta.url).href
-const BODY_DISCOVERY_URL = new URL('../../chord.mp3', import.meta.url).href
-const EVIDENCE_DISCOVERY_URL = new URL('../../discovery.mp3', import.meta.url).href
-const HOUR_CHIME_URL = new URL('../../chime.m4a', import.meta.url).href
-const RAIN_URL = new URL('../../rain.mp3', import.meta.url).href
-const FOOTSTEPS_URL = new URL('../../footsteps.mp3', import.meta.url).href
-const TEXT_BLIP_URL = new URL('../../text-blip.mp3', import.meta.url).href
-const FIRE_URL = new URL('../../fire.mp3', import.meta.url).href
+const audioUrl = (filename: string) => `${import.meta.env.BASE_URL}assets/audio/${filename}`
+
+const SOUNDTRACK_URL = audioUrl('Midnight in the Static.mp3')
+const CLOCK_URL = audioUrl('ticktock.mp3')
+const BODY_DISCOVERY_URL = audioUrl('chord.mp3')
+const EVIDENCE_DISCOVERY_URL = audioUrl('discovery.mp3')
+const HOUR_CHIME_URL = audioUrl('chime.m4a')
+const RAIN_URL = audioUrl('rain.mp3')
+const FOOTSTEPS_URL = audioUrl('footsteps.mp3')
+const TEXT_BLIP_URL = audioUrl('text-blip.mp3')
+const FIRE_URL = audioUrl('fire.mp3')
 const STUDY_FIRE_GAIN = 0.44
 
 export class Soundtrack {

@@ -2,7 +2,7 @@ import {
   renderLegalBeat,
   renderPreparedBeat,
   resetBeatRendererCaches,
-} from './src/game/llmBeatRenderer'
+} from '../../src/game/llm/beatRenderer'
 import {
   BEAT_PROMPT_VERSION,
   buildBeatPacket,
@@ -11,11 +11,11 @@ import {
   canonicalJson,
   type BeatPacket,
   type BuiltBeatRequest,
-} from './src/game/llmPromptBuilder'
-import { validateBeatPresentation } from './src/game/llmValidation'
-import { DOSSIERS } from './src/game/narrative/dossierStoryData'
-import { getLegalBeat, initializeNarrativeCase } from './src/game/narrative/storyEngine'
-import { Simulation } from './src/game/sim'
+} from '../../src/game/llm/promptBuilder'
+import { validateBeatPresentation } from '../../src/game/llm/validation'
+import { DOSSIERS } from '../../src/game/narrative/dossierStoryData'
+import { getLegalBeat, initializeNarrativeCase } from '../../src/game/narrative/storyEngine'
+import { Simulation } from '../../src/game/sim'
 
 function check(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message)

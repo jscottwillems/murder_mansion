@@ -5,7 +5,7 @@ import {
   type BeatPacketContext,
   type BeatPresentation,
   type BuiltBeatRequest,
-} from './llmPromptBuilder'
+} from './promptBuilder'
 import {
   completeChat,
   normalizeLlmOrigin,
@@ -13,13 +13,13 @@ import {
   type ChatCompletionResult,
   type CompletionFailureKind,
   type LLMConfig,
-} from './llmTransport'
+} from './transport'
 import {
   validateBeatPresentation,
   type BeatValidationErrorCode,
-} from './llmValidation'
-import type { LegalBeat, NarrativeCaseState } from './narrative/types'
-import type { Guest } from './types'
+} from './validation'
+import type { LegalBeat, NarrativeCaseState } from '../narrative/types'
+import type { Guest } from '../types'
 
 export interface BeatRenderDiagnostics {
   fingerprintPrefix: string

@@ -1,241 +1,234 @@
 // Pack C closings — Jazz Vocalist, Antiquarian, Off-Duty Chauffeur, Debutante.
-// Bespoke thread wrap-ups keyed by route id. Each evidence route defines a
-// `resolve` closing (the guest's final word as the association is recorded);
-// each rapport route defines `warm`/`measured`/`hostile` closings, one per
-// stance. Anything omitted falls back to already-authored dialogue, then a
-// generic engine line, so a thread is always playable.
-//
-// Voice discipline follows docs/NARRATIVE_BIBLE.md §8. Resolve lines never
-// concede guilt — a trace establishes association only — and never use
-// murder/death/body language (the knowledge-state guard applies throughout).
+// Plain spoken wrap-ups. Short sentences. No purple metaphor.
+// Resolve never concedes guilt. No murder/death/body language.
 import type { AuthoredClosings } from './types'
 
 export const CLOSINGS_C: Record<string, AuthoredClosings> = {
   // ── Jazz Vocalist ──────────────────────────────────────────────────
   'vocalist-perfume': {
-    resolve: { line: 'There — the gardenia hangs in a hall I never walked, while my scarf sat folded in its case the whole set. Write it as scent on the loose, detective. It travels where a girl’s feet never did, and that places me nowhere worse.', emotion: 'thoughtful' },
-    noReveal: { line: 'Set that scented corridor against my scarf and the two won\u2019t sing together — my gardenia stayed folded in its case the whole set. Whoever left that trail of blossom in the hall, it wasn\u2019t this girl. Follow the perfume to another wrist.', emotion: 'neutral' },
+    resolve: { line: 'My scarf sat folded in its case the whole set. The gardenia turned up in a hall I never walked. Scent travels — I didn’t.', emotion: 'thoughtful' },
+    noReveal: { line: 'My gardenia stayed in its case. Whoever left that trail in the hall, it wasn’t me.', emotion: 'neutral' },
   },
   'vocalist-powder': {
-    resolve: { line: 'Lay the seam in that door’s powder beside the card carrier’s edge — they answer each other, and neither wears my hand. Note it plain: my ivory spilled, someone else pressed it. It puts my powder on the door, not me at the keyhole.', emotion: 'neutral' },
-    noReveal: { line: 'Hold that door\u2019s ivory up to my compact and the shades refuse to rhyme — what cracked across my dressing table never once dusted that keyhole. My powder kept to my own collar all night. The hand that pressed the door wore some other girl\u2019s shade.', emotion: 'neutral' },
+    resolve: { line: 'My ivory spilled on the dressing table. Someone else pressed a card edge into it on that door. My powder — not my hand at the keyhole.', emotion: 'neutral' },
+    noReveal: { line: 'That door’s powder isn’t my shade. Mine stayed on my own collar. Someone else pressed that door.', emotion: 'neutral' },
   },
   'vocalist-wax': {
-    resolve: { line: 'You’ve pressed it yourself now — teeth-down, the brass sits back into the cake just as it did while I wasn’t looking. Set the little scene in your book. The wax took that key’s shape; it doesn’t follow that I did.', emotion: 'worried' },
-    noReveal: { line: 'Press that brass key into my grip wax all evening — it won\u2019t seat the way you want it to. My amber cake is for a stubborn clasp and slippery hands, never a keyhole. The impression you\u2019re chasing was pressed into somebody else\u2019s tin.', emotion: 'neutral' },
+    resolve: { line: 'Something with teeth sat on my grip wax while I wasn’t looking — a brass key, from the shape. The wax took the impression. That doesn’t mean I did.', emotion: 'worried' },
+    noReveal: { line: 'My wax is for a stubborn clasp, not a key. Whatever impression you’re chasing, it isn’t in my tin.', emotion: 'neutral' },
   },
   'vocalist-ink': {
-    resolve: { line: 'There it is — the margin inked to the very chime I marked it by, hour and stain holding the same note. Write down the minute if you must. Keeping good time makes me punctual, detective, not guilty of anything under it.', emotion: 'neutral' },
-    noReveal: { line: 'Fix my inked margin to your chime and the hours fall on different beats. My blue-black stayed on my own charts, marking my own tempo. That stain you\u2019re following kept a stranger\u2019s appointment, not mine.', emotion: 'neutral' },
+    resolve: { line: 'I inked the score margin when the clock chimed. Same hour, same stain. Keeping time isn’t a crime.', emotion: 'neutral' },
+    noReveal: { line: 'That hour isn’t on my charts. My ink marked my own tempo. Try another pen.', emotion: 'neutral' },
   },
   'vocalist-antiseptic': {
-    resolve: { line: 'Test the scarf and you have your answer — throat wash and menthol, a sting that only borrows the surgeon’s tune. Record it as a singer’s vanity. It shares a bite with carbolic and shares nothing else, and it ties me to a warm-up, no worse.', emotion: 'thoughtful' },
-    noReveal: { line: 'Test the scarf and the note won\u2019t hold — my throat wash only borrows the surgeon\u2019s sting; underneath it\u2019s menthol and honey. No carbolic ever touched me tonight. That medicinal trace clings to a steadier hand than a singer\u2019s.', emotion: 'neutral' },
+    resolve: { line: 'Throat wash — menthol and honey. It stings like carbolic and isn’t. I warmed up my voice. That’s all.', emotion: 'thoughtful' },
+    noReveal: { line: 'No carbolic touched this scarf. Mine’s for a sore throat. That medicinal smell belongs to steadier hands.', emotion: 'neutral' },
   },
   'vocalist-earth': {
-    resolve: { line: 'Set my palm beside the grip tin and then beside your garden — the chalk is milled even, the soil never is. They won’t harmonize, and now your own notes say so. It marks the tin in my case, not my knees in the conservatory.', emotion: 'neutral' },
-    noReveal: { line: 'Lay my grip chalk beside your garden grit, and they won\u2019t harmonize — mine\u2019s milled even, the soil\u2019s a mess. My palms only ever met the microphone stand. That pale conservatory dirt came off somebody else\u2019s knees.', emotion: 'neutral' },
+    resolve: { line: 'Palm matches my grip tin. Garden soil doesn’t. I dust my hands for the mic stand — I wasn’t in the conservatory.', emotion: 'neutral' },
+    noReveal: { line: 'My chalk and that garden grit won’t match. The pale dirt came off someone else’s knees.', emotion: 'neutral' },
   },
   'vocalist-wool': {
-    resolve: { line: 'Follow it the whole soft way — splintered doorframe to my shoulder to the chair I draped it on. That’s the journey of my stole, start to rest. Trace it right and it carries me past a door, no further than that.', emotion: 'thoughtful' },
-    noReveal: { line: 'Trace that coarse strand from the splintered doorframe, and the trail never once reaches my stole — my black wool kept to my own shoulders all set. Follow it back and it starts on a coat that was never mine. Some other frayed hem brushed that hall.', emotion: 'neutral' },
+    resolve: { line: 'Doorframe to my shoulder to the chair I draped the stole on. It brushed a splintered frame. Passing a door isn’t a plot.', emotion: 'thoughtful' },
+    noReveal: { line: 'That strand never reaches my stole. Some other frayed coat brushed that hall.', emotion: 'neutral' },
   },
   'vocalist-polish': {
-    resolve: { line: 'No — the neck of the stand and the front of the locket, never its back; you’ve got that part wrong. Mind you write the correction. Whoever handled the silver upstairs was far less careful than I, and my smear only reaches my own two things.', emotion: 'neutral' },
-    noReveal: { line: 'Tell me I buffed the back of that silver too, and I\u2019ll only shrug — there\u2019s nothing of mine on it to correct. My polish reaches my stand and my locket and stops cold. The bright smear you\u2019re tracing came off a different hand entirely.', emotion: 'neutral' },
+    resolve: { line: 'I shined the mic stand and the front of my locket — not the silver upstairs. Whoever handled the plate was messier than me.', emotion: 'neutral' },
+    noReveal: { line: 'There’s nothing of mine on that silver. My polish stops at my stand and my locket.', emotion: 'neutral' },
   },
   'vocalist-oil': {
-    resolve: { line: 'Watch it once more — I free the latch here, it springs there, the oil catches my thumb, plain as a downbeat. Put the little fix in your record. It lands exactly where an honest hand would leave it and points nowhere past my case.', emotion: 'thoughtful' },
-    noReveal: { line: 'Have me work that latch a hundred times — no oil of mine springs where you\u2019re pointing. My thumb\u2019s only slick from a stuck music case, plain as a rest between verses. Whatever mechanism you\u2019re tracing, my hand never freed it.', emotion: 'neutral' },
+    resolve: { line: 'Stuck music-case latch — oil here, spring there, slick on my thumb. An honest fix. Nowhere past my case.', emotion: 'thoughtful' },
+    noReveal: { line: 'I didn’t free whatever you’re pointing at. My thumb’s only slick from my own case lid.', emotion: 'neutral' },
   },
   'vocalist-note': {
-    resolve: { line: 'Ask the guest who wanted the tune and they’ll hum back the same hour my shorthand keeps — the note and the wish, one melody. Set it down as a request answered. It ties me to a song a guest asked for, detective, and to nothing darker.', emotion: 'neutral' },
-    noReveal: { line: 'Ask the guest who\u2019s meant to have wanted that tune, and they\u2019ll hum back nothing — no such request was ever mine. My shorthand keeps its own little melodies, tucked in my own glove. That torn scrap was scribbled by another hand.', emotion: 'neutral' },
+    resolve: { line: 'Ask the guest who requested the tune — same hour my shorthand keeps. A song request. Nothing darker.', emotion: 'neutral' },
+    noReveal: { line: 'No one asked me for that tune. That scrap isn’t my hand.', emotion: 'neutral' },
   },
   'vocalist-ear': {
-    warm: { line: 'Since you’ve been gentle with me, I’ll give you the true bar: the humming moved from the side hall toward the stairs and cut off the moment another guest turned the corner. Someone was covering their nerves with my own tune. I’ll trust you with the sound — be gentle with wherever it leads.', emotion: 'thoughtful' },
-    measured: { line: 'I’ll lend you the rhythm and keep the rest, detective. A door on the offbeat, hurried shoes, a borrowed melody sung a shade too fast — that much is true and that much you may have. The name I think it was stays behind my teeth.', emotion: 'neutral' },
-    hostile: { line: 'If you’d rather corner me than listen, you’ll get silence and a tuned-up band, nothing more. I hear things, detective. I don’t hand them to a man swinging at me. We’re through.', emotion: 'angry' },
+    warm: { line: 'The humming moved from the side hall toward the stairs and cut off when another guest turned the corner. Someone was covering their nerves with my tune. Be careful where that leads.', emotion: 'thoughtful' },
+    measured: { line: 'A door on the offbeat, hurried shoes, a melody sung too fast. That much is true. The name I think stays with me.', emotion: 'neutral' },
+    hostile: { line: 'Corner me and you’ll get silence. I hear things — I don’t hand them to a man swinging at me.', emotion: 'angry' },
   },
   'vocalist-road': {
-    warm: { line: 'The honest verse, since you’ve earned it: I keep singing so the friend who once kept me singing never has to go quiet again. I’ve lost rooms and wages before I’d lose her, and I’d lose them twice over without missing a beat.', emotion: 'worried' },
-    measured: { line: 'Call it following the work, detective — the work follows the money, and the money leads to colder rooms than I came up in. There’s a friend I look after and a tune I won’t lose. Beyond that, my past is my own set list.', emotion: 'neutral' },
-    hostile: { line: 'You didn’t come for my life story and I’m done offering it. Push me like that again and the only thing you’ll hear from me is the downbeat. This number’s over.', emotion: 'angry' },
+    warm: { line: 'I keep singing so a friend who once kept me singing never has to go quiet. I’ve lost rooms before I’d lose her.', emotion: 'worried' },
+    measured: { line: 'The work follows the money, and the money leads to colder rooms than I came up in. There’s a friend I look after. Beyond that, my past is mine.', emotion: 'neutral' },
+    hostile: { line: 'You didn’t come for my life story. Push again and this number’s over.', emotion: 'angry' },
   },
   'vocalist-room': {
-    warm: { line: 'Quietly, because you’ve listened kindly — trust the breath before a lie; it catches every time, like a singer missing a cue. The one who worries me holds a false calm too long, and real calm has to breathe. Watch that one, but watch, don’t swing.', emotion: 'thoughtful' },
-    measured: { line: 'I’ll give you the sound and keep the sentence, detective. One guest laughs a half-beat late, like they’re listening for something under the music. Make of the pitch what your evidence allows; I only sing you what I hear.', emotion: 'neutral' },
-    hostile: { line: 'Mistake my ear for cheap gossip again and the set ends here. I read a room to keep people safe, not to hand you a name to bruise. Good night, detective.', emotion: 'angry' },
+    warm: { line: 'Trust the breath before a lie — it catches every time. The one who worries me holds a false calm too long. Watch that one. Don’t swing.', emotion: 'thoughtful' },
+    measured: { line: 'One guest laughs a half-beat late, like they’re listening for something under the music. Make of that what you can.', emotion: 'neutral' },
+    hostile: { line: 'I read a room to keep people safe, not to hand you a name to bruise. Good night.', emotion: 'angry' },
   },
 
   // ── Antiquarian ────────────────────────────────────────────────────
   'antiquarian-earth': {
-    resolve: { line: 'Then enter it precisely: the pumice packing fell from the reliquary’s false base, marked my fingertips, and tracked along the hem to the west panel. That is a chain of custody, not a confession. Where such dust settles is where I walked, no more — and I do apologize to the piece for the handling.', emotion: 'worried' },
-    noReveal: { line: 'Trace that pumice packing from the false base and the chain breaks well before my hem — I handled no such reliquary tonight, and even a medieval one sheds only on the hand that lifts it. The pale dust marks another\u2019s route to the panel entirely. Follow it there, and mind the wood as you go.', emotion: 'neutral' },
+    resolve: { line: 'Pale packing dust under the reliquary’s false base — on my fingertips, then along my hem toward the west panel. I handled the piece. That’s where I walked. Nothing more.', emotion: 'worried' },
+    noReveal: { line: 'I handled no such reliquary tonight. That dust marks someone else’s path to the panel.', emotion: 'neutral' },
   },
   'antiquarian-polish': {
-    resolve: { line: 'Compare them and be done — the streak on the catalog card and the tin by the passage share one formula exactly. Record the match. It attests that I tested an impertinently modern hinge; it does not attest to anything graver.', emotion: 'neutral' },
-    noReveal: { line: 'Compare the streak on that card with the tin by the passage and the formulas simply refuse each other — my authentication wax follows a conservator\u2019s old recipe, quite distinct from any common brightener. Whatever polished the fitting you\u2019re chasing came from a different pot. The provenance is not mine.', emotion: 'neutral' },
+    resolve: { line: 'The streak on my catalog card matches the tin by the passage. I tested a hinge that looked too new. Noticing a forgery isn’t a crime.', emotion: 'neutral' },
+    noReveal: { line: 'My authentication wax doesn’t match that tin. Whatever polished your fitting came from a different pot.', emotion: 'neutral' },
   },
   'antiquarian-resin': {
-    resolve: { line: 'Note the two ages side by side: my resin is hours old and still tacky, while the flecks in the passage are generations cured. Time itself parts our hands. It dates me to a veneer I mended tonight, and to no older mischief.', emotion: 'thoughtful' },
-    noReveal: { line: 'Date any resin of mine against those flecks in the passage and the years part us at once — I mended no veneer tonight, while that amber cured a generation before my hand was near it. Time is the honestest appraiser there is. The old fleck answers to an older hand than mine.', emotion: 'thoughtful' },
+    resolve: { line: 'My resin is hours old and still tacky. Those passage flecks are years cured. I mended a veneer tonight — not old mischief.', emotion: 'thoughtful' },
+    noReveal: { line: 'I mended no veneer tonight. That old amber answers to an older hand than mine.', emotion: 'thoughtful' },
   },
   'antiquarian-ink': {
-    resolve: { line: 'Fix the card to the chime, then — the ink and the hour concur to the minute, for I date every entry as I make it. Set the correspondence in your record. Meticulous scholarship places me at my catalogue, detective, and pedantry is not an indictment.', emotion: 'neutral' },
-    noReveal: { line: 'Fix my dated card to your chime and the minutes decline to meet — I inscribe every entry to the hour, and my hour is plainly not the one you want. Meticulous record-keeping cuts both ways. Here the ink acquits me and directs you elsewhere.', emotion: 'neutral' },
+    resolve: { line: 'I date every catalog card as I write it. Ink and hour match. Careful scholarship — not an indictment.', emotion: 'neutral' },
+    noReveal: { line: 'That hour isn’t on my cards. The ink points elsewhere.', emotion: 'neutral' },
   },
   'antiquarian-antiseptic': {
-    resolve: { line: 'Analyse the fluid and the confusion resolves: mine dissolves old varnish, the surgeon’s cleans a wound — a shared reek is the poorest provenance there is. Enter it as a conservator’s spirit. It places me at a clouded lacquer, nothing nearer to harm.', emotion: 'thoughtful' },
-    noReveal: { line: 'Analyse the spirit on my cuff and it will confess to lifting varnish, never to dressing a wound — a shared reek is the poorest provenance there is. My conservator\u2019s solvent borrows carbolic\u2019s bite and nothing else. The medicinal trace you want belongs to a surgeon\u2019s hand, not a scholar\u2019s.', emotion: 'neutral' },
+    resolve: { line: 'Mine lifts old varnish. His cleans a wound. Same sting, different job. I was clearing clouded lacquer.', emotion: 'thoughtful' },
+    noReveal: { line: 'My solvent strips lacquer, not infection. The medicinal trace you want is a surgeon’s, not a scholar’s.', emotion: 'neutral' },
   },
   'antiquarian-wool': {
-    resolve: { line: 'Trace the whole scholarly little journey — the display case corner to my elbow to the ledge I steadied a piece upon. That is provenance for a thread, and I grant it freely. It sets me leaning over glass to admire, which is no charge at all.', emotion: 'neutral' },
-    noReveal: { line: 'Trace that coarse strand from the display case and the little journey never arrives at my elbow — my scholar\u2019s coat is a finer, better-documented weave, and it snagged on nothing tonight. Some other dark coat leaned where you\u2019re looking. The thread\u2019s provenance ends far from me.', emotion: 'neutral' },
+    resolve: { line: 'Display case corner, then my elbow, then the ledge I steadied a piece on. I leaned over glass to look. That isn’t a charge.', emotion: 'neutral' },
+    noReveal: { line: 'My coat snagged on nothing tonight. Some other dark sleeve leaned where you’re looking.', emotion: 'neutral' },
   },
   'antiquarian-perfume': {
-    resolve: { line: 'Ask the two who watched, and they will place her at my shoulder, her sleeve against my coat. Record their account beside the scent. It documents an admirer’s enthusiasm transferred to my collar — proximity, which authenticates nothing against me.', emotion: 'neutral' },
-    noReveal: { line: 'Ask your onlookers whether any admirer pressed close to me tonight, and they will place no one at my shoulder — for no one leaned there. A gardenia never settled on this collar by my doing. The scent you follow rode in on another\u2019s sleeve entirely.', emotion: 'neutral' },
+    resolve: { line: 'Two people saw her lean over my shoulder to look at the piece. The scent came off her sleeve, not mine. Standing close proves nothing against me.', emotion: 'neutral' },
+    noReveal: { line: 'Nobody leaned on my shoulder tonight, and I don’t wear gardenia. Whatever scent you’re chasing isn’t from me.', emotion: 'neutral' },
   },
   'antiquarian-powder': {
-    resolve: { line: 'Match the shade to her compact, then against my own whiting, which is chalk-white and never ivory — the distinction is decisive. Note the comparison carefully. Her powder settled on my sleeve in a narrow passage; that is where it places me and no further.', emotion: 'thoughtful' },
-    noReveal: { line: 'Match the ivory you found against my sleeve and the shades will not answer each other — I carry only chalk-white whiting for restoration, never a lady\u2019s powder. No compact brushed this coat tonight in any passage. That cloud settled on some other shoulder.', emotion: 'neutral' },
+    resolve: { line: 'Match it to her compact — mine is chalk-white whiting, never ivory. She brushed past in a narrow passage. That’s as far as it goes.', emotion: 'thoughtful' },
+    noReveal: { line: 'I don’t carry ivory powder. No compact brushed this coat. That cloud settled on another shoulder.', emotion: 'neutral' },
   },
   'antiquarian-oil': {
-    resolve: { line: 'Observe it again: I ease the ward here, the bolt springs there, and the oil catches my thumb — a scholar reading a two-century mechanism. Enter the reconstruction. It marks a lock I could not leave frozen; it does not mark me otherwise.', emotion: 'thoughtful' },
-    noReveal: { line: 'Have me ease that seized lock again and no oil of mine springs where you expect — my case stayed shut and my hands dry the whole evening. A two-century mechanism found some other curious scholar tonight, if it found one at all. The slick you\u2019re tracing is not off my thumb.', emotion: 'neutral' },
+    resolve: { line: 'I oiled a seized lock — ward, bolt, oil on my thumb. Curiosity about an old mechanism. Nothing else.', emotion: 'thoughtful' },
+    noReveal: { line: 'My case stayed shut. Whatever lock you’re tracing, my hand never freed it.', emotion: 'neutral' },
   },
   'antiquarian-note': {
-    resolve: { line: 'No — your accession number is transposed; restore the final digits and the “plot” resolves into a plain condition report. I do beg the object’s pardon for the correction, but accuracy is owed it. It records an examination, detective, and nothing worse of me.', emotion: 'neutral' },
-    noReveal: { line: 'Read that accession code back to me however you please — I have nothing to restore, for the slip is none of mine. My catalogue shorthand stays in my own folio, and this scrap answers to a stranger\u2019s ledger. You are misreading another hand, detective, not mine.', emotion: 'neutral' },
+    resolve: { line: 'You’ve got the accession number wrong — fix the last digits and it’s a condition report, not a plot. An examination. Nothing worse.', emotion: 'neutral' },
+    noReveal: { line: 'That scrap isn’t mine. My catalogue notes stayed in my folio. You’re reading another hand.', emotion: 'neutral' },
   },
   'antiquarian-history': {
-    warm: { line: 'Since you ask with patience — there is a servants’ route behind the paneling, and one panel wears fresh scratches around an ancient catch, beside the landscape that hangs crooked in the west passage. Old wood freshly marked earns attention. I give you the moment gladly; be as careful with it as I would be with the wood.', emotion: 'thoughtful' },
-    measured: { line: 'I will offer the history and withhold the speculation: the house kept a concealed passage, and one catch shows recent use it has no business showing. Where it leads is yours to trace. I catalogue the damage; I do not invent the hand behind it.', emotion: 'neutral' },
-    hostile: { line: 'You would have me name a hand I never saw upon that panel. I will not. History is accustomed to being rushed by people who do not understand it — the tour is over, detective.', emotion: 'angry' },
+    warm: { line: 'There’s a servants’ route behind the paneling. One panel has fresh scratches around an old catch, beside the crooked landscape. Old wood freshly marked — that deserves attention.', emotion: 'thoughtful' },
+    measured: { line: 'The house kept a concealed passage, and one catch shows recent use it shouldn’t. I note the damage. I don’t invent the hand behind it.', emotion: 'neutral' },
+    hostile: { line: 'I won’t name a hand I never saw on that panel. The tour is over.', emotion: 'angry' },
   },
   'antiquarian-vocation': {
-    warm: { line: 'The honest answer, since you have listened: objects keep their promises, and I once signed my name to one that did not keep its. I have wanted to correct that single line ever since. Perhaps, handled gently, tonight is when I finally do.', emotion: 'worried' },
-    measured: { line: 'Call it a temperament, detective. A genuine piece is honest about its age; only people and their forgeries lie, and I have spent a life mending the past’s neglect. What weighs on me beyond that stays in its case for now.', emotion: 'thoughtful' },
-    hostile: { line: 'I did not offer my memoirs and you plainly do not want them, only a lever. Erudition withdrawn. Ask me of an object, or ask me nothing at all.', emotion: 'neutral' },
+    warm: { line: 'I once signed my name to a piece that wasn’t what I claimed. I’ve wanted to correct that line ever since. Perhaps tonight I finally can.', emotion: 'worried' },
+    measured: { line: 'A genuine piece is honest about its age. People and forgeries lie. I’ve spent a life mending neglect. What weighs on me beyond that stays put for now.', emotion: 'thoughtful' },
+    hostile: { line: 'I didn’t offer my memoirs. Ask me about an object, or ask me nothing.', emotion: 'neutral' },
   },
   'antiquarian-guests': {
-    warm: { line: 'Off the record, since you have earned the courtesy: the one who asked the reliquary’s price before its history frightens me most. Value without reverence is a kind of vandalism, and vandals are capable of a great deal. Watch that one the way I watch for a forged hinge.', emotion: 'thoughtful' },
-    measured: { line: 'Impressions I have catalogued in abundance; names I withhold. One guest handles everything — and everyone — a shade too casually. Careless hands, careless conscience. Read the wear pattern as you like.', emotion: 'neutral' },
-    hostile: { line: 'I appraise objects, detective, not suspects for your convenience, and I shield a pressured patron, not a wrongdoer. Confuse the two again and the gallery closes. We may return the topic to its case.', emotion: 'angry' },
+    warm: { line: 'The one who asked the reliquary’s price before its history frightens me. People who only see cost are capable of a great deal.', emotion: 'thoughtful' },
+    measured: { line: 'One guest handles everything — and everyone — a shade too casually. Careless hands. Read that as you like.', emotion: 'neutral' },
+    hostile: { line: 'I appraise objects, not suspects. I shield a pressured patron, not a wrongdoer. Don’t confuse them again.', emotion: 'angry' },
   },
 
   // ── Off-Duty Chauffeur ─────────────────────────────────────────────
   'chauffeur-solvent': {
-    resolve: { line: 'There’s the tin on the bench, sir — same label as my cuff, none of it off the doctor’s shelf. Set the two side by side and write what you see. It puts battery solvent on my sleeve, not a surgeon’s work, and that’s the whole of what it puts on me.', emotion: 'neutral' },
-    noReveal: { line: 'Hold my cuff to the motor tin, sir, then to the doctor\u2019s shelf. It answers the garage, not the surgery. That sharp bite is battery solvent, nothing off a medical bottle. Whoever left the antiseptic you\u2019re after, it wasn\u2019t this hand.', emotion: 'neutral' },
+    resolve: { line: 'Same label as the tin on the bench, sir. Battery solvent, not the doctor’s shelf. Working hands — that’s all.', emotion: 'neutral' },
+    noReveal: { line: 'My cuff answers the garage tin, not the surgery. Whoever left that antiseptic, it wasn’t me.', emotion: 'neutral' },
   },
   'chauffeur-wool': {
-    resolve: { line: 'Look and you can’t miss it, sir — mine frayed at the wrist on a seat spring; that passage thread’s elbow-high and a coarser weave. Two coats, two weaves. It can’t be mine, and it can’t put me at that latch.', emotion: 'thoughtful' },
-    noReveal: { line: 'Set my wrist tear against that latch thread, sir. Mine\u2019s a finer weave, frayed low; that one\u2019s coarse and elbow-high. They can\u2019t be the same coat. Look to another man\u2019s sleeve.', emotion: 'neutral' },
+    resolve: { line: 'Mine frayed at the wrist on a seat spring. If your thread’s elbow-high and coarser, it can’t be my coat.', emotion: 'thoughtful' },
+    noReveal: { line: 'Wrist tear, finer weave — that latch thread’s a different coat. Look to another man’s sleeve.', emotion: 'neutral' },
   },
   'chauffeur-polish': {
-    resolve: { line: 'Follow it straight, sir — tin, glove, garage latch, cuff. One trail, all garage, nowhere near the dining room. Log it that way. It places my hand on the badge, not on the silver upstairs.', emotion: 'neutral' },
-    noReveal: { line: 'Follow that polish, sir — tin, glove, garage latch — and the trail ends flat at the garage door. It never once climbs to the dining room. The smear on the silver upstairs came off a hand that isn\u2019t mine.', emotion: 'neutral' },
+    resolve: { line: 'Tin, glove, garage latch, cuff. One trail, all garage. My hand on the badge — not the silver upstairs.', emotion: 'neutral' },
+    noReveal: { line: 'That polish trail ends at the garage door. The smear upstairs came off someone else.', emotion: 'neutral' },
   },
   'chauffeur-ink': {
-    resolve: { line: 'The entry’s dated to the chime I wrote by, sir — ink and hour say the same thing to the minute. Put the time down. A driver who keeps a careful log keeps himself honest; it doesn’t make him guilty of aught.', emotion: 'neutral' },
-    noReveal: { line: 'Line my log entry up against your chime, sir, and the hours don\u2019t meet. My ink marked my own runs, at my own time. That stain you\u2019re chasing was set down by another man\u2019s pen.', emotion: 'neutral' },
+    resolve: { line: 'Log entry dated to the chime I wrote by. A careful driver’s record. That doesn’t make me guilty of anything.', emotion: 'neutral' },
+    noReveal: { line: 'My log doesn’t match your hour. That stain was another man’s pen.', emotion: 'neutral' },
   },
   'chauffeur-earth': {
-    resolve: { line: 'Set my knee-grit against the drive gravel, sir, then against the garden — mine’s coarse and sandy, theirs isn’t. They won’t match. It puts me under the motor on the drive, not on my knees in the conservatory.', emotion: 'thoughtful' },
-    noReveal: { line: 'Set my knee-grit by the drive gravel, sir, then by the garden. It matches the drive and not the garden — mine\u2019s coarse and sandy; that conservatory dust isn\u2019t. Two different grounds. I was never down on my knees indoors.', emotion: 'neutral' },
+    resolve: { line: 'Knee grit matches the drive gravel, not the garden. I was under the motor. Not in the conservatory.', emotion: 'thoughtful' },
+    noReveal: { line: 'Drive grit is coarse and sandy. That garden dust isn’t. I wasn’t on my knees indoors.', emotion: 'neutral' },
   },
   'chauffeur-perfume': {
-    resolve: { line: 'Smell the back seat, sir — same gardenia as my collar. It came off my fare, not out of my pocket. A man in oil and wool don’t buy French scent. It places a passenger in my cab, and nothing worse on me.', emotion: 'neutral' },
-    noReveal: { line: 'Smell my collar against that corridor, sir, and they won\u2019t line up. No gardenia rode with me tonight; the back seat carried no such fare. A man in oil and wool doesn\u2019t leave French scent where you\u2019re pointing. That perfume clings to somebody else.', emotion: 'neutral' },
+    resolve: { line: 'Smell the back seat — same gardenia as my collar. Came off my fare when I shut her door. A man in oil and wool doesn’t buy French scent.', emotion: 'neutral' },
+    noReveal: { line: 'No gardenia rode with me tonight. That perfume isn’t off my collar.', emotion: 'neutral' },
   },
   'chauffeur-powder': {
-    resolve: { line: 'Ask the footman, sir — he watched her powder her face and step down from my cab. His word and my shoulder agree. It marks me the driver who held her door, not a hand at anything else.', emotion: 'neutral' },
-    noReveal: { line: 'Ask the footman, sir — he\u2019ll swear no powdered lady rode in my cab tonight, because none did. There\u2019s no ivory on my shoulder to account for. That face powder settled off some other man\u2019s fare.', emotion: 'neutral' },
+    resolve: { line: 'Ask the footman — he watched her powder her face and step out of my cab. I held the door. That’s the job.', emotion: 'neutral' },
+    noReveal: { line: 'No powdered lady rode in my cab tonight. That face powder came off someone else’s fare.', emotion: 'neutral' },
   },
   'chauffeur-oil': {
-    resolve: { line: 'One trail, sir — can to thumb to the rag in my pocket to the linkage. All garage, none of it near the house. Trace it and log it. It ties me to my own motor, and that’s the whole of what it ties me to.', emotion: 'thoughtful' },
-    noReveal: { line: 'Trace that oil, sir — can, thumb, rag — and it never leaves the garage. My hands stayed on my own motor tonight. The delicate thing you\u2019re chasing was oiled by somebody else\u2019s fingers.', emotion: 'neutral' },
+    resolve: { line: 'Can, thumb, rag, throttle linkage. All garage. Ties me to my own motor — that’s the whole of it.', emotion: 'thoughtful' },
+    noReveal: { line: 'That oil never left the garage with me. Whatever you’re chasing, someone else oiled it.', emotion: 'neutral' },
   },
   'chauffeur-wax': {
-    resolve: { line: 'Watch me seal another, sir — I press the knot here, the stick cracks there, the fleck lands on my cuff. Same every time. It marks me a man paid to carry a sealed parcel, not a hand in whatever you’re chasing.', emotion: 'neutral' },
-    noReveal: { line: 'Have me seal a parcel over and over, sir — no fleck of mine matches that amber. I pressed no wax tonight; my cuff\u2019s clean of it. The seal you\u2019re tracing broke off another man\u2019s stick.', emotion: 'neutral' },
+    resolve: { line: 'Press the knot, stick cracks, fleck on the cuff. Same every time. I was paid to carry a sealed parcel. That’s the job.', emotion: 'neutral' },
+    noReveal: { line: 'I pressed no wax tonight. That fleck broke off another man’s stick.', emotion: 'neutral' },
   },
   'chauffeur-note': {
-    resolve: { line: 'Your hour’s wrong, sir — it’s a quarter later; fix it and the “getaway” reads as a fare waiting on a car. Write down the right time. It logs a pickup I was booked for, and booked isn’t guilty, whatever my station.', emotion: 'thoughtful' },
-    noReveal: { line: 'Read that pickup hour back wrong all you like, sir — I\u2019ve nothing to fix, because the scrap isn\u2019t mine. My fares stay in my own shorthand. That torn note was scratched down by another driver\u2019s hand, not this one.', emotion: 'neutral' },
+    resolve: { line: 'Your hour’s wrong — it’s a quarter later. Fix it and it’s a fare waiting on a car, not a getaway. Booked isn’t guilty.', emotion: 'thoughtful' },
+    noReveal: { line: 'That scrap isn’t mine. My fares stay in my own shorthand.', emotion: 'neutral' },
   },
   'chauffeur-traffic': {
-    warm: { line: 'Since you’re asking me straight, sir, I’ll tell it straight: one guest used the service door twice and played it like they’d never seen the thing. Same step both times — heel drags on the left when they hurry. Second trip came after the hall clock chimed, before the next thunder. That’s a witness talking, not the help guessing.', emotion: 'thoughtful' },
-    measured: { line: 'I’ll give you what I heard and keep what I guess, sir. A step through the service door twice, a left heel dragging when it hurried, the second run after the chime. The face I won’t swear to. Vague’s better than wrong.', emotion: 'neutral' },
-    hostile: { line: 'You want me to point at a gentleman on my say-so, then pin it on the driver if it turns sour. I’ve been that tidy answer once, sir. Not again. We’re done.', emotion: 'angry' },
+    warm: { line: 'One guest used the service door twice and played dumb about it. Same step both times — left heel drags when they hurry. Second trip after the hall clock, before the next thunder. That’s what I heard.', emotion: 'thoughtful' },
+    measured: { line: 'Service door twice, left heel dragging, second run after the chime. The face I won’t swear to. Vague’s better than wrong.', emotion: 'neutral' },
+    hostile: { line: 'I won’t point at a gentleman so the driver becomes the tidy answer later. I’ve been that once. Not again.', emotion: 'angry' },
   },
   'chauffeur-standing': {
-    warm: { line: 'Cap off, then, sir — what I want is to be counted. Believe a working man when he tells you what he saw, and I’ll give you every road I drove tonight, every stop, every hour of it.', emotion: 'thoughtful' },
-    measured: { line: 'It’s restful work, being furniture, sir — people talk in front of a driver like he’s upholstery, so I hear plenty. I keep my own counsel and I keep it clean. What I saw, I’ll tell a man who’ll credit it.', emotion: 'neutral' },
-    hostile: { line: 'If I’m only the help to you, sir, then the help’s got nothing to say. I’ll not be the tidy neck the gentry pin it on. Engine off. We’re through.', emotion: 'angry' },
+    warm: { line: 'What I want is to be believed. Give a working man that, and I’ll tell you every road I drove tonight.', emotion: 'thoughtful' },
+    measured: { line: 'People talk in front of a driver like he’s furniture. I hear plenty. I’ll tell a man who’ll credit it.', emotion: 'neutral' },
+    hostile: { line: 'If I’m only the help to you, the help’s got nothing to say. Engine off.', emotion: 'angry' },
   },
   'chauffeur-fares': {
-    warm: { line: 'Quiet between us, sir — watch the one who kept eyeing the road behind us the whole way up, then overpaid at the door. Fear and money together, that’s a story worth reading. I give you what I saw, not the verdict.', emotion: 'thoughtful' },
-    measured: { line: 'You learn a person from the back seat, sir — where they’re soft, where they lie, what they tip when they’re scared. One rode looking backward the whole way. Make of it what you can; I’ll not name him for you.', emotion: 'neutral' },
-    hostile: { line: 'I’ll not sell you a fare’s secrets to save myself the trouble, sir. A man who paid for my quiet on a trip hasn’t bought me for worse. Pull rank all you like — we’re parked.', emotion: 'angry' },
+    warm: { line: 'Watch the one who eyed the road behind us the whole way up, then overpaid at the door. Fear and money together — that’s worth reading.', emotion: 'thoughtful' },
+    measured: { line: 'You learn a person from the back seat. One rode looking backward the whole way. I won’t name him for you.', emotion: 'neutral' },
+    hostile: { line: 'A man who paid for my quiet on a trip hasn’t bought me for worse. We’re parked.', emotion: 'angry' },
   },
 
   // ── Debutante ──────────────────────────────────────────────────────
   'debutante-earth': {
-    resolve: { line: 'Retrace it and you’ll see, detective — the grit spilled here, the repaired heel clicked oddly there, and both end at that crooked panel. Write it down properly. The dust puts me behind someone else’s odd little heel; I followed the mess, I didn’t make it.', emotion: 'thoughtful' },
-    noReveal: { line: 'Retrace that repaired heel from the spilled grit however you like, detective — the path simply never crosses mine. My slippers kept to the card room all evening. The pale conservatory dust followed some other, cleverer pair of shoes.', emotion: 'neutral' },
+    resolve: { line: 'Grit spilled here, an odd repaired heel clicked there, both end at that crooked panel. I followed the mess. I didn’t make it.', emotion: 'thoughtful' },
+    noReveal: { line: 'That path never crosses mine. My slippers stayed in the card room. Someone else’s shoes tracked the conservatory.', emotion: 'neutral' },
   },
   'debutante-perfume': {
-    resolve: { line: 'Set my perfume’s little stroll down the corridor against the card table where three players will swear I sat. I was losing at cards in plain view. Note it exactly. My scent wandered off without me — it places the gardenia in that hall, not me.', emotion: 'neutral' },
-    noReveal: { line: 'Set that scented corridor against the card table, detective, and the two won\u2019t meet — three players will swear I never rose, and no gardenia of mine ever strayed. My little bottle stayed capped on the vanity. Some other woman perfumed that hall.', emotion: 'neutral' },
+    resolve: { line: 'Three players will swear I never left the card table. My scent wandered the hall without me. The gardenia went — I didn’t.', emotion: 'neutral' },
+    noReveal: { line: 'I never rose from the table, and my bottle stayed capped. Some other woman perfumed that hall.', emotion: 'neutral' },
   },
   'debutante-powder': {
-    resolve: { line: 'Match the glove seams in that latch powder to the ones pressed into my vanity lining — the same stranger’s hand made both, and neither is mine. Do look closely. My powder is on the brass; the hand that spread it there belongs to someone else entirely.', emotion: 'thoughtful' },
-    noReveal: { line: 'Match the glove seams in that latch powder to my vanity lining, detective, and they refuse each other entirely — the ivory isn\u2019t even my shade. My compact spilled across my own collar, nowhere near the brass. A stranger\u2019s powder dressed that latch.', emotion: 'neutral' },
+    resolve: { line: 'Glove seams in the latch powder match the ones pressed into my vanity lining — same stranger’s hand, not mine. My powder’s on the brass. Their hand spread it.', emotion: 'thoughtful' },
+    noReveal: { line: 'That isn’t even my shade. My compact spilled on my collar, nowhere near the latch.', emotion: 'neutral' },
   },
   'debutante-ink': {
-    resolve: { line: 'The page is dated to the very chime, detective — the ink and the hour agree, because I do date my pages. Write the minute down. A girl who can read a clock isn’t a girl with a plot; it only places me at my little book.', emotion: 'neutral' },
-    noReveal: { line: 'Fix my dated page against your clock, detective, and the hours won\u2019t agree — my ink marked a minute all its own. A girl who dates her diary isn\u2019t a girl in your chronology. That blue-black stain kept somebody else\u2019s hour.', emotion: 'neutral' },
+    resolve: { line: 'I dated the page to the chime. Ink and hour agree. A girl who keeps time isn’t a girl with a plot.', emotion: 'neutral' },
+    noReveal: { line: 'My diary marked a different minute. That stain kept someone else’s hour.', emotion: 'neutral' },
   },
   'debutante-antiseptic': {
-    resolve: { line: 'Sniff it properly and it’s pear-drops, not medicine — acetone from my vanity case, the surgeon’s carbolic only borrowing the sting. Set that down. It places me at a chipped manicure, detective, and a shared reek isn’t a shared hand.', emotion: 'thoughtful' },
-    noReveal: { line: 'Sniff my cuff properly, detective — it\u2019s pear-drops and acetone, not a surgeon\u2019s carbolic. The two only borrow the same sting. My vanity case never held a drop of medicine. That antiseptic clings to steadier hands than mine.', emotion: 'neutral' },
+    resolve: { line: 'It’s acetone — pear-drops, not medicine. I redid a chipped nail. Same sting as carbolic, different bottle.', emotion: 'thoughtful' },
+    noReveal: { line: 'Vanity acetone, not a surgeon’s bottle. That antiseptic clings to steadier hands than mine.', emotion: 'neutral' },
   },
   'debutante-wool': {
-    resolve: { line: 'Follow the whole gallant little journey — the borrowed coat to my bracelet clasp to my shoulder, where the collar sat. That’s the road the thread took. Borrowing a man’s coat on a cold terrace puts his wool on me, detective, not me anywhere I shouldn’t be.', emotion: 'neutral' },
-    noReveal: { line: 'Trace that coarse thread wherever it leads, detective — it never once arrives at my bracelet or my shoulder. I borrowed no gentleman\u2019s coat tonight, and my wrap is silk clean through. The wool belongs to another cold guest entirely.', emotion: 'neutral' },
+    resolve: { line: 'He lent me his coat on the terrace. It snagged on my bracelet and shed all over my shoulders. His wool on me — not me somewhere I shouldn’t be.', emotion: 'neutral' },
+    noReveal: { line: 'I borrowed no coat tonight. My wrap is silk. That wool belongs to someone else.', emotion: 'neutral' },
   },
   'debutante-polish': {
-    resolve: { line: 'No — the back and the clasp, never the handle; do get it right. Whoever handled the big silver was far less tidy than I. Note the correction. My smear reaches my own hand-mirror and stops there.', emotion: 'neutral' },
-    noReveal: { line: 'Tell me I buffed the mirror\u2019s handle too, detective — I shan\u2019t correct you, because none of it is mine to correct. I polished no silver tonight, not a clasp nor a plate. Your careful smear belongs to some other tidy hand.', emotion: 'neutral' },
+    resolve: { line: 'Back and clasp of my hand-mirror — never the handle, never the big silver. Get that right.', emotion: 'neutral' },
+    noReveal: { line: 'I polished nothing tonight. Your smear belongs to some other tidy hand.', emotion: 'neutral' },
   },
   'debutante-oil': {
-    resolve: { line: 'Watch me free it again — I oil the comb here, the cylinder springs there, the oil catches my thumb. There’s your mechanism, detective. It ties me to a stubborn waltz I mended myself, and to nothing cleverer than that.', emotion: 'thoughtful' },
-    noReveal: { line: 'Have me free that music box a dozen times, detective — no oil of mine springs where you\u2019re pointing. My thumb is quite clean tonight; the little movement never jammed at all. Whatever mechanism you\u2019re tracing, a cleverer hand than mine oiled it.', emotion: 'neutral' },
+    resolve: { line: 'Stubborn music-box comb — oil here, cylinder springs, slick on my thumb. A waltz I mended. Nothing cleverer.', emotion: 'thoughtful' },
+    noReveal: { line: 'My music box never jammed. Whatever you’re tracing, a cleverer hand oiled it.', emotion: 'neutral' },
   },
   'debutante-wax': {
-    resolve: { line: 'Ask my friend — she holds the letter, and her seal is twin to the fleck on my glove. Their halves agree. Set it down as a sealed letter, detective. A girl’s guarded secret isn’t a girl’s guilt; it only places the wax on my glove.', emotion: 'neutral' },
-    noReveal: { line: 'Ask my friend for the matching half, detective, and she\u2019ll produce nothing — because I sealed no letter tonight. There\u2019s no amber fleck on my glove to twin. That wax hardened on someone else\u2019s secret entirely.', emotion: 'neutral' },
+    resolve: { line: 'Ask my friend — she has the letter, and her seal matches the fleck on my glove. A sealed letter. A girl’s secret isn’t a girl’s guilt.', emotion: 'neutral' },
+    noReveal: { line: 'I sealed no letter tonight. There’s no fleck on my glove to match. That wax hardened on someone else’s secret.', emotion: 'neutral' },
   },
   'debutante-note': {
-    resolve: { line: 'Lay my marks beside the table’s score sheet, detective — same hand, same night, hand for hand. They match exactly. Write it down. A tally isn’t a scheme; it places me at the card table, keeping better books than they credited me for.', emotion: 'thoughtful' },
-    noReveal: { line: 'Lay my shorthand beside the table\u2019s score sheet, detective, and the hands won\u2019t match — the scrawl simply isn\u2019t mine. My tally stayed tucked in my own little bag all night. Some other cramped hand scratched out that torn note.', emotion: 'neutral' },
+    resolve: { line: 'My marks match the card table’s score sheet — same hand, same night. A tally. Not a scheme.', emotion: 'thoughtful' },
+    noReveal: { line: 'That scrawl isn’t mine. My tally stayed in my bag. Someone else scratched that note.', emotion: 'neutral' },
   },
   'debutante-glance': {
-    warm: { line: 'Since you’ve treated me as though I can count — and I can — I’ll tell you plainly: two guests swapped a key beneath the card table while explaining the rules to me. One long brass key, into a left coat pocket, just before its new owner left the room alone. I saw the whole of it.', emotion: 'thoughtful' },
-    measured: { line: 'I’ll give you the shape of it and keep the names, detective. A key changed hands under the table during cards — the brass one, not the silver. Where it went after, I’ll tell you when I’m sure you’ll use it kindly.', emotion: 'neutral' },
-    hostile: { line: 'How lovely, being cornered by a man who thinks a smile means empty. I fold. If you’d rather bully than believe me, you’ll get nothing but pretty nothing. We’re quite finished.', emotion: 'angry' },
+    warm: { line: 'Two guests swapped a key under the card table while explaining the rules to me. Long brass one, into a left coat pocket, just before its new owner left alone. I saw the whole of it.', emotion: 'thoughtful' },
+    measured: { line: 'A brass key changed hands under the table during cards. Where it went after, I’ll say when I’m sure you’ll use it kindly.', emotion: 'neutral' },
+    hostile: { line: 'Bully a girl who can count and you’ll get pretty nothing. We’re finished.', emotion: 'angry' },
   },
   'debutante-underestimated': {
-    warm: { line: 'The true answer, since you asked the real me: I’m fighting for my own money and the right to say what I saw without a guardian deciding it for me. Give me that — my accounts, my accusation, my future — and I’ll give you the truth I’ve been counting all night.', emotion: 'worried' },
-    measured: { line: 'Call it useful, detective. People say anything in front of a girl they think can’t count, and I count beautifully. I’m after what’s mine and the say-so over it. Beyond that, my papers stay sewn where they are for now.', emotion: 'neutral' },
-    hostile: { line: '“Drop the act,” you say — how you all love ending things for me. Smile, nod, be filed away like a debut portrait. Not tonight. If that’s your tone, we’re done.', emotion: 'suspicious' },
+    warm: { line: 'I’m fighting for my own money and the right to say what I saw. Give me that, and I’ll give you the truth I’ve been counting all night.', emotion: 'worried' },
+    measured: { line: 'People say anything in front of a girl they think can’t count. I count beautifully. I’m after what’s mine.', emotion: 'neutral' },
+    hostile: { line: 'Smile, nod, be filed away — not tonight. If that’s your tone, we’re done.', emotion: 'suspicious' },
   },
   'debutante-watchers': {
-    warm: { line: 'Quietly, since you’ve listened: watch the one who counted the exits every time the thunder covered it. Nervous people fidget; that one was mapping a way out. People only count the doors when they mean to use one. I’d swear to it.', emotion: 'thoughtful' },
-    measured: { line: 'I observe, detective — spying sounds so grubby. One guest mapped the exits under the thunder; a figure changed hands under the card table where I was dealt in. I give you what I saw, not what it means.', emotion: 'neutral' },
-    hostile: { line: 'What a disappointing girl I must be, refusing to perform for you. I keep my names and my papers to myself. Press me like that and you’ll get the decorative version and nothing else.', emotion: 'suspicious' },
+    warm: { line: 'Watch the one who counted the exits every time the thunder covered it. People only count the doors when they mean to use one.', emotion: 'thoughtful' },
+    measured: { line: 'One guest mapped the exits under the thunder. A figure changed hands under the card table. I give you what I saw, not what it means.', emotion: 'neutral' },
+    hostile: { line: 'Press me like that and you’ll get the decorative version and nothing else.', emotion: 'suspicious' },
   },
 }

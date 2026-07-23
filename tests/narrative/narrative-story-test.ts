@@ -1,6 +1,6 @@
-import { Simulation } from './src/game/sim'
-import { EVIDENCE_IDS, type QuestionTopic } from './src/game/types'
-import { DOSSIERS, NARRATIVE_NODES, NARRATIVE_THREADS } from './src/game/narrative/dossierStoryData'
+import { Simulation } from '../../src/game/sim'
+import { EVIDENCE_IDS, type QuestionTopic } from '../../src/game/types'
+import { DOSSIERS, NARRATIVE_NODES, NARRATIVE_THREADS } from '../../src/game/narrative/dossierStoryData'
 import {
   applyStoryChoice,
   dispatchCrossNpcEvent,
@@ -10,7 +10,7 @@ import {
   markCharacterUnavailable,
   recordNarrativeFact,
   reopenThread,
-} from './src/game/narrative/storyEngine'
+} from '../../src/game/narrative/storyEngine'
 function check(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message)
 }

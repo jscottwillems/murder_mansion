@@ -1,9 +1,15 @@
 node_modules/
 dist/
 output/
+coverage/
+.vite/
+playwright-report/
+test-results/
 
 .DS_Store
 *.log
+__pycache__/
+*.py[cod]
 
 .env
 .env.*

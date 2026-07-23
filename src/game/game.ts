@@ -8,8 +8,8 @@ import { ARCHETYPES, EVIDENCE_BY_ID, ROOMS, ROOM_BY_ID, ROOM_HALF, roomAt, roomC
 import { Simulation } from './sim'
 import { MansionScene } from './world'
 import { Soundtrack } from './audio'
-import { BeatVisibilityGuard, renderLegalBeat } from './llmBeatRenderer'
-import type { BeatPacketContext, BeatPresentation } from './llmPromptBuilder'
+import { BeatVisibilityGuard, renderLegalBeat } from './llm/beatRenderer'
+import type { BeatPacketContext, BeatPresentation } from './llm/promptBuilder'
 import { DOSSIERS, NARRATIVE_THREADS } from './narrative/dossierStoryData'
 import { escalationTier, pickMoodGreeting } from './narrative/escalation'
 import {

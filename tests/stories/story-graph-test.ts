@@ -1,5 +1,5 @@
-import { EVIDENCE_BY_ARCHETYPE } from './src/game/data'
-import { STORY_CATALOG, newStoryState, type StoryRuntimeState } from './src/game/stories/storyCatalog'
+import { EVIDENCE_BY_ARCHETYPE } from '../../src/game/data'
+import { STORY_CATALOG, newStoryState, type StoryRuntimeState } from '../../src/game/stories/storyCatalog'
 
 function check(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message)

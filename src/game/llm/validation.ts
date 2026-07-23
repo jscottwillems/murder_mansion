@@ -2,7 +2,7 @@ import {
   BEAT_EMOTIONS,
   type BeatPacket,
   type BeatPresentation,
-} from './llmPromptBuilder'
+} from './promptBuilder'
 
 export type BeatValidationErrorCode =
   | 'E_PARSE_JSON'

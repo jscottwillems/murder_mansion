@@ -1,10 +1,10 @@
 // Standalone exhaustive integrity test for built-in authored investigations.
 // Bundle with esbuild and run under Node; throws on the first catalog defect.
-import { AUTHORED_DIALOGUE_BY_ARCHETYPE } from './src/game/authoredDialogue'
-import { CLOSINGS_BY_ROUTE } from './src/game/dialogue/closings'
-import { PERSONAL_ASIDES_BY_ARCHETYPE } from './src/game/dialogue/personalAsides'
-import type { AuthoredClosing, AuthoredDialogueRoute } from './src/game/dialogue/types'
-import { ARCHETYPES, EVIDENCE_BY_ID } from './src/game/data'
+import { AUTHORED_DIALOGUE_BY_ARCHETYPE } from '../../src/game/authoredDialogue'
+import { CLOSINGS_BY_ROUTE } from '../../src/game/dialogue/closings'
+import { PERSONAL_ASIDES_BY_ARCHETYPE } from '../../src/game/dialogue/personalAsides'
+import type { AuthoredClosing, AuthoredDialogueRoute } from '../../src/game/dialogue/types'
+import { ARCHETYPES, EVIDENCE_BY_ID } from '../../src/game/data'
 
 const EFFECTS = ['advance', 'stall', 'close'] as const
 const EMOTIONS = ['neutral', 'suspicious', 'worried', 'angry', 'thoughtful', 'surprised'] as const

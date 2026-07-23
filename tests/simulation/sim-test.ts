@@ -1,7 +1,7 @@
 // Headless smoke test for the simulation (run with node after esbuild bundling)
-import { Simulation } from './src/game/sim'
-import { SCENE_EVIDENCE, NIGHT_LENGTH_MIN, canOccupy } from './src/game/data'
-import type { QuestionTopic } from './src/game/types'
+import { Simulation } from '../../src/game/sim'
+import { SCENE_EVIDENCE, NIGHT_LENGTH_MIN, canOccupy } from '../../src/game/data'
+import type { QuestionTopic } from '../../src/game/types'
 
 let deaths = 0
 let discoveries = 0

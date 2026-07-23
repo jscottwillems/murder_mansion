@@ -1,13 +1,13 @@
-import { ROOM_BY_ID } from './data'
-import { DOSSIERS } from './narrative/dossierStoryData'
+import { ROOM_BY_ID } from '../data'
+import { DOSSIERS } from '../narrative/dossierStoryData'
 import type {
   FactSource,
   LegalBeat,
   NarrativeCaseState,
   RoleMode,
   VoiceCard,
-} from './narrative/types'
-import type { ArchetypeId, ConversationEmotion, Guest } from './types'
+} from '../narrative/types'
+import type { ArchetypeId, ConversationEmotion, Guest } from '../types'
 
 export const BEAT_PROMPT_VERSION = 'mm-beat-2'
 

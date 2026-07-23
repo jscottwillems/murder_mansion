@@ -1,5 +1,14 @@
 Original prompt: the music for this game is currently horrible and very hard to listen to, please work it to be something that players will want to continue listening to as they play
 
+Repository organization follow-up (current prompt): completed a conservative, behavior-preserving first-stage reorganization with parallel architecture, hygiene, and verification audits.
+- Moved standalone regression programs from the repository root into domain folders under `tests/`, updated imports, and documented the execution/baseline caveats in `tests/README.md`.
+- Moved the LLM integration pipeline into `src/game/llm/` and updated application/test imports.
+- Moved retained design notes into `docs/design/`, runtime sound files into `public/assets/audio/`, and updated Vite base-path-safe audio URLs.
+- Replaced the template README with a project map, added `docs/ARCHITECTURE.md`, named the package `murder-mansion`, added focused game lint, expanded generated-artifact ignores, and removed tracked Python bytecode caches (temporary backup: `/private/tmp/murder-mansion-python-cache-backup`).
+- Protected the six pre-existing modified authored-dialogue files and untracked `tmp/authored-dialogue-test.mjs`; no bulk deletion of `tmp/`, `output/`, `dist/`, assets, legacy stories, or unused-looking UI primitives was attempted.
+- Verification: production build and focused game lint pass. Five reliable standalone suites pass after bundling; `sim-test` still emits three pre-existing failed `console.assert` checks while incorrectly exiting 0, so it is not yet a trustworthy green gate.
+- Deferred high-risk work: split `world.ts`, `game.ts`, `sim.ts`, and `audio.ts` behind stable facades; break the shared domain/narrative/dialogue type cycle; separately audit legacy/orphan modules before any removal.
+
 Character-shadow registration follow-up (current prompt): moved each living character's floor shadow out of the camera-facing/flipping portrait root and into the actor's stable world-space group. Shadow scale and entrance-fade opacity remain synchronized with the character, while death still hides the shadow.
 - Verification: production build and focused world ESLint pass. The mandated web-game client completed in `output/character-shadow-runtime/`. Targeted live gameplay captures at two north/south positions were visually inspected; the detective's shadow remains centered at the feet and the browser reported zero console errors.
 

@@ -1,5 +1,5 @@
-import { BeatVisibilityGuard } from './src/game/llmBeatRenderer'
-import { DOSSIERS } from './src/game/narrative/dossierStoryData'
+import { BeatVisibilityGuard } from '../../src/game/llm/beatRenderer'
+import { DOSSIERS } from '../../src/game/narrative/dossierStoryData'
 import {
   applyStoryChoice,
   evaluateCaseEnding,
@@ -8,14 +8,14 @@ import {
   markCharacterUnavailable,
   recordNarrativeFact,
   resumePausedThread,
-} from './src/game/narrative/storyEngine'
+} from '../../src/game/narrative/storyEngine'
 import type {
   ArchiveDisposition,
   CaseOutcome,
   NarrativeCaseState,
   ProofCategory,
-} from './src/game/narrative/types'
-import { Simulation } from './src/game/sim'
+} from '../../src/game/narrative/types'
+import { Simulation } from '../../src/game/sim'
 
 function check(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message)

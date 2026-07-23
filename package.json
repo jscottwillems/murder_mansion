@@ -1,5 +1,5 @@
 {
-  "name": "my-app",
+  "name": "murder-mansion",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "lint:game": "eslint src/game src/App.tsx src/state src/ui",
     "preview": "vite preview"
   },
   "dependencies": {
