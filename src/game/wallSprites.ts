@@ -181,8 +181,13 @@ export function getWallTexture(room: RoomId): THREE.Texture {
     texture.wrapS = THREE.RepeatWrapping
     texture.wrapT = THREE.RepeatWrapping
     texture.magFilter = THREE.NearestFilter
-    texture.minFilter = THREE.LinearMipmapLinearFilter
-    texture.generateMipmaps = true
+    // This authored 512x256 wall already contains the intended fine detail.
+    // Native-level sampling avoids the soft lower mip selected on the room's
+    // long, oblique wall planes, while modest anisotropy preserves shelf and
+    // botanical edges toward the corners.
+    texture.generateMipmaps = false
+    texture.minFilter = THREE.LinearFilter
+    texture.anisotropy = 4
     textureCache.set(room, texture)
     return texture
   }

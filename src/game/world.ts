@@ -3,7 +3,7 @@
 // rain, lightning, dust motes, lamplight.
 import * as THREE from 'three'
 import type { RoomId } from './types'
-import { DINING_BANQUET_FOOTPRINT, ROOMS, ROOM_HALF, ROOM_STEP, PASS_HALF, roomCenter } from './data'
+import { DINING_BANQUET_FOOTPRINT, GALLERY_BUST_FOOTPRINTS, ROOMS, ROOM_HALF, ROOM_STEP, PASS_HALF, roomCenter } from './data'
 import { atlasFrame, CHARACTER_ATLAS, NPC_ATLAS_V3 } from './characterAtlas'
 import { getExteriorWallTexture, getWallTexture, disposeWallTextures } from './wallSprites'
 import { createStormWindow, updateStormWindows, type ExteriorWall, type StormWindowHandles } from './stormWindows'
@@ -283,6 +283,8 @@ export class MansionScene {
 
       if (r.id === 'dining') this.buildDiningFurniture(g)
 
+      if (r.id === 'gallery') this.buildGalleryBusts(g)
+
       if (r.id === 'conservatory') {
         this.conservatoryFountain = createConservatoryFountain()
         g.add(this.conservatoryFountain.group)
@@ -424,8 +426,10 @@ export class MansionScene {
       if (image?.width && image.height) sprite.scale.x = height * image.width / image.height
     })
     texture.colorSpace = THREE.SRGBColorSpace
-    texture.minFilter = THREE.LinearMipmapLinearFilter
+    texture.generateMipmaps = false
+    texture.minFilter = THREE.LinearFilter
     texture.magFilter = THREE.NearestFilter
+    texture.anisotropy = 4
     const overlaysDiningTable = asset === 'dining-ceiling-chandelier'
     const material = new THREE.SpriteMaterial({
       map: texture,
@@ -456,8 +460,10 @@ export class MansionScene {
       `${import.meta.env.BASE_URL}assets/decor/sprites/study/partners-desk.png`,
     )
     texture.colorSpace = THREE.SRGBColorSpace
-    texture.minFilter = THREE.LinearMipmapLinearFilter
+    texture.generateMipmaps = false
+    texture.minFilter = THREE.LinearFilter
     texture.magFilter = THREE.NearestFilter
+    texture.anisotropy = 4
     const material = new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
@@ -524,8 +530,10 @@ export class MansionScene {
         `${import.meta.env.BASE_URL}assets/decor/sprites/dining/${asset}.png`,
       )
       texture.colorSpace = THREE.SRGBColorSpace
-      texture.minFilter = THREE.LinearMipmapLinearFilter
+      texture.generateMipmaps = false
+      texture.minFilter = THREE.LinearFilter
       texture.magFilter = THREE.NearestFilter
+      texture.anisotropy = 4
       const material = new THREE.MeshBasicMaterial({
         map: texture,
         transparent: true,
@@ -558,6 +566,34 @@ export class MansionScene {
       false,
     )
     addFixedCutout('grandfather-clock-v2', 'dining-grandfather-clock', 1.22, 2.58, 3.62, -4.05, 2, false)
+  }
+
+  /** Four matched portrait busts form an exact mirrored 2x2 gallery grid. */
+  private buildGalleryBusts(g: THREE.Group) {
+    const height = 2.35
+    const width = height * (887 / 1774)
+    for (const bust of GALLERY_BUST_FOOTPRINTS) {
+      const texture = new THREE.TextureLoader().load(
+        `${import.meta.env.BASE_URL}assets/decor/sprites/gallery/bust-${bust.id}.png`,
+      )
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.generateMipmaps = false
+      texture.minFilter = THREE.LinearFilter
+      texture.magFilter = THREE.NearestFilter
+      texture.anisotropy = 4
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.04,
+        toneMapped: false,
+        side: THREE.DoubleSide,
+      })
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material)
+      plane.name = `gallery-bust-${bust.id}`
+      plane.position.set(bust.x, height / 2 + 0.025, bust.z)
+      plane.renderOrder = 2
+      g.add(plane)
+    }
   }
 
   private buildCeilingInsects(g: THREE.Group, kind: 'fly' | 'moth', x: number, y: number, z: number, count: number) {

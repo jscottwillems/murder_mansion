@@ -24,8 +24,13 @@ export function createStudyFireplace(wallThickness: number): StudyFireplace {
     `${import.meta.env.BASE_URL}assets/decor/sprites/study/grand-fireplace-animated.png`,
   )
   texture.colorSpace = THREE.SRGBColorSpace
-  texture.minFilter = THREE.LinearMipmapLinearFilter
+  // Atlas frames are already rendered at high resolution. Mipmapping the
+  // complete horizontal strip softens fine carving and water/fire detail and
+  // can blend neighboring animation cells, so sample the native frame only.
+  texture.generateMipmaps = false
+  texture.minFilter = THREE.LinearFilter
   texture.magFilter = THREE.NearestFilter
+  texture.anisotropy = 4
   texture.wrapS = THREE.RepeatWrapping
   texture.wrapT = THREE.ClampToEdgeWrapping
   texture.repeat.set(1 / FRAME_COUNT, 1)

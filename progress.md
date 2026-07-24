@@ -741,6 +741,12 @@ Gothic window-border follow-up: added a shared antique-brass double frame with e
 - Added root-level `chime.m4a` as an SFX-bus cue at 0.62 gain. It plays once whenever running simulated time crosses an hourly boundary (1:00 AM onward), does not fire immediately at the midnight case start, and resets cleanly when a new case rewinds the clock.
 - Production build, focused audio ESLint, and diff check pass. The mandated gameplay capture/state in `output/hour-chime-regression/` were inspected with no browser-error artifact. A targeted runtime test confirmed zero plays at midnight and 12:59, exactly one at 1:00, no repeat at 1:00:30, a loaded/playing 6.912-second cue, and unchanged BGM gain.
 
+## Conservatory fountain ambience (2026-07-23)
+
+- Moved the user-provided `fountain.mp3` from generated `dist/assets/audio` into the durable source asset folder at `public/assets/audio`.
+- Added it as a filtered, low-volume ambience loop that fades in while the detective occupies the Conservatory and fades out after leaving. It follows SFX volume and remains additive to BGM.
+- Production build, focused audio/game ESLint, and diff check pass; the rebuilt `dist` retains the fountain asset. The mandated browser workflow reached live gameplay and its screenshot/state were inspected in `output/fountain-audio-gameplay/`. A targeted runtime test confirmed the 40.272-second loop loads and plays on Conservatory entry, fades and pauses after exit, and leaves BGM gain unchanged with no console/page errors.
+
 ## Accusation window guest-view parity (2026-07-20)
 
 - Rebuilt the standalone accusation menu inside the same ornate popup window used by the Case Journal.
@@ -896,6 +902,42 @@ Hallway wall-junction follow-up (current prompt): extended and recentered the sh
 - Added a dedicated animation component at the Conservatory's exact local center and a matching basin collision footprint used by both detective movement and NPC routing.
 - Initial targeted captures confirmed distinct water frames but showed the fountain reading too small for a central hero furnishing. Increased its display height from 2.62 to 3.2 world units and expanded the basin footprint proportionally.
 - Production build and focused ESLint pass. The mandated browser client smoke test completed, followed by targeted settled Conservatory captures at `output/conservatory-fountain-final/frame-a.png` and `frame-b.png`; both were visually inspected and show the enlarged centered fountain with changing bubbling/flow frames. Browser errors are empty. A direct footprint probe confirms the basin center is blocked while positions just beyond its west and south edges remain walkable.
+
+## Animated landmark sharpness (2026-07-23)
+
+- Native source inspection confirmed the fireplace and fountain already provide high-resolution frames (543x724 and 495x793 respectively). Their softness came from trilinear mipmapping of the full horizontal atlases during heavy minification.
+- Disabled mip generation and switched both animated textures to native-frame linear minification while retaining nearest magnification. This avoids lower-resolution mip selection and cross-frame atlas softening without introducing nearest-only shimmer.
+- Stabilized the fountain atlas mechanically using frame one as the identical carved-stone base in every cell, then compositing only detected cyan jets, bubbles, droplets, streams, and ripples from frames two through four. The original generated alpha and chroma masters remain recoverable under `tmp/imagegen-conservatory/`.
+- Added `scripts/stabilize_fountain_frames.py` so the water-only stabilization is reproducible.
+- Production build and focused TypeScript ESLint pass. The mandated browser smoke test completed, followed by targeted fountain and fireplace captures in `output/landmark-sharpness-final/`; both were visually inspected and show materially crisper carving and animated effects. The paired fountain captures confirm the structure remains fixed while the water changes, and `errors.json` is empty.
+
+## Conservatory wallpaper sharpness (2026-07-23)
+
+- Native inspection confirmed the authored Conservatory wall texture is 512x256; the visible softness came from trilinear mip selection on long oblique wall planes rather than a low-resolution source.
+- Disabled mip generation for only the Conservatory wallpaper, switched it to native-level linear minification, and added 4x anisotropic sampling. Other rooms retain their established wall filtering.
+- Production build and focused wall-texture ESLint pass. The mandated browser smoke test completed, followed by a targeted settled Conservatory capture at `output/conservatory-wall-sharpness-final/conservatory.png`; it was visually inspected and confirms substantially clearer shelf, jar, foliage, and tool silhouettes across both wall planes. Browser errors are empty.
+
+## Room furnishing and lighting sharpness audit (2026-07-23)
+
+- Audited every active room-furnishing and ceiling-light sprite loader. Native assets are sufficiently detailed; remaining softness came from trilinear mipmapping during minification.
+- Standardized all nine ceiling fixtures, the Study partners desk, Dining Hall banquet arrangement and clock, animated fountain, and animated fireplace on no-mipmap native-level linear minification, nearest magnification, and 4x anisotropic sampling.
+- Floors, character atlases, walls, hallways, and weather textures remain outside this furnishing-specific change.
+- Production build and focused ESLint pass. The mandated browser smoke test completed, followed by targeted Dining Hall, Study, and Conservatory captures in `output/all-sprite-sharpness-final/`; all were visually inspected.
+- A live scene audit enumerated every loaded `/assets/decor/` and `/assets/lighting/` texture and confirmed `generateMipmaps=false`, linear minification, nearest magnification, and anisotropy 4 across all 18 active instances. Browser errors are empty; the audit is saved as `texture-audit.json`.
+
+## Gallery portrait-bust installation (2026-07-24)
+
+- Generated four distinct forward-facing marble busts on matching full-height Gothic pedestals: patriarch, matriarch, military officer, and scholar. Chroma masters are retained under `tmp/imagegen-gallery-busts/`; transparent project sprites live under `public/assets/decor/sprites/gallery/`.
+- Added an exact mirrored 2x2 layout at local coordinates `(±2.55, ±2.55)`, keeping the central north/south and east/west circulation cross open.
+- Added matching pedestal collision footprints shared by detective and NPC movement. All four sprites use the project's sharp no-mipmap cutout sampling.
+- Production build and focused TypeScript ESLint pass. The mandated browser smoke test completed, followed by a targeted settled Gallery capture at `output/gallery-busts-final/gallery.png`; it was visually inspected and confirms two evenly spaced mirrored columns and rows with the central circulation cross open.
+- Direct runtime probes confirm all four pedestal centers are blocked, and `errors.json` reports zero browser errors.
+
+## Fireplace fire-only stabilization (2026-07-24)
+
+- Preserved the original generated alpha atlas at `tmp/imagegen-fireplace/grand-fireplace-alpha-original.png`.
+- Added `scripts/stabilize_fireplace_frames.py`, which rebuilds every cell from frame one's identical mantel, masonry, screen, logs, and hearth, then composites only warm flame/ember pixels inside the firebox.
+- Pixel-difference bounds for frames two through four are confined to the central firebox (`x 144–398`, `y 291–552` within each 543x724 cell). Targeted paired live captures are saved under `output/gallery-busts-final/fireplace-*.png`; the mantel remains steady while the flames animate.
 
 ## Compact conversation framing (2026-07-22)
 

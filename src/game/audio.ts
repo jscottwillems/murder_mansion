@@ -11,7 +11,9 @@ const RAIN_URL = audioUrl('rain.mp3')
 const FOOTSTEPS_URL = audioUrl('footsteps.mp3')
 const TEXT_BLIP_URL = audioUrl('text-blip.mp3')
 const FIRE_URL = audioUrl('fire.mp3')
+const FOUNTAIN_URL = audioUrl('fountain.mp3')
 const STUDY_FIRE_GAIN = 0.44
+const CONSERVATORY_FOUNTAIN_GAIN = 0.34
 
 export class Soundtrack {
   private ctx: AudioContext | null = null
@@ -34,6 +36,9 @@ export class Soundtrack {
   private fireLoop: HTMLAudioElement | null = null
   private fireSource: MediaElementAudioSourceNode | null = null
   private fireGain: GainNode | null = null
+  private fountainLoop: HTMLAudioElement | null = null
+  private fountainSource: MediaElementAudioSourceNode | null = null
+  private fountainGain: GainNode | null = null
   private footstepsLoop: HTMLAudioElement | null = null
   private footstepsSource: MediaElementAudioSourceNode | null = null
   private textBlipLoop: HTMLAudioElement | null = null
@@ -49,6 +54,8 @@ export class Soundtrack {
   private dialogueShouldBlip = false
   private fireShouldRun = false
   private fireFadeTimer: ReturnType<typeof setTimeout> | null = null
+  private fountainShouldRun = false
+  private fountainFadeTimer: ReturnType<typeof setTimeout> | null = null
   private lastGameMinute: number | null = null
 
   /** Must be called from a user gesture at least once. */
@@ -58,6 +65,7 @@ export class Soundtrack {
       if (this.soundtrack?.paused) void this.soundtrack.play().catch(() => undefined)
       if (this.rainLoop?.paused) void this.rainLoop.play().catch(() => undefined)
       if (this.fireShouldRun && this.fireLoop?.paused) void this.fireLoop.play().catch(() => undefined)
+      if (this.fountainShouldRun && this.fountainLoop?.paused) void this.fountainLoop.play().catch(() => undefined)
       if (this.clockShouldRun && this.clockLoop?.paused) void this.clockLoop.play().catch(() => undefined)
       if (this.playerShouldWalk && this.footstepsLoop?.paused) void this.footstepsLoop.play().catch(() => undefined)
       if (this.dialogueShouldBlip && this.textBlipLoop?.paused) void this.textBlipLoop.play().catch(() => undefined)
@@ -96,6 +104,7 @@ export class Soundtrack {
     this.prepareTextBlip(ctx)
     this.startRain(ctx)
     this.prepareFireLoop(ctx)
+    this.prepareFountainLoop(ctx)
     this.scheduleThunder()
   }
 
@@ -118,6 +127,32 @@ export class Soundtrack {
     this.fireSource = ctx.createMediaElementSource(fire)
     this.fireSource.connect(lowpass).connect(gain).connect(this.ambienceBus)
     if (this.fireShouldRun) void fire.play().catch(() => undefined)
+  }
+
+  private prepareFountainLoop(ctx: AudioContext) {
+    if (!this.ambienceBus) return
+    const fountain = new Audio(FOUNTAIN_URL)
+    fountain.loop = true
+    fountain.preload = 'auto'
+    fountain.dataset.conservatoryFountain = 'true'
+
+    const highpass = ctx.createBiquadFilter()
+    highpass.type = 'highpass'
+    highpass.frequency.value = 90
+    highpass.Q.value = 0.2
+
+    const lowpass = ctx.createBiquadFilter()
+    lowpass.type = 'lowpass'
+    lowpass.frequency.value = 6200
+    lowpass.Q.value = 0.18
+
+    const gain = ctx.createGain()
+    gain.gain.value = this.fountainShouldRun ? CONSERVATORY_FOUNTAIN_GAIN : 0.0001
+    this.fountainLoop = fountain
+    this.fountainGain = gain
+    this.fountainSource = ctx.createMediaElementSource(fountain)
+    this.fountainSource.connect(highpass).connect(lowpass).connect(gain).connect(this.ambienceBus)
+    if (this.fountainShouldRun) void fountain.play().catch(() => undefined)
   }
 
   private prepareTextBlip(ctx: AudioContext) {
@@ -459,9 +494,13 @@ export class Soundtrack {
     }
   }
 
-  /** Fade the fireplace recording in only while the detective occupies the Study. */
+  /** Fade room-specific recordings as the detective crosses a doorway. */
   setRoomAmbience(room: string) {
-    const active = room === 'study'
+    this.setFireAmbience(room === 'study')
+    this.setFountainAmbience(room === 'conservatory')
+  }
+
+  private setFireAmbience(active: boolean) {
     if (active === this.fireShouldRun && (!active || (this.fireLoop && !this.fireLoop.paused))) return
     this.fireShouldRun = active
     if (this.fireFadeTimer) {
@@ -483,6 +522,30 @@ export class Soundtrack {
       if (!this.fireShouldRun && this.fireLoop && !this.fireLoop.paused) this.fireLoop.pause()
       this.fireFadeTimer = null
     }, 1500)
+  }
+
+  private setFountainAmbience(active: boolean) {
+    if (active === this.fountainShouldRun && (!active || (this.fountainLoop && !this.fountainLoop.paused))) return
+    this.fountainShouldRun = active
+    if (this.fountainFadeTimer) {
+      clearTimeout(this.fountainFadeTimer)
+      this.fountainFadeTimer = null
+    }
+    const ctx = this.ctx
+    const fountain = this.fountainLoop
+    const gain = this.fountainGain
+    if (!ctx || !fountain || !gain) return
+    gain.gain.cancelScheduledValues(ctx.currentTime)
+    gain.gain.setValueAtTime(Math.max(0.0001, gain.gain.value), ctx.currentTime)
+    gain.gain.setTargetAtTime(active ? CONSERVATORY_FOUNTAIN_GAIN : 0.0001, ctx.currentTime, active ? 0.28 : 0.38)
+    if (active) {
+      if (fountain.paused) void fountain.play().catch(() => undefined)
+      return
+    }
+    this.fountainFadeTimer = setTimeout(() => {
+      if (!this.fountainShouldRun && this.fountainLoop && !this.fountainLoop.paused) this.fountainLoop.pause()
+      this.fountainFadeTimer = null
+    }, 1700)
   }
 
   setMuted(m: boolean) {
@@ -513,6 +576,7 @@ export class Soundtrack {
   dispose() {
     if (this.thunderTimer) clearTimeout(this.thunderTimer)
     if (this.fireFadeTimer) clearTimeout(this.fireFadeTimer)
+    if (this.fountainFadeTimer) clearTimeout(this.fountainFadeTimer)
     if (this.ctx) void this.ctx.close()
     if (this.soundtrack) {
       this.soundtrack.pause()
@@ -549,6 +613,11 @@ export class Soundtrack {
       this.fireLoop.removeAttribute('src')
       this.fireLoop.load()
     }
+    if (this.fountainLoop) {
+      this.fountainLoop.pause()
+      this.fountainLoop.removeAttribute('src')
+      this.fountainLoop.load()
+    }
     if (this.footstepsLoop) {
       this.footstepsLoop.pause()
       this.footstepsLoop.removeAttribute('src')
@@ -579,6 +648,9 @@ export class Soundtrack {
     this.fireLoop = null
     this.fireSource = null
     this.fireGain = null
+    this.fountainLoop = null
+    this.fountainSource = null
+    this.fountainGain = null
     this.footstepsLoop = null
     this.footstepsSource = null
     this.textBlipLoop = null

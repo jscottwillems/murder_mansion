@@ -19,8 +19,13 @@ export function createConservatoryFountain(): ConservatoryFountain {
     `${import.meta.env.BASE_URL}assets/decor/sprites/conservatory/animated-fountain.png`,
   )
   texture.colorSpace = THREE.SRGBColorSpace
-  texture.minFilter = THREE.LinearMipmapLinearFilter
+  // Preserve the native 495x793 detail in each animation cell. Trilinear
+  // mipmaps make this small on-screen landmark visibly soft and may mix pixels
+  // from adjacent frames in the horizontal atlas.
+  texture.generateMipmaps = false
+  texture.minFilter = THREE.LinearFilter
   texture.magFilter = THREE.NearestFilter
+  texture.anisotropy = 4
   texture.wrapS = THREE.RepeatWrapping
   texture.wrapT = THREE.ClampToEdgeWrapping
   texture.repeat.set(1 / FRAME_COUNT, 1)

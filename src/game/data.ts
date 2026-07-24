@@ -55,6 +55,13 @@ export const CONSERVATORY_FOUNTAIN_FOOTPRINT = {
   halfDepth: 0.78,
 } as const
 
+export const GALLERY_BUST_FOOTPRINTS = [
+  { id: 'patriarch', x: -2.55, z: -2.55 },
+  { id: 'matriarch', x: 2.55, z: -2.55 },
+  { id: 'officer', x: -2.55, z: 2.55 },
+  { id: 'scholar', x: 2.55, z: 2.55 },
+] as const
+
 export function roomCenter(id: RoomId): { x: number; z: number } {
   const r = ROOM_BY_ID[id]
   return { x: (r.col - 1) * ROOM_STEP, z: (r.row - 1) * ROOM_STEP }
@@ -136,6 +143,14 @@ export function canOccupy(x: number, z: number, radius: number): boolean {
     Math.abs(x - (conservatoryCenter.x + CONSERVATORY_FOUNTAIN_FOOTPRINT.x)) <= CONSERVATORY_FOUNTAIN_FOOTPRINT.halfWidth + radius
     && Math.abs(z - (conservatoryCenter.z + CONSERVATORY_FOUNTAIN_FOOTPRINT.z)) <= CONSERVATORY_FOUNTAIN_FOOTPRINT.halfDepth + radius
   ) return false
+
+  const galleryCenter = roomCenter('gallery')
+  for (const bust of GALLERY_BUST_FOOTPRINTS) {
+    if (
+      Math.abs(x - (galleryCenter.x + bust.x)) <= 0.58 + radius
+      && Math.abs(z - (galleryCenter.z + bust.z)) <= 0.48 + radius
+    ) return false
+  }
 
   return true
 }

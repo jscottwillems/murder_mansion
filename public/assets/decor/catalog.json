@@ -1,6 +1,6 @@
 {
   "study": ["writing-desk", "leather-armchair", "banker-lamp", "globe", "decanter-table"],
-  "gallery": ["ancestral-portrait", "marble-bust", "velvet-stanchions", "relic-display", "candelabrum"],
+  "gallery": ["ancestral-portrait", "marble-bust", "velvet-stanchions", "relic-display", "candelabrum", "bust-patriarch", "bust-matriarch", "bust-officer", "bust-scholar"],
   "conservatory": ["potted-monstera", "garden-bench", "orchid-stand", "tea-table", "birdbath", "animated-fountain"],
   "kitchen": ["butcher-block", "range-stove", "cookware-rack", "pastry-table", "provision-crate"],
   "dining": ["silver-candelabra", "serving-trolley", "dining-chair", "decanter-stand", "grandfather-clock", "grandfather-clock-v2", "banquet-table-chairs"],
