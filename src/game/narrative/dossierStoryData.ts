@@ -1,5 +1,5 @@
 import { AUTHORED_DIALOGUE_BY_ARCHETYPE, type RevealMechanism } from '../authoredDialogue'
-import { ARCHETYPES, BUILTIN_EVIDENCE_HINTS, EVIDENCE_BY_ID } from '../data'
+import { ARCHETYPES, ARCHETYPE_GENDER, BUILTIN_EVIDENCE_HINTS, EVIDENCE_BY_ID } from '../data'
 import { CLOSINGS_BY_ROUTE } from '../dialogue/closings'
 import { PERSONAL_ASIDES_BY_ARCHETYPE } from '../dialogue/personalAsides'
 import { c, pa, r, rep, s, type AuthoredClosing, type AuthoredDialogueChoice, type AuthoredDialogueRoute, type PersonalAside } from '../dialogue/types'
@@ -392,6 +392,8 @@ function resolveRegularRoutes(seed: DossierSeed): AuthoredDialogueRoute[] {
 
 function evidenceStory(seed: DossierSeed, evidenceId: EvidenceId): EvidenceThreadDefinition {
   const route = resolveEvidenceRoute(seed, evidenceId)
+  const evidenceLabel = EVIDENCE_BY_ID[evidenceId].label.toLocaleLowerCase()
+  const subjectPronoun = ARCHETYPE_GENDER[seed.id] === 'female' ? 'she' : 'he'
   const closings = CLOSINGS_BY_ROUTE[route.id] ?? {}
   const threadId = `${seed.id}:evidence:${evidenceId}`
   const carrierId = `${threadId}:fallback`
@@ -476,6 +478,55 @@ function evidenceStory(seed: DossierSeed, evidenceId: EvidenceId): EvidenceThrea
   // by the guest's per-case assigned evidence.
   const revealLabel = route.revealLabel ?? defaultRevealLabel(route.revealMechanism, evidenceId)
   const revealIntent: StoryChoice['intent'] = route.revealMechanism === 'contradiction' ? 'challenge' : 'test'
+  const distractorLabels = (() => {
+    switch (route.revealMechanism) {
+      case 'comparison': return [
+        'Who else could have handled both items before tonight?',
+        'Could ordinary wear explain why they look so similar?',
+      ]
+      case 'reconstruction': return [
+        'Which part of that sequence are you least certain you remember?',
+        'Could someone following the same route have left an identical trail?',
+      ]
+      case 'contradiction': return [
+        'Who would benefit from making those two accounts disagree?',
+        'Could the difference come down to a mistaken time rather than a lie?',
+      ]
+      case 'corroboration': return [
+        'Why should I trust that witness’s memory over yours?',
+        'Who else might repeat the same story without having seen it?',
+      ]
+      case 'bait': return [
+        'Who told you that detail before I arrived?',
+        'Would the same detail mean anything to another guest?',
+      ]
+      case 'chronology': return [
+        'Which clock in this house would you trust least?',
+        'Who else could account for that missing stretch of time?',
+      ]
+      case 'custody': return [
+        'Who had the best reason to borrow it without asking?',
+        'Could it have changed hands earlier than anyone noticed?',
+      ]
+      default: return [
+        'Who else would tell this part of the story differently?',
+        'What detail are you least willing to stand behind?',
+      ]
+    }
+  })()
+  const failedDeduction = (
+    suffix: string,
+    label: string,
+    response: string,
+    emotion: 'angry' | 'suspicious',
+  ) => choice(`${ids[2]}:${suffix}`, label, 'pressure', null, [
+    { kind: 'pressure', target: seed.id, delta: 1 },
+    { kind: 'thread-status', threadId, status: 'closed-personal' },
+  ], [], {
+    line: `${response} That is enough, Detective. This line of questioning is over.`,
+    emotion,
+    summary: `The question was plausible, but it pursued the wrong inference. ${seed.title} has closed this evidence thread; no association or clearance is recorded.`,
+  })
   STORY_NODES[ids[2]] = {
     id: ids[2], threadId, owner: seed.id, phase: 'test', text: route.stages[1].advance.response,
     emotion: route.stages[1].advance.emotion, fallbackCarrierIds: [carrierId], deathSafe: true,
@@ -494,11 +545,13 @@ function evidenceStory(seed: DossierSeed, evidenceId: EvidenceId): EvidenceThrea
       choice(`${ids[2]}:clear`, revealLabel, revealIntent, null, [
         { kind: 'thread-status', threadId, status: 'spent' },
       ], [{ kind: 'not-assigned-evidence', value: evidenceId }], authoredClosing(closings.noReveal) ?? genericNoRevealClosing(evidenceId)),
+      failedDeduction('wrong-context', distractorLabels[0], route.stages[1].stall.response, 'suspicious'),
+      failedDeduction('wrong-pressure', distractorLabels[1], route.stages[1].close.response, 'angry'),
     ],
   }
   const thread: EvidenceThreadDefinition = {
     id: threadId, owner: seed.id, kind: 'evidence', evidenceId,
-    rootLabel: route.rootQuestion, topic: route.topic,
+    rootLabel: `Ask if ${subjectPronoun} knows anything about the ${evidenceLabel}.`, topic: route.topic,
     startNodeId: ids[0], nodeIds: ids, fallbackCarrierIds: [carrierId],
     reopenFactIds: [`${threadId}:fallback-found`], revealFactId: `${threadId}:fact`,
     concreteReveal: route.stages[1].advance.response,
@@ -673,4 +726,3 @@ function dossier(seed: DossierSeed): ArchetypeDossier {
 export const DOSSIERS = Object.fromEntries(DOSSIER_SEEDS.map(seed => [seed.id, dossier(seed)])) as Record<ArchetypeId, ArchetypeDossier>
 export const NARRATIVE_NODES: Readonly<Record<string, StoryNode>> = STORY_NODES
 export const NARRATIVE_THREADS: Readonly<Record<string, NarrativeThread | EvidenceThreadDefinition>> = STORY_THREADS
-

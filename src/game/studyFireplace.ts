@@ -42,11 +42,13 @@ export function createStudyFireplace(wallThickness: number): StudyFireplace {
     side: THREE.DoubleSide,
     toneMapped: false,
   })
-  const height = 3.68
-  const fireplace = new THREE.Mesh(new THREE.PlaneGeometry(height * 0.75, height), material)
+  const height = 3.92
+  const width = 3.3
+  const fireplace = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material)
   // The generated strip has transparent breathing room beneath each sprite;
-  // lower the plane so the visible stone plinth lands directly on the floor.
-  fireplace.position.set(0, 1.21, 0.018)
+  // scale the old grounding offset with the new height so the visible stone
+  // plinth remains on the floor while the crown rises near the wall top.
+  fireplace.position.set(0, 1.21 * (height / 3.68), 0.018)
   fireplace.renderOrder = 3
   group.add(fireplace)
 

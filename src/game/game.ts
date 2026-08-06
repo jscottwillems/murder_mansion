@@ -4,7 +4,7 @@ import type {
   CollectedEvidence, ConversationEmotion, EndInfo, EvidenceId, Guest, InterviewState, Lead, LogLine, Phase,
   QuestionOption, RoomId, Settings, Snapshot, TranscriptEntry,
 } from './types'
-import { ARCHETYPES, EVIDENCE_BY_ID, ROOMS, ROOM_BY_ID, ROOM_HALF, roomAt, roomCenter, roomOfPoint, canOccupy, fmtTime, NIGHT_LENGTH_MIN } from './data'
+import { ARCHETYPES, EVIDENCE_BY_ID, ROOMS, ROOM_BY_ID, ROOM_HALF, roomAt, roomCenter, roomOfPoint, canOccupy, touchesBallroomPiano, fmtTime, NIGHT_LENGTH_MIN } from './data'
 import { Simulation } from './sim'
 import { MansionScene } from './world'
 import { Soundtrack } from './audio'
@@ -38,6 +38,7 @@ import type { RevealMechanism } from './dialogue/types'
 const SETTINGS_KEY = 'murder-mansion-settings'
 const PLAYER_SPEED = 4.4
 const ACTOR_RADIUS = 0.42
+const PIANO_TOUCH_COOLDOWN_S = 0.75
 
 /** Plain third-person phrasing of how an evidence association was established. */
 const MECHANISM_SUMMARY: Record<RevealMechanism, string> = {
@@ -114,6 +115,8 @@ export class Game {
   private playerRoom: RoomId = 'dining'
   private guestRevealOpacity = 1
   private playerWalking = false
+  private pianoContactActive = false
+  private pianoTouchCooldown = 0
   private playerEncounteredBodyIds = new Set<string>()
   private leads: Lead[] = []
   private evidence: CollectedEvidence[] = []
@@ -496,6 +499,8 @@ export class Game {
     this.transcripts = {}
     this.interview = null
     this.playerEncounteredBodyIds.clear()
+    this.pianoContactActive = false
+    this.pianoTouchCooldown = 0
     this.evidenceDiscovery = null
     if (this.evidenceDiscoveryTimer) {
       clearTimeout(this.evidenceDiscoveryTimer)
@@ -518,7 +523,6 @@ export class Game {
         if (this.narrative) this.narrative = markCharacterUnavailable(this.narrative, g.id, 'death')
       },
       bodyDiscovered: (g) => {
-        this.world.markBodyRoom(g.deathRoom!)
         this.syncNarrativeBodyDiscovery(g)
       },
       overheard: (_who, text) => this.pushLog(text, 'rumor'),
@@ -773,7 +777,10 @@ export class Game {
     this.interviewRequestN++
     this.narrative = applyStoryChoice(before, g.id, threadId, selected.id)
     const statusAfterChoice = this.narrative.characters[g.id].threadStatuses[threadId]
-    if (statusAfterChoice === 'closed-personal') {
+    // A failed evidence deduction closes that one investigative route, not the
+    // guest's entire interview. Personal-thread shutdowns retain the broader
+    // consequence.
+    if (statusAfterChoice === 'closed-personal' && NARRATIVE_THREADS[threadId]?.kind !== 'evidence') {
       this.narrative = markCharacterUnavailable(this.narrative, g.id, 'shutdown')
     }
     for (const association of this.narrative.revealedAssociations) {
@@ -902,6 +909,8 @@ export class Game {
     const closing = choice.closing
       ? { line: choice.closing.line, emotion: choice.closing.emotion }
       : this.closingLineFor(g, status, choice.intent)
+    const clearedLead = status === 'spent' ? this.clearedEvidenceLead(g, threadId) : null
+    if (clearedLead) closing.line = `${closing.line} ${clearedLead}`
     const baseConclusion = this.conclusionFor(g, threadId, status, choice.intent)
     const conclusion = choice.closing?.summary && baseConclusion
       ? { ...baseConclusion, summary: choice.closing.summary }
@@ -923,6 +932,24 @@ export class Game {
     }
     this.recordTranscript(g, question, closing.line)
     this.emit()
+  }
+
+  /**
+   * Reaching an evidence thread's correct terminal test should still move the
+   * investigation forward when the current guest is not associated with it.
+   * Point toward one real, living owner from this seeded case without recording
+   * an association or otherwise changing the evidence graph.
+   */
+  private clearedEvidenceLead(g: Guest, threadId: string): string | null {
+    const thread = NARRATIVE_THREADS[threadId]
+    if (!this.sim || thread?.kind !== 'evidence') return null
+    const possibleOwners = this.sim.guests
+      .filter(other => other.id !== g.id && other.alive && other.evidenceIds.includes(thread.evidenceId))
+      .sort((left, right) => left.id.localeCompare(right.id))
+    if (!possibleOwners.length) return null
+    const hintedGuest = possibleOwners[0]
+    const label = EVIDENCE_BY_ID[thread.evidenceId]?.label.toLocaleLowerCase() ?? 'item'
+    return `I did see ${hintedGuest.name} handling something like that ${label}. Ask them about it.`
   }
 
   /** A final in-character statement from the guest that closes the thread meaningfully. */
@@ -967,7 +994,9 @@ export class Game {
       return { kind: 'withdrawn', summary: `You leave this subject without erasing its progress. ${g.name} may be approached again.` }
     }
     if (status === 'closed-personal') {
-      return { kind: 'closed', summary: `${g.name} has shut down this personal route. External corroboration remains available.` }
+      return NARRATIVE_THREADS[threadId]?.kind === 'evidence'
+        ? { kind: 'closed', summary: `${g.name} has ended this evidence thread after an unproductive inference. Nothing is recorded for or against them; other interview topics remain available.` }
+        : { kind: 'closed', summary: `${g.name} has shut down this personal route. External corroboration remains available.` }
     }
     if (status === 'rerouted') {
       return { kind: 'rerouted', summary: `${g.name}'s testimony is unavailable; a pre-seeded artifact or confidant now carries the unresolved fact.` }
@@ -1147,6 +1176,8 @@ export class Game {
     const sim = this.sim!
     const previousX = this.px
     const previousZ = this.pz
+    let touchedPianoThisStep = false
+    this.pianoTouchCooldown = Math.max(0, this.pianoTouchCooldown - dt)
     // player movement
     let mx = 0
     let mz = 0
@@ -1162,8 +1193,15 @@ export class Game {
       // Guests remain collision-aware with one another, but they should never
       // be able to body-block the player in a doorway or against furniture.
       if (canOccupy(nx, this.pz, ACTOR_RADIUS)) this.px = nx
+      else if (touchesBallroomPiano(nx, this.pz, ACTOR_RADIUS)) touchedPianoThisStep = true
       if (canOccupy(this.px, nz, ACTOR_RADIUS)) this.pz = nz
+      else if (touchesBallroomPiano(this.px, nz, ACTOR_RADIUS)) touchedPianoThisStep = true
     }
+    if (touchedPianoThisStep && !this.pianoContactActive && this.pianoTouchCooldown <= 0) {
+      this.audio.pianoTouched()
+      this.pianoTouchCooldown = PIANO_TOUCH_COOLDOWN_S
+    }
+    this.pianoContactActive = touchedPianoThisStep
     this.playerWalking = Math.hypot(this.px - previousX, this.pz - previousZ) > 0.001
     const r = roomOfPoint(this.px, this.pz)
     if (r && r !== this.playerRoom) {
@@ -1178,7 +1216,6 @@ export class Game {
       const found = sim.playerDiscovers(r)
       for (const body of found) {
         this.syncNarrativeBodyDiscovery(body)
-        this.world.markBodyRoom(body.deathRoom!)
         this.pushLog(`You found ${body.name}'s body.`, 'danger')
         this.pushLead('discovery', 'You', `You discovered ${body.name}'s body in the ${ROOM_BY_ID[r].name} (~${fmtTime(body.diedAtMin)}).`)
       }
@@ -1332,6 +1369,10 @@ export class Game {
       room: this.playerRoom,
       roomName: ROOM_BY_ID[this.playerRoom].name,
       moving: this.isMoving(),
+    },
+    pianoInteraction: {
+      touching: this.pianoContactActive,
+      cooldownSeconds: Number(this.pianoTouchCooldown.toFixed(2)),
     },
     camera: this.world.cameraDebug(),
     guestsVisible: this.sim

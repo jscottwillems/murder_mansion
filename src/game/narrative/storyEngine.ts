@@ -190,10 +190,21 @@ export function getLegalBeat(state: NarrativeCaseState, guestId: string, threadI
   const node = NARRATIVE_NODES[nodeId]
   if (!node || node.owner !== character.archetypeId) return null
   if (!character.alive && !node.deathSafe) return null
-  return {
-    node,
-    choices: node.choices.filter(choice => choice.requires.every(condition => conditionMet(condition, state, character))),
+  const choices = node.choices.filter(choice => choice.requires.every(condition => conditionMet(condition, state, character)))
+  const thread = NARRATIVE_THREADS[threadId]
+  if (thread?.kind === 'evidence' && node.phase === 'test' && choices.length > 1) {
+    // Do not teach the player that the first answer is always correct. Rotate
+    // the three legal deduction choices deterministically per case and guest so
+    // retries remain stable while a new case changes their order.
+    let hash = 2166136261
+    for (const char of `${state.caseSeed}:${guestId}:${threadId}`) {
+      hash ^= char.charCodeAt(0)
+      hash = Math.imul(hash, 16777619)
+    }
+    const offset = (hash >>> 0) % choices.length
+    choices.push(...choices.splice(0, offset))
   }
+  return { node, choices }
 }
 
 function eventRecipients(type: CrossNpcEventType, source: ArchetypeId): ArchetypeId[] {

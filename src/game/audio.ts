@@ -3,7 +3,7 @@
 const audioUrl = (filename: string) => `${import.meta.env.BASE_URL}assets/audio/${filename}`
 
 const SOUNDTRACK_URL = audioUrl('Midnight in the Static.mp3')
-const CLOCK_URL = audioUrl('ticktock.mp3')
+const CLOCK_URL = audioUrl('ticktock-loop.wav')
 const BODY_DISCOVERY_URL = audioUrl('chord.mp3')
 const EVIDENCE_DISCOVERY_URL = audioUrl('discovery.mp3')
 const HOUR_CHIME_URL = audioUrl('chime.m4a')
@@ -12,8 +12,10 @@ const FOOTSTEPS_URL = audioUrl('footsteps.mp3')
 const TEXT_BLIP_URL = audioUrl('text-blip.mp3')
 const FIRE_URL = audioUrl('fire.mp3')
 const FOUNTAIN_URL = audioUrl('fountain.mp3')
+const PIANO_URL = audioUrl('piano.mp3')
 const STUDY_FIRE_GAIN = 0.44
 const CONSERVATORY_FOUNTAIN_GAIN = 0.34
+const PIANO_CONTACT_GAIN = 0.5
 
 export class Soundtrack {
   private ctx: AudioContext | null = null
@@ -39,6 +41,8 @@ export class Soundtrack {
   private fountainLoop: HTMLAudioElement | null = null
   private fountainSource: MediaElementAudioSourceNode | null = null
   private fountainGain: GainNode | null = null
+  private pianoCue: HTMLAudioElement | null = null
+  private pianoCueSource: MediaElementAudioSourceNode | null = null
   private footstepsLoop: HTMLAudioElement | null = null
   private footstepsSource: MediaElementAudioSourceNode | null = null
   private textBlipLoop: HTMLAudioElement | null = null
@@ -105,7 +109,22 @@ export class Soundtrack {
     this.startRain(ctx)
     this.prepareFireLoop(ctx)
     this.prepareFountainLoop(ctx)
+    this.preparePianoCue(ctx)
     this.scheduleThunder()
+  }
+
+  private preparePianoCue(ctx: AudioContext) {
+    if (!this.sfxBus) return
+    const piano = new Audio(PIANO_URL)
+    piano.loop = false
+    piano.preload = 'auto'
+    piano.dataset.pianoContactCue = 'true'
+
+    const gain = ctx.createGain()
+    gain.gain.value = PIANO_CONTACT_GAIN
+    this.pianoCue = piano
+    this.pianoCueSource = ctx.createMediaElementSource(piano)
+    this.pianoCueSource.connect(gain).connect(this.sfxBus)
   }
 
   private prepareFireLoop(ctx: AudioContext) {
@@ -419,6 +438,15 @@ export class Soundtrack {
     void this.evidenceCue.play().catch(() => undefined)
   }
 
+  /** Play the authored piano phrase once. Contact edge/cooldown handling lives
+   * in Game so this media element never loops while the player stays nearby. */
+  pianoTouched() {
+    if (!this.ctx || !this.sfxBus || !this.pianoCue) return
+    this.pianoCue.pause()
+    this.pianoCue.currentTime = 0
+    void this.pianoCue.play().catch(() => undefined)
+  }
+
   private duckMusic(seconds: number) {
     const ctx = this.ctx
     const bus = this.musicBus
@@ -618,6 +646,11 @@ export class Soundtrack {
       this.fountainLoop.removeAttribute('src')
       this.fountainLoop.load()
     }
+    if (this.pianoCue) {
+      this.pianoCue.pause()
+      this.pianoCue.removeAttribute('src')
+      this.pianoCue.load()
+    }
     if (this.footstepsLoop) {
       this.footstepsLoop.pause()
       this.footstepsLoop.removeAttribute('src')
@@ -651,6 +684,8 @@ export class Soundtrack {
     this.fountainLoop = null
     this.fountainSource = null
     this.fountainGain = null
+    this.pianoCue = null
+    this.pianoCueSource = null
     this.footstepsLoop = null
     this.footstepsSource = null
     this.textBlipLoop = null

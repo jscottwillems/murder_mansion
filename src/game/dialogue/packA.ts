@@ -5,7 +5,7 @@ import { c, r, s, type AuthoredDialogueRoute } from './types'
 
 export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'curator'>, AuthoredDialogueRoute[]> = {
   columnist: [
-    r('columnist-ink', 'social', 'ink-fiber', 'Your hand’s smudged with ink. Where did that come from?',
+    r('columnist-ink', 'social', 'ink-fiber', 'Ask if she knows anything about the ink-stained paper fiber.',
       'My pen skidded during a row in the gallery and left ink all over my hand. I tore the ruined page clean out.', 'thoughtful',
       s(
         c('What was the row you were writing down?', 'Two guests going at each other. I got a name down before the ink ran everywhere.', 'suspicious'),
@@ -23,7 +23,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Help me quietly and I keep your source out of it?', 'Kind, for a hired man. The ink’s mine, yes — but a leaky pen isn’t a crime.', 'thoughtful'),
         challenge: c('That ink matches the torn page. Explain yourself.', 'So compare them. A pen that leaks makes a mess, not a monster.', 'angry'),
       }),
-    r('columnist-perfume', 'room', 'floral-perfume', 'Your perfume is awfully strong tonight. Why?',
+    r('columnist-perfume', 'room', 'floral-perfume', 'Ask if she knows anything about the floral perfume trace.',
       'The atomizer overfilled at the drawing-room mirror. The bulb jammed and soaked my glove instead of my wrist — gardenia beats damp wool, believe me.', 'neutral',
       s(
         c('How did it catch the glove and miss your skin?', 'I was holding it up to the light when the bulb stuck. The cloth took the whole spray.', 'thoughtful'),
@@ -41,7 +41,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Tell me who else used that atomizer — I won’t print it.', 'You do listen. Someone used it after me; that’s why the scent sits heavier on the glove than on me.', 'thoughtful'),
         challenge: c('You soaked that glove on purpose. Why leave a trail?', 'So a bulb sprayed cloth harder than wrist. That’s a spill, not a plot.', 'angry'),
       }),
-    r('columnist-shorthand', 'timeline', 'torn-note', 'What was so important you kept writing through dinner?',
+    r('columnist-shorthand', 'timeline', 'torn-note', 'Ask if she knows anything about the torn shorthand note.',
       'A conversation worth keeping. I got it down in shorthand, then tore the margin free when one name on it turned dangerous. A time, a lone letter, half a room — that’s all it holds.', 'thoughtful',
       s(
         c('Which conversation was worth tearing a page for?', 'A meeting two people wanted buried. I keep those; I don’t sell them.', 'suspicious'),
@@ -75,7 +75,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Off the record — who looked scared?', 'Off the record, then. A quiet man went pale when the hall door slammed.', 'thoughtful'),
         challenge: c('Names. Now.', 'Threaten me and you’ll get nothing. We’re finished.', 'angry'),
       }),
-    r('columnist-antiseptic', 'room', 'antiseptic', 'Why do your hands smell so sharply of medicine?',
+    r('columnist-antiseptic', 'room', 'antiseptic', 'Ask if she knows anything about the sharp chemical trace.',
       'I cut my thumb on a broken glass and borrowed a little bottle from someone’s kit to clean it. It stung like a bad review.', 'worried',
       s(
         c('What was in the bottle you borrowed?', 'Clear stuff, very sharp — carbolic, at a guess. Not mine to keep.', 'thoughtful'),
@@ -93,7 +93,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Name who lent the bottle and I keep your cut out of it.', 'Generous. Ask them — they watched me clean the cut, and the smell explains itself.', 'thoughtful'),
         challenge: c('That smell isn’t from a cut. What did you really clean?', 'Ask. A borrowed bottle and a witness prove I bleed, not that I’m dangerous.', 'angry'),
       }),
-    r('columnist-earth', 'timeline', 'fine-earth', 'How did pale grit get on your hem?',
+    r('columnist-earth', 'timeline', 'fine-earth', 'Ask if she knows anything about the fine mineral dust.',
       'I followed a promising row into the conservatory and knelt where a pot had been knocked over.', 'suspicious',
       s(
         c('Why did you kneel in the spilled grit?', 'There was a folded note under the bench. You pick those up gracefully or not at all.', 'thoughtful'),
@@ -111,7 +111,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Walk me through the grit and I stay discreet.', 'Kind of you. Pot to hem, hem to hand, hand to bench. That’s the whole trip.', 'thoughtful'),
         challenge: c('That grit puts you at the spilled pot. What were you really after?', 'So it does. Kneeling by a spill makes me nosy, not dangerous.', 'angry'),
       }),
-    r('columnist-wool', 'social', 'black-wool', 'Where did those black threads on your shoulders come from?',
+    r('columnist-wool', 'social', 'black-wool', 'Ask if she knows anything about the black wool thread.',
       'A man draped his coat over me against the draught in the gallery. It shed all over me.', 'neutral',
       s(
         c('Which man lent you the coat?', 'One too dull to name and too warm to refuse. The wool caught on my clasp straight away.', 'thoughtful'),
@@ -129,7 +129,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Point me to the coat and I keep the man’s name out of it.', 'Decent of you. My wrap’s silk; that strand is coarse wool, so it came off his coat, not me.', 'thoughtful'),
         challenge: c('That thread is yours. Prove it isn’t.', 'Compare them. Silk against wool. Even you can tell those apart.', 'angry'),
       }),
-    r('columnist-polish', 'room', 'metal-polish', 'Why is there a waxy metal smear on your fingers?',
+    r('columnist-polish', 'room', 'metal-polish', 'Ask if she knows anything about the metal-polish residue.',
       'I picked up a silver cigarette case to read the engraving. Someone had just polished it.', 'neutral',
       s(
         c('Whose case were you reading?', 'One with initials worth a paragraph, if they’re who I think.', 'suspicious'),
@@ -147,7 +147,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Help me and the engraving stays out of print.', 'You bargain well. I only touched the lid to read it — whoever polished the base is your man.', 'thoughtful'),
         challenge: c('You wiped more than polish off that case. What else?', 'I read an engraving. Curiosity smudges silver; it isn’t a confession.', 'angry'),
       }),
-    r('columnist-powder', 'social', 'face-powder', 'Why is there ivory powder on your sleeve?',
+    r('columnist-powder', 'social', 'face-powder', 'Ask if she knows anything about the ivory face powder.',
       'The powder room was a scrum of women all patting at once. A cloud like that doesn’t pick favourites.', 'neutral',
       s(
         c('Who were you crowded next to?', 'Two women sharing one mirror and, it seems, one compact’s worth of dust.', 'thoughtful'),
@@ -165,7 +165,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Help me match the compact — I won’t name her in print.', 'Kind. The shade on my sleeve is heavier than mine — match it to her compact.', 'thoughtful'),
         challenge: c('That powder was pressed onto you, not brushed. Who did it?', 'Compare the shades. Mine’s lighter. Someone else’s cloud landed on me.', 'angry'),
       }),
-    r('columnist-oil', 'timeline', 'blade-oil', 'Why are your fingers slick with machine oil?',
+    r('columnist-oil', 'timeline', 'blade-oil', 'Ask if she knows anything about the precision oil.',
       'My lighter jammed at the worst moment. A drop of oil and some bad language sorted it out.', 'suspicious',
       s(
         c('When did the lighter jam?', 'Just as the hall clock struck. I remember because I swore along with the chimes.', 'thoughtful'),
@@ -183,7 +183,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Give me the time the lighter jammed — I’ll leave the rest.', 'Fair. The lighter jammed on the clock’s stroke — the oil and the time agree, and neither accuses me.', 'thoughtful'),
         challenge: c('That’s more oil than a lighter needs. What else did you oil?', 'So test it. A stubborn flame makes a mess, not a plot.', 'angry'),
       }),
-    r('columnist-wax', 'social', 'wax-resin', 'Why is there a brittle amber fleck on your cuff?',
+    r('columnist-wax', 'social', 'wax-resin', 'Ask if she knows anything about the amber wax residue.',
       'I seal my riskier notes with wax. A slammed drawer knocked the stick before it cooled.', 'thoughtful',
       s(
         c('What did you need to seal?', 'A note too costly to leave loose in a folio.', 'suspicious'),
@@ -236,7 +236,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
   ],
 
   surgeon: [
-    r('surgeon-antiseptic', 'room', 'antiseptic', 'You keep washing your hands. What are you trying to get off them?',
+    r('surgeon-antiseptic', 'room', 'antiseptic', 'Ask if he knows anything about the sharp chemical trace.',
       'Nothing sinister. The conservatory shears nicked my thumb and I dressed it with carbolic from my case. The smell lingers, I know.', 'neutral',
       s(
         c('Where did you dress it?', 'In the library. The stopper slipped and soaked my cuff before I wiped the bottle.', 'worried'),
@@ -254,7 +254,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Tell me what you cleaned — I won’t make a scene of it.', 'Decent of you. I bound the cut in the library; the carbolic caught my cuff there, no more.', 'thoughtful'),
         challenge: c('That smell is stronger than one dressed thumb. What else took carbolic?', 'A man who dresses a cut smells of carbolic. Nothing in that undoes me.', 'angry'),
       }),
-    r('surgeon-oil', 'social', 'blade-oil', 'Why are your fingertips slick with fine oil?',
+    r('surgeon-oil', 'social', 'blade-oil', 'Ask if he knows anything about the precision oil.',
       'A hinge on my instrument case stuck when I opened it for a bandage. One drop of oil freed it, and it marked my hand.', 'suspicious',
       s(
         c('How did you free the hinge?', 'One drop of light oil and a probe. Forcing precision tools is barbaric.', 'thoughtful'),
@@ -272,7 +272,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Account for the case and I’ll leave you alone.', 'Fair. The vial’s down one drop — my hand, my hinge, my sleeve.', 'thoughtful'),
         challenge: c('Only your hand touched that oil tonight. Prove it stayed on the case.', 'Confirm it. A man oiling his own case gets oil on himself. Hardly damning.', 'angry'),
       }),
-    r('surgeon-wax', 'timeline', 'wax-resin', 'Where did that brittle amber fleck on your lapel come from?',
+    r('surgeon-wax', 'timeline', 'wax-resin', 'Ask if he knows anything about the amber wax residue.',
       'I sealed a private medical letter with an amber stick; a fleck of the wax caught my lapel as it cooled. Retirement doesn’t stop people asking for an opinion.', 'thoughtful',
       s(
         c('Who was the letter for?', 'Confidentiality survives a dinner invitation — the recipient keeps their own half of the seal.', 'angry'),
@@ -306,7 +306,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Between us — who worried you most?', 'The still one. Stillness after a scare is rarely calm.', 'thoughtful'),
         challenge: c('You saw who flinched. Name them.', 'I’ll give you what I saw, not a name. Draw your own conclusion.', 'angry'),
       }),
-    r('surgeon-ink', 'timeline', 'ink-fiber', 'Why are your fingers marked with blue-black ink?',
+    r('surgeon-ink', 'timeline', 'ink-fiber', 'Ask if he knows anything about the ink-stained paper fiber.',
       'I was writing up a private note. A steady hand still uses a fountain pen — the ink comes with it.', 'neutral',
       s(
         c('When exactly were you writing?', 'Just before the corridor got loud. I noted the hour, as I always do.', 'thoughtful'),
@@ -324,7 +324,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Give me the hour — keep the patient unnamed.', 'Acceptable. The page carries the time I wrote it; ink and clock agree, and no name need leave my lips.', 'thoughtful'),
         challenge: c('You timed that page to cover a minute you can’t account for.', 'So I recorded something precisely. Precision is my habit, not my guilt.', 'angry'),
       }),
-    r('surgeon-earth', 'room', 'fine-earth', 'What is that pale grit on your cuff?',
+    r('surgeon-earth', 'room', 'fine-earth', 'Ask if he knows anything about the fine mineral dust.',
       'A dusting powder from my case — bismuth, near enough. It spilled when I steadied the lid.', 'neutral',
       s(
         c('What’s the powder for?', 'Settling a stomach. Harmless, chalk-fine, easily mistaken for ordinary dust.', 'thoughtful'),
@@ -342,7 +342,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Show me the case and I won’t chase the flowerbeds.', 'Reasonable. Set my cuff beside the tin — the grain matches the powder, not the flowerbeds.', 'thoughtful'),
         challenge: c('That grit came from the conservatory. You’re lying about the powder.', 'Then examine it properly. My powder is even; garden grit isn’t. The lens will correct you.', 'angry'),
       }),
-    r('surgeon-wool', 'social', 'black-wool', 'Where did that black wool thread on your sleeve come from?',
+    r('surgeon-wool', 'social', 'black-wool', 'Ask if he knows anything about the black wool thread.',
       'My travelling coat. Good wool, old cut. It’s caught on furniture in better houses than this.', 'neutral',
       s(
         c('What did the coat catch on tonight?', 'A rough edge on the library shelving, about where a reaching arm would meet it.', 'thoughtful'),
@@ -360,7 +360,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Let me check the coat against the thread — quietly.', 'Sensible. Lay the strand against my cuff; if the weave differs, it isn’t mine.', 'thoughtful'),
         challenge: c('That thread ties you to a place you deny. Own it.', 'Then compare the weaves first. A shared colour isn’t a shared coat.', 'angry'),
       }),
-    r('surgeon-polish', 'room', 'metal-polish', 'Why is there polish residue on your fingertips?',
+    r('surgeon-polish', 'room', 'metal-polish', 'Ask if he knows anything about the metal-polish residue.',
       'I picked up a steel instrument to check its edge and found someone had waxed it like a trophy.', 'suspicious',
       s(
         c('Which instrument had been polished?', 'A blade from the case by the sideboard. Freshly buffed — an amateur’s idea of care.', 'thoughtful'),
@@ -378,7 +378,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Tell me what you handled and I leave the silver alone.', 'Fair. Handle to thumb, thumb to cloth — one blade, one chain, nothing past it.', 'thoughtful'),
         challenge: c('That polish came off the dining silver. You handled more than a blade.', 'Then follow it from the blade I named, not the plate. It doesn’t reach where you hope.', 'angry'),
       }),
-    r('surgeon-perfume', 'social', 'floral-perfume', 'Why does an expensive perfume cling to your lapel?',
+    r('surgeon-perfume', 'social', 'floral-perfume', 'Ask if he knows anything about the floral perfume trace.',
       'A woman felt faint and I steadied her. Her scent stayed on my coat longer than my sympathy did.', 'neutral',
       s(
         c('Who was it you steadied?', 'A guest near the drawing room. I took her weight on my shoulder for a moment, no more.', 'thoughtful'),
@@ -396,7 +396,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Name her and I keep it quiet.', 'Decent. The woman I steadied will confirm it — her scent came to my lapel, not from me.', 'thoughtful'),
         challenge: c('That perfume puts you alone with someone. Who?', 'Close enough to keep her upright. Ask her. Proximity isn’t proof.', 'angry'),
       }),
-    r('surgeon-powder', 'timeline', 'face-powder', 'How did ivory face powder get onto your cuff?',
+    r('surgeon-powder', 'timeline', 'face-powder', 'Ask if he knows anything about the ivory face powder.',
       'When the woman I steadied swayed, her compact sprang open and dusted us both.', 'surprised',
       s(
         c('What happened to the compact?', 'It flew from her hand. I caught her first and the powder second, all over my cuff.', 'thoughtful'),
@@ -414,7 +414,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Show me how it fell — I’ll leave her name out.', 'Gladly. She tips here, I catch there, the compact bursts — the powder does the rest.', 'thoughtful'),
         challenge: c('That powder didn’t get there by accident. You pressed it on.', 'Then let me show you how it spilled. The sequence blames the clasp, not the surgeon.', 'angry'),
       }),
-    r('surgeon-note', 'suspicion', 'torn-note', 'You keep filling a page with cramped shorthand. What is it?',
+    r('surgeon-note', 'suspicion', 'torn-note', 'Ask if he knows anything about the torn shorthand note.',
       'Clinical notes. My own shorthand — times, symptoms, a dose. I tore off the used strip out of habit.', 'thoughtful',
       s(
         c('What did the notes record?', 'Observations on a guest who looked unwell. I write things down before memory tidies them.', 'suspicious'),
@@ -467,7 +467,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
   ],
 
   curator: [
-    r('curator-antiseptic', 'room', 'antiseptic', 'Why does a sharp, medicinal smell cling to your sleeve?',
+    r('curator-antiseptic', 'room', 'antiseptic', 'Ask if she knows anything about the sharp chemical trace.',
       'An orchid was going rotten, so I treated it with a sulphur wash. The smell soaked into my sleeve.', 'worried',
       s(
         c('What did you treat it with?', 'A sharp sulphur wash, watered down. You can’t mask that smell.', 'thoughtful'),
@@ -485,7 +485,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Tell me what you sprayed — I won’t call it medicine.', 'Gently, then. The sprayer kicked back; that sulphur streak is its doing, not medicine.', 'thoughtful'),
         challenge: c('That’s a doctor’s bottle on a gardener. What did you really treat?', 'You’ve done your reading. It’s plant wash, yes — because I treat plants.', 'angry'),
       }),
-    r('curator-earth', 'timeline', 'fine-earth', 'Where did that pale grit on your hem come from?',
+    r('curator-earth', 'timeline', 'fine-earth', 'Ask if she knows anything about the fine mineral dust.',
       'I repotted a cramped night jasmine — its roots couldn’t wait for dinner to end. The pale mix got all over my hem.', 'neutral',
       s(
         c('What soil did you use?', 'A pale mineral mix, finer than garden earth and dry as chalk.', 'thoughtful'),
@@ -503,7 +503,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Show me the trail and I won’t accuse the plants.', 'If you must. Someone swapped a root ball; the grit runs from the gallery rug toward the study vent.', 'thoughtful'),
         challenge: c('That grit didn’t come from a flowerpot alone. You’re covering a path.', 'So mineral mix travels on a hem. Follow it — it leads to a searched pot, not to me.', 'angry'),
       }),
-    r('curator-note', 'social', 'torn-note', 'You keep jotting shorthand tonight. What are you recording?',
+    r('curator-note', 'social', 'torn-note', 'Ask if she knows anything about the torn shorthand note.',
       'Growing records — dates, cuttings, a time or two — in my own shorthand. I tore the margin off one to label a pot.', 'thoughtful',
       s(
         c('What did you write down tonight?', 'A time, a slammed door, and some initials, in my own shorthand.', 'suspicious'),
@@ -537,7 +537,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Quietly — who moved when they thought no one was looking?', 'One figure crossed on a wet sole just as the clock chimed. That’s all I can swear to.', 'thoughtful'),
         challenge: c('You saw them cross. Why won’t you name them?', 'I don’t have a name. The stride was wrong for a servant — that’s all.', 'angry'),
       }),
-    r('curator-ink', 'timeline', 'ink-fiber', 'How did blue-black ink get on your fingers?',
+    r('curator-ink', 'timeline', 'ink-fiber', 'Ask if she knows anything about the ink-stained paper fiber.',
       'I ink my plant labels by hand. A written label outlasts a pencil, and a garden forgets everything else.', 'neutral',
       s(
         c('When were you writing labels tonight?', 'Just before the corridor stirred. I mark the hour on each cutting, so the time’s in my hand too.', 'thoughtful'),
@@ -555,7 +555,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Give me the hour on the label — I won’t ask for more.', 'Gently, then. The label carries the time I wrote it; ink and hour agree, and neither condemns me.', 'thoughtful'),
         challenge: c('That’s too much ink for plant labels. What were you really dating?', 'So a cutting is time-stamped. Careful record-keeping isn’t a crime.', 'angry'),
       }),
-    r('curator-wool', 'social', 'black-wool', 'Where did that frayed black wool come from?',
+    r('curator-wool', 'social', 'black-wool', 'Ask if she knows anything about the black wool thread.',
       'My work wrap — dark, coarse, older than most of my ferns. It snags on anything with a splinter.', 'neutral',
       s(
         c('What did the wrap catch on tonight?', 'An old cabinet by the passage. There’s a raised nail that took a thread as I passed.', 'thoughtful'),
@@ -573,7 +573,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Show me where the wrap snagged and I keep it quiet.', 'If you must. Nail to shoulder to pot — the whole quiet trip, nothing sinister on it.', 'thoughtful'),
         challenge: c('That thread puts you at more than a cabinet. Where else did you go?', 'So my wrap brushed something in passing. That’s not a plot.', 'angry'),
       }),
-    r('curator-polish', 'room', 'metal-polish', 'Why is there metal polish on your hands?',
+    r('curator-polish', 'room', 'metal-polish', 'Ask if she knows anything about the metal-polish residue.',
       'I keep the brass sprayers and name-plates bright. Tarnish looks like neglect, and neglect frightens the patrons.', 'neutral',
       s(
         c('Which fittings did you polish?', 'The name-plates on the rarer plants, and the long brass sprayer I use each evening.', 'thoughtful'),
@@ -591,7 +591,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Help me quietly and the patrons stay unnamed.', 'Kindly. I brightened only the grips, never the faces — whoever handled the silver was less careful than I.', 'thoughtful'),
         challenge: c('That polish came off the dining silver, not your brass.', 'I polished brass. If the smear troubles you, follow it to the sprayers, not the plate.', 'angry'),
       }),
-    r('curator-perfume', 'social', 'floral-perfume', 'That heavy perfume — surely a gardener’s vanity?',
+    r('curator-perfume', 'social', 'floral-perfume', 'Ask if she knows anything about the floral perfume trace.',
       'A gardener smells of soil and sap, not a bottled garden. That perfume is someone else’s, caught on me.', 'suspicious',
       s(
         c('Then how did it get on you?', 'A guest hugged me by the conservatory door and left half her bottle on my collar.', 'thoughtful'),
@@ -609,7 +609,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Name who hugged you — I won’t print it.', 'Gently. Smell my hands — soil, not gardenia. The perfume came off her, not out of any bottle of mine.', 'thoughtful'),
         challenge: c('That perfume puts you somewhere you deny. Own the meeting.', 'Compare the scents. Mine’s green and low; hers is loud and bottled. Not the same.', 'angry'),
       }),
-    r('curator-powder', 'room', 'face-powder', 'How did ivory powder get onto your shoulder?',
+    r('curator-powder', 'room', 'face-powder', 'Ask if she knows anything about the ivory face powder.',
       'Someone squeezed past me in a narrow doorway and left half her compact on my sleeve.', 'neutral',
       s(
         c('Who pressed past you?', 'A woman in a hurry toward the hall. I felt her more than saw her face.', 'thoughtful'),
@@ -627,7 +627,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Help me find whose compact it is — quietly.', 'Kindly meant. Match the shade to her compact, not my face — mine has never held ivory.', 'thoughtful'),
         challenge: c('That powder puts you near someone you won’t name. Who?', 'Near a careless shoulder in a doorway. Compare the shade; it’s hers, not mine.', 'angry'),
       }),
-    r('curator-oil', 'timeline', 'blade-oil', 'Why are your fingers slick with fine oil?',
+    r('curator-oil', 'timeline', 'blade-oil', 'Ask if she knows anything about the precision oil.',
       'The conservatory vent seized in the damp. One drop of oil on the ratchet and it opened again.', 'neutral',
       s(
         c('What exactly did you oil?', 'The vent’s winding gear, and my shears while the tin was open. Both had gone stiff.', 'thoughtful'),
@@ -645,7 +645,7 @@ export const PACK_A: Record<Extract<ArchetypeId, 'columnist' | 'surgeon' | 'cura
         bargain: c('Show me how you freed the vent and I leave the oil alone.', 'Gladly. I turn the gear here, the ratchet springs there, and the oil catches my thumb. No mystery.', 'thoughtful'),
         challenge: c('That oil touched more than a garden vent. What else did you free?', 'A garden vent. Watch me free it; the oil lands exactly where honest work would put it.', 'angry'),
       }),
-    r('curator-wax', 'social', 'wax-resin', 'What’s that amber fleck on your sleeve?',
+    r('curator-wax', 'social', 'wax-resin', 'Ask if she knows anything about the amber wax residue.',
       'Grafting wax. I seal the join where two cuttings meet, so the graft doesn’t weep sap and fail.', 'thoughtful',
       s(
         c('What were you grafting tonight?', 'A rose stock onto hardier root. The wax goes on warm, and warm wax flicks where it likes.', 'suspicious'),

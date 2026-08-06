@@ -1,12 +1,12 @@
 // Three.js mansion renderer: 3x3 rooms, passageways, characters,
-// pixel-art noir pipeline (low-res render target upscaled nearest-neighbor),
+// painterly noir pipeline with a capped native-resolution render target,
 // rain, lightning, dust motes, lamplight.
 import * as THREE from 'three'
 import type { RoomId } from './types'
-import { DINING_BANQUET_FOOTPRINT, GALLERY_BUST_FOOTPRINTS, ROOMS, ROOM_HALF, ROOM_STEP, PASS_HALF, roomCenter } from './data'
+import { BALLROOM_CHAMPAGNE_TOWER_FOOTPRINT, BALLROOM_PIANO_FOOTPRINT, DINING_BANQUET_FOOTPRINT, GALLERY_BUST_FOOTPRINTS, MASTER_SUITE_FURNITURE_FOOTPRINTS, ROOMS, ROOM_HALF, ROOM_STEP, PASS_HALF, adjacentRooms, roomCenter } from './data'
 import { atlasFrame, CHARACTER_ATLAS, NPC_ATLAS_V3 } from './characterAtlas'
 import { getExteriorWallTexture, getWallTexture, disposeWallTextures } from './wallSprites'
-import { createStormWindow, updateStormWindows, type ExteriorWall, type StormWindowHandles } from './stormWindows'
+import { createStormWindow, type ExteriorWall, type StormWindowHandles } from './stormWindows'
 import { createCellarSconces, type CellarSconces } from './cellarSconces'
 import { createConservatoryFountain, type ConservatoryFountain } from './conservatoryFountain'
 import { createStudyFireplace, type StudyFireplace } from './studyFireplace'
@@ -47,6 +47,7 @@ interface Actor {
 }
 
 interface CeilingInsect {
+  room: RoomId
   mesh: THREE.Mesh
   center: THREE.Vector3
   phase: number
@@ -57,22 +58,52 @@ interface CeilingInsect {
   kind: 'fly' | 'moth'
 }
 
-interface OccludingWall {
+interface ChampagneBubble {
   mesh: THREE.Mesh
-  materials: THREE.MeshStandardMaterial[]
+  centerY: number
+  phase: number
+  speed: number
+}
+
+interface OccludingWall {
+  room: RoomId
+  mesh: THREE.Mesh
+  materials: THREE.Material[]
   edgeMaterial: THREE.LineBasicMaterial
   opacity: number
   occluded: boolean
 }
 
 interface OccludingFixture {
+  room: RoomId
   sprite: THREE.Sprite
   material: THREE.SpriteMaterial
   opacity: number
   occluded: boolean
 }
 
-const PIXEL_SCALE = 0.58 // render-target resolution fraction
+// A full Retina-sized 4x-MSAA target can exceed 22 million color/depth samples
+// per frame at common desktop sizes. This cap retains supersampled edges while
+// keeping the painterly scene within a much steadier GPU fill-rate budget.
+const MAX_RENDER_PIXEL_RATIO = 1.5
+const INACTIVE_ROOM_LIGHT_LEVEL = 0.015
+const INACTIVE_ROOM_VEIL_OPACITY = 0.88
+const ROOM_LIGHT_FADE_SPEED = 1.65
+const MSAA_SAMPLES = 0
+// Most floor sources are material swatches, not room-wide compositions. Tiling
+// them twice brings planks and masonry back to a believable scale beside the
+// 2.45-unit actors. Preserve the Ballroom's authored central medallion.
+const FLOOR_TEXTURE_REPEATS: Record<RoomId, number> = {
+  study: 2,
+  gallery: 2,
+  conservatory: 2,
+  kitchen: 2,
+  dining: 2,
+  ballroom: 1,
+  cellar: 2,
+  library: 2,
+  suite: 2,
+}
 // Character cutouts are 2.45 units tall. Keep the shared room/hallway wall
 // line above them so doorway crowns frame actors instead of crossing their heads.
 const WALL_H = 2.8
@@ -92,6 +123,19 @@ const OCCLUDED_WALL_OPACITY = 0.18
 const WALL_FADE_SPEED = 8
 const OCCLUDED_FIXTURE_OPACITY = 0.2
 const FIXTURE_FADE_SPEED = 9
+const ACTOR_HEAD_X_OFFSETS = [-0.22, 0.22] as const
+const ACTOR_HEAD_Y_OFFSETS = [1.68, 2.35] as const
+const FIXTURE_CORNERS = [0, 1] as const
+const REQUIRED_ROOM_MASKS = new Map<RoomId, number>(
+  ROOMS.map(room => {
+    const required = new Set<RoomId>([room.id, ...adjacentRooms(room.id)])
+    return [
+      room.id,
+      ROOMS.reduce((mask, candidate, index) =>
+        required.has(candidate.id) ? mask | (1 << index) : mask, 0),
+    ]
+  }),
+)
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)))
@@ -115,15 +159,38 @@ export class MansionScene {
   private moon: THREE.DirectionalLight
   private edgeMat = new THREE.LineBasicMaterial({ color: 0x08070a, transparent: true, opacity: 0.42 })
   private roomLights = new Map<RoomId, THREE.PointLight[]>()
+  private roomLightLevels = new Map<RoomId, number>()
+  private roomLightTargets = new Map<RoomId, number>()
+  private roomDarknessVeils = new Map<RoomId, THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>>()
+  private roomRoots = new Map<RoomId, THREE.Group>()
+  private visibleRooms = new Set<RoomId>(ROOMS.map(room => room.id))
+  private visibleRoomMask = (1 << ROOMS.length) - 1
+  private focusedRoom: RoomId | null = null
+  private roomBounds = new Map<RoomId, THREE.Box3>()
+  private cullingFrustum = new THREE.Frustum()
+  private cullingProjection = new THREE.Matrix4()
   private stormWindows: StormWindowHandles[] = []
+  private stormWindowRooms = new Map<StormWindowHandles, RoomId>()
   private studyFireplace: StudyFireplace | null = null
   private cellarSconces: CellarSconces | null = null
   private conservatoryFountain: ConservatoryFountain | null = null
   private hallwayWalls: HallwayWalls[] = []
   private southernWalls: OccludingWall[] = []
+  private visibleSouthernWallMeshes: THREE.Mesh[] = []
+  private southernWallByMesh = new Map<THREE.Object3D, OccludingWall>()
   private hangingFixtures: OccludingFixture[] = []
   private wallRaycaster = new THREE.Raycaster()
+  private wallOcclusionTarget = new THREE.Vector3()
+  private wallOcclusionDirection = new THREE.Vector3()
+  private fixtureCameraRight = new THREE.Vector3()
+  private fixtureCameraUp = new THREE.Vector3()
+  private fixtureWorld = new THREE.Vector3()
+  private fixtureCorner = new THREE.Vector3()
+  private fixtureProjected = new THREE.Vector3()
+  private desiredCameraPosition = new THREE.Vector3()
+  private labelPosition = new THREE.Vector3()
   private ceilingInsects: CeilingInsect[] = []
+  private champagneBubbles: ChampagneBubble[] = []
   private materialCache = new Map<string, THREE.MeshStandardMaterial>()
   private floorTextureCache = new Map<string, THREE.Texture>()
   private rain!: THREE.Points
@@ -138,11 +205,15 @@ export class MansionScene {
 
   constructor(container: HTMLElement) {
     this.container = container
+    // The native-resolution texture pass preserves authored sprite detail.
+    // Hardware MSAA multiplied the full-scene fill cost (and caused the
+    // observed frame-rate regression), so transparent art relies on its
+    // filtered alpha edges instead.
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' })
-    this.renderer.setPixelRatio(1)
-    // Compress bright practical-light gradients before the low-resolution pixel
-    // pass. Without tone mapping, the steep point-light falloff quantizes into
-    // visible concentric bands across darker room floors.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO))
+    // Compress bright practical-light gradients before the post-process pass.
+    // Without tone mapping, the steep point-light falloff produces visible
+    // concentric bands across darker room floors.
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.08
@@ -167,14 +238,18 @@ export class MansionScene {
     this.scene.add(this.moon)
 
     this.buildMansion()
+    this.visibleSouthernWallMeshes = this.southernWalls.map(wall => wall.mesh)
+    this.southernWallByMesh = new Map(this.southernWalls.map(wall => [wall.mesh, wall]))
     this.buildRain()
     this.buildDust()
 
-    // pixel pipeline
+    // Fine furniture silhouettes retain a capped native-resolution texture
+    // pass without multiplying every scene sample through hardware MSAA.
     this.rt = new THREE.WebGLRenderTarget(2, 2, {
-      minFilter: THREE.NearestFilter,
-      magFilter: THREE.NearestFilter,
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
       depthBuffer: true,
+      samples: MSAA_SAMPLES,
     })
     const quadMat = new THREE.MeshBasicMaterial({ map: this.rt.texture })
     const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), quadMat)
@@ -194,6 +269,10 @@ export class MansionScene {
       wall.edgeMaterial.dispose()
     }
     for (const fixture of this.hangingFixtures) fixture.material.dispose()
+    for (const veil of this.roomDarknessVeils.values()) {
+      veil.geometry.dispose()
+      veil.material.dispose()
+    }
     disposeWallTextures()
     disposeHallwayTextures()
     this.studyFireplace?.dispose()
@@ -206,10 +285,12 @@ export class MansionScene {
   private resize = () => {
     const w = Math.max(2, this.container.clientWidth)
     const h = Math.max(2, this.container.clientHeight)
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, MAX_RENDER_PIXEL_RATIO)
+    this.renderer.setPixelRatio(pixelRatio)
     this.renderer.setSize(w, h)
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
-    this.rt.setSize(Math.max(2, Math.floor(w * PIXEL_SCALE)), Math.max(2, Math.floor(h * PIXEL_SCALE)))
+    this.rt.setSize(Math.max(2, Math.floor(w * pixelRatio)), Math.max(2, Math.floor(h * pixelRatio)))
   }
 
   // ------------------------------------------------------------ mansion build
@@ -230,9 +311,18 @@ export class MansionScene {
       texture = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}assets/floors/${roomId}.png`)
       texture.colorSpace = THREE.SRGBColorSpace
       texture.minFilter = THREE.LinearMipmapLinearFilter
-      texture.magFilter = THREE.NearestFilter
-      texture.wrapS = THREE.ClampToEdgeWrapping
-      texture.wrapT = THREE.ClampToEdgeWrapping
+      texture.magFilter = THREE.LinearFilter
+      const repeat = FLOOR_TEXTURE_REPEATS[roomId]
+      if (repeat > 1) {
+        // Mirroring keeps opposite edges continuous even though the painterly
+        // source swatches were not exported as seamless textures.
+        texture.wrapS = THREE.MirroredRepeatWrapping
+        texture.wrapT = THREE.MirroredRepeatWrapping
+        texture.repeat.set(repeat, repeat)
+      } else {
+        texture.wrapS = THREE.ClampToEdgeWrapping
+        texture.wrapT = THREE.ClampToEdgeWrapping
+      }
       texture.anisotropy = Math.min(4, this.renderer.capabilities.getMaxAnisotropy())
       this.floorTextureCache.set(roomId, texture)
     }
@@ -283,11 +373,28 @@ export class MansionScene {
 
       if (r.id === 'dining') this.buildDiningFurniture(g)
 
-      if (r.id === 'gallery') this.buildGalleryBusts(g)
+      if (r.id === 'ballroom') {
+        this.buildBallroomGrandPiano(g)
+        this.buildBallroomCurtains(g)
+        this.buildBallroomChampagneTower(g)
+      }
+
+      if (r.id === 'gallery') {
+        this.buildGalleryBusts(g)
+        this.buildGalleryWallArt(g)
+      }
 
       if (r.id === 'conservatory') {
         this.conservatoryFountain = createConservatoryFountain()
         g.add(this.conservatoryFountain.group)
+        this.buildConservatoryGardenShelves(g)
+        this.buildConservatoryCornerPlant(g)
+        this.buildConservatoryNortheastPalm(g)
+      }
+
+      if (r.id === 'suite') {
+        this.buildMasterSuiteRug(g)
+        this.buildMasterSuiteFurniture(g)
       }
 
       if (r.id === 'cellar') {
@@ -295,6 +402,33 @@ export class MansionScene {
         g.add(this.cellarSconces.group)
       }
 
+      // One translucent plane suppresses global ambient/moonlight in inactive
+      // rooms. This is much cheaper than keeping their practical lights in the
+      // renderer just to achieve a dim background silhouette.
+      const darknessMaterial = new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        toneMapped: false,
+      })
+      const darknessVeil = new THREE.Mesh(new THREE.PlaneGeometry(10.15, 10.15), darknessMaterial)
+      darknessVeil.rotation.x = -Math.PI / 2
+      darknessVeil.position.y = WALL_H + 0.08
+      darknessVeil.renderOrder = 20
+      darknessVeil.visible = false
+      g.add(darknessVeil)
+      this.roomDarknessVeils.set(r.id, darknessVeil)
+
+      this.roomRoots.set(r.id, g)
+      // Floors, trim, walls, and authored decor stay within roughly 0.2 units
+      // of the nominal 10x10 room footprint. A 0.55-unit safety margin retains
+      // their complete silhouettes without making neighboring empty space count
+      // as visible room geometry.
+      this.roomBounds.set(r.id, new THREE.Box3(
+        new THREE.Vector3(c.x - ROOM_HALF - 0.55, -1, c.z - ROOM_HALF - 0.55),
+        new THREE.Vector3(c.x + ROOM_HALF + 0.55, 5, c.z + ROOM_HALF + 0.55),
+      ))
       this.scene.add(g)
     }
 
@@ -374,7 +508,9 @@ export class MansionScene {
         g.add(this.studyFireplace.group)
         continue
       }
-      this.stormWindows.push(createStormWindow(g, { side, wallHeight: WALL_H, wallThickness: WALL_T, seed: col * 101 + row * 17 + index * 7919 }))
+      const window = createStormWindow(g, { side, wallHeight: WALL_H, wallThickness: WALL_T, seed: col * 101 + row * 17 + index * 7919 })
+      this.stormWindows.push(window)
+      this.stormWindowRooms.set(window, room)
     }
   }
 
@@ -391,7 +527,7 @@ export class MansionScene {
       ballroom: [[0, 0, 1.55]],
       cellar: [[-2.65, 2.1, 0.48], [2.7, -2.35, 0.43]],
       library: [[0, 0.15, 1.35]],
-      suite: [[0.35, 0.2, 1.3]],
+      suite: [[0, 0, 1.3]],
     }
     const fixtureAssets: Record<RoomId, [string, number]> = {
       study: ['study-ceiling-pendant', 1.55],
@@ -408,28 +544,31 @@ export class MansionScene {
     for (const [x, z, share] of layouts[room]) {
       const fixtureY = room === 'ballroom' || room === 'dining' ? 2.58 : 2.48
       const [asset, spriteHeight] = fixtureAssets[room]
-      this.buildLightingSprite(g, asset, x, fixtureY - 0.25, z, spriteHeight)
-      if (room === 'cellar') this.buildCeilingInsects(g, 'fly', x, fixtureY - 0.04, z, 7)
-      if (room === 'conservatory') this.buildCeilingInsects(g, 'moth', x, fixtureY - 0.02, z, 5)
+      this.buildLightingSprite(g, room, asset, x, fixtureY - 0.25, z, spriteHeight)
+      if (room === 'cellar') this.buildCeilingInsects(g, room, 'fly', x, fixtureY - 0.04, z, 7)
+      if (room === 'conservatory') this.buildCeilingInsects(g, room, 'moth', x, fixtureY - 0.02, z, 5)
       const light = new THREE.PointLight(color, intensity * 21 * share, room === 'ballroom' ? 14 : 11.5, 1.4)
       light.position.set(x, fixtureY + 0.08, z)
       light.userData.baseIntensity = light.intensity
+      light.userData.lightShare = share
       g.add(light)
       lights.push(light)
     }
     this.roomLights.set(room, lights)
+    this.roomLightLevels.set(room, 1)
+    this.roomLightTargets.set(room, 1)
   }
 
-  private buildLightingSprite(g: THREE.Group, asset: string, x: number, y: number, z: number, height: number) {
+  private buildLightingSprite(g: THREE.Group, room: RoomId, asset: string, x: number, y: number, z: number, height: number) {
     const texture = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}assets/lighting/${asset}.png`, loaded => {
       const image = loaded.image as { width?: number; height?: number } | undefined
       if (image?.width && image.height) sprite.scale.x = height * image.width / image.height
     })
     texture.colorSpace = THREE.SRGBColorSpace
-    texture.generateMipmaps = false
-    texture.minFilter = THREE.LinearFilter
-    texture.magFilter = THREE.NearestFilter
-    texture.anisotropy = 4
+    texture.generateMipmaps = true
+    texture.minFilter = THREE.LinearMipmapLinearFilter
+    texture.magFilter = THREE.LinearFilter
+    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
     const overlaysDiningTable = asset === 'dining-ceiling-chandelier'
     const material = new THREE.SpriteMaterial({
       map: texture,
@@ -448,7 +587,7 @@ export class MansionScene {
     // only the obstructing fixture so the character remains readable.
     sprite.renderOrder = 5
     g.add(sprite)
-    this.hangingFixtures.push({ sprite, material, opacity: 1, occluded: false })
+    this.hangingFixtures.push({ room, sprite, material, opacity: 1, occluded: false })
   }
 
   /** The Study's main work surface is a single authored cutout, grounded near
@@ -460,10 +599,10 @@ export class MansionScene {
       `${import.meta.env.BASE_URL}assets/decor/sprites/study/partners-desk.png`,
     )
     texture.colorSpace = THREE.SRGBColorSpace
-    texture.generateMipmaps = false
-    texture.minFilter = THREE.LinearFilter
-    texture.magFilter = THREE.NearestFilter
-    texture.anisotropy = 4
+    texture.generateMipmaps = true
+    texture.minFilter = THREE.LinearMipmapLinearFilter
+    texture.magFilter = THREE.LinearFilter
+    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
     const material = new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
@@ -530,10 +669,10 @@ export class MansionScene {
         `${import.meta.env.BASE_URL}assets/decor/sprites/dining/${asset}.png`,
       )
       texture.colorSpace = THREE.SRGBColorSpace
-      texture.generateMipmaps = false
-      texture.minFilter = THREE.LinearFilter
-      texture.magFilter = THREE.NearestFilter
-      texture.anisotropy = 4
+      texture.generateMipmaps = true
+      texture.minFilter = THREE.LinearMipmapLinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
       const material = new THREE.MeshBasicMaterial({
         map: texture,
         transparent: true,
@@ -568,6 +707,267 @@ export class MansionScene {
     addFixedCutout('grandfather-clock-v2', 'dining-grandfather-clock', 1.22, 2.58, 3.62, -4.05, 2, false)
   }
 
+  /** The keyboard faces southwest into the Ballroom while the curved body
+   * recedes toward the northeast corner, matching the authored perspective. */
+  private buildBallroomGrandPiano(g: THREE.Group) {
+    const height = 2.2
+    const width = height * (1536 / 1024)
+    const texture = new THREE.TextureLoader().load(
+      `${import.meta.env.BASE_URL}assets/decor/sprites/ballroom/grand-piano.png`,
+    )
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.generateMipmaps = true
+    texture.minFilter = THREE.LinearMipmapLinearFilter
+    texture.magFilter = THREE.LinearFilter
+    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
+
+    const piano = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, height),
+      new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.035,
+        toneMapped: false,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+      }),
+    )
+    piano.name = 'ballroom-grand-piano'
+    piano.position.set(BALLROOM_PIANO_FOOTPRINT.x, height / 2, BALLROOM_PIANO_FOOTPRINT.z)
+    piano.renderOrder = 2
+    g.add(piano)
+
+    const shadowCanvas = document.createElement('canvas')
+    shadowCanvas.width = 256
+    shadowCanvas.height = 128
+    const context = shadowCanvas.getContext('2d')!
+    const gradient = context.createRadialGradient(128, 64, 10, 128, 64, 122)
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0.82)')
+    gradient.addColorStop(0.58, 'rgba(0, 0, 0, 0.48)')
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
+    context.fillStyle = gradient
+    context.fillRect(0, 0, 256, 128)
+    const shadowTexture = new THREE.CanvasTexture(shadowCanvas)
+    const shadow = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.45, 1.55),
+      new THREE.MeshBasicMaterial({
+        map: shadowTexture,
+        transparent: true,
+        opacity: 0.74,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    )
+    shadow.name = 'ballroom-grand-piano-shadow'
+    shadow.rotation.x = -Math.PI / 2
+    shadow.position.set(BALLROOM_PIANO_FOOTPRINT.x, 0.02, BALLROOM_PIANO_FOOTPRINT.z + 0.4)
+    shadow.renderOrder = 1
+    g.add(shadow)
+  }
+
+  /** Tall ivory panels establish the same symmetric cadence around the
+   * Ballroom's centred east window and its three centred entryways. */
+  private buildBallroomCurtains(g: THREE.Group) {
+    const height = WALL_H + 0.1
+    const width = height * (856 / 1920)
+    // Project the textile slightly into the room, matching the shallow
+    // furnishing depth used by the Conservatory shelving.
+    const wallFace = ROOM_HALF - WALL_T / 2 - 0.085
+    const doorwayOffset = 3.02
+    const windowOffset = 1.82
+    const texture = new THREE.TextureLoader().load(
+      `${import.meta.env.BASE_URL}assets/decor/sprites/ballroom/tall-white-curtain.png`,
+    )
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.generateMipmaps = true
+    texture.minFilter = THREE.LinearMipmapLinearFilter
+    texture.magFilter = THREE.LinearFilter
+    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
+
+    const placements = [
+      // East exterior window: close enough to frame its 2.2-unit opening.
+      { side: 'east', x: wallFace, z: -windowOffset, rotationY: -Math.PI / 2, mirrored: false },
+      { side: 'east', x: wallFace, z: windowOffset, rotationY: -Math.PI / 2, mirrored: true },
+      // Remaining pairs share an exact offset from their centred entryways.
+      { side: 'north', x: -doorwayOffset, z: -wallFace, rotationY: 0, mirrored: false },
+      { side: 'north', x: doorwayOffset, z: -wallFace, rotationY: 0, mirrored: true },
+      { side: 'south', x: -doorwayOffset, z: wallFace, rotationY: Math.PI, mirrored: true },
+      { side: 'south', x: doorwayOffset, z: wallFace, rotationY: Math.PI, mirrored: false },
+      { side: 'west', x: -wallFace, z: -doorwayOffset, rotationY: Math.PI / 2, mirrored: true },
+      { side: 'west', x: -wallFace, z: doorwayOffset, rotationY: Math.PI / 2, mirrored: false },
+    ] as const
+
+    const southernSegments = this.southernWalls.filter(wall => wall.room === 'ballroom')
+    for (const [index, placement] of placements.entries()) {
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.04,
+        toneMapped: false,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+      })
+      const curtain = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material)
+      curtain.name = `ballroom-white-curtain-${placement.side}-${index % 2 === 0 ? 'left' : 'right'}`
+      curtain.position.set(placement.x, height / 2, placement.z)
+      curtain.rotation.y = placement.rotationY
+      curtain.scale.x = placement.mirrored ? -1 : 1
+      curtain.renderOrder = 2
+      g.add(curtain)
+
+      // Keep foreground textiles synchronized with their fading south wall.
+      if (placement.side === 'south') {
+        const segment = southernSegments.reduce((nearest, wall) =>
+          Math.abs(wall.mesh.position.x - placement.x) < Math.abs(nearest.mesh.position.x - placement.x)
+            ? wall
+            : nearest
+        )
+        segment.materials.push(material)
+      }
+    }
+  }
+
+  /** The furniture remains still; only tiny highlights within the filled
+   * coupe bowls rise and fade to suggest continuously bubbling champagne. */
+  private buildBallroomChampagneTower(g: THREE.Group) {
+    const height = 2.42
+    const width = height * (1004 / 1566)
+    const texture = new THREE.TextureLoader().load(
+      `${import.meta.env.BASE_URL}assets/decor/sprites/ballroom/champagne-tower.png`,
+    )
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.generateMipmaps = true
+    texture.minFilter = THREE.LinearMipmapLinearFilter
+    texture.magFilter = THREE.LinearFilter
+    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
+
+    const tower = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, height),
+      new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.035,
+        toneMapped: false,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+      }),
+    )
+    tower.name = 'ballroom-champagne-tower'
+    tower.position.set(
+      BALLROOM_CHAMPAGNE_TOWER_FOOTPRINT.x,
+      height / 2 + 0.02,
+      BALLROOM_CHAMPAGNE_TOWER_FOOTPRINT.z,
+    )
+    tower.renderOrder = 3
+    g.add(tower)
+
+    const bubbleCenters = [
+      [0, 2.27],
+      [-0.23, 2.08], [0.23, 2.08],
+      [-0.38, 1.89], [0, 1.89], [0.38, 1.89],
+      [-0.51, 1.69], [-0.17, 1.69], [0.17, 1.69], [0.51, 1.69],
+      [-0.61, 1.49], [-0.31, 1.49], [0, 1.49], [0.31, 1.49], [0.61, 1.49],
+    ] as const
+    const bubbleGeometry = new THREE.CircleGeometry(0.018, 10)
+    for (const [index, [x, y]] of bubbleCenters.entries()) {
+      const material = new THREE.MeshBasicMaterial({
+        color: index % 3 === 0 ? 0xfff4bf : 0xffdf78,
+        transparent: true,
+        opacity: 0.72,
+        depthWrite: false,
+        toneMapped: false,
+      })
+      const bubble = new THREE.Mesh(bubbleGeometry, material)
+      bubble.name = `ballroom-champagne-bubble-${index}`
+      bubble.position.set(BALLROOM_CHAMPAGNE_TOWER_FOOTPRINT.x + x, y, BALLROOM_CHAMPAGNE_TOWER_FOOTPRINT.z + 0.025)
+      bubble.scale.setScalar(0.72 + (index % 4) * 0.13)
+      bubble.renderOrder = 4
+      g.add(bubble)
+      this.champagneBubbles.push({
+        mesh: bubble,
+        centerY: y,
+        phase: index * 0.83,
+        speed: 1.8 + (index % 5) * 0.23,
+      })
+    }
+  }
+
+  /** A fixed, top-down textile layer softens the Suite's open central floor. */
+  private buildMasterSuiteRug(g: THREE.Group) {
+    const width = 6
+    const length = 6.82
+    const texture = new THREE.TextureLoader().load(
+      `${import.meta.env.BASE_URL}assets/decor/sprites/suite/aubusson-rug.png`,
+    )
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.generateMipmaps = true
+    texture.minFilter = THREE.LinearMipmapLinearFilter
+    texture.magFilter = THREE.LinearFilter
+    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
+
+    const rug = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, length),
+      new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.035,
+        toneMapped: false,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    )
+    rug.name = 'suite-aubusson-rug'
+    rug.rotation.x = -Math.PI / 2
+    rug.position.set(0, 0.018, 0)
+    rug.renderOrder = 1
+    g.add(rug)
+  }
+
+  /** A coordinated first furniture pass occupies three corner zones while
+   * preserving the Suite's centred north/west entries and east/south windows. */
+  private buildMasterSuiteFurniture(g: THREE.Group) {
+    const placements = [
+      { id: 'bed', asset: 'large-victorian-bed', width: 4.14, height: 2.76, renderOrder: 2 },
+      { id: 'vanity', asset: 'vanity-v2', width: 1.87, height: 2.82, renderOrder: 2 },
+      { id: 'plant', asset: 'rubber-plant', width: 1.6, height: 2.4, renderOrder: 3 },
+    ] as const
+
+    for (const placement of placements) {
+      const footprint = MASTER_SUITE_FURNITURE_FOOTPRINTS.find(item => item.id === placement.id)!
+      const texture = new THREE.TextureLoader().load(
+        `${import.meta.env.BASE_URL}assets/decor/sprites/suite/${placement.asset}.png`,
+      )
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.generateMipmaps = true
+      texture.minFilter = THREE.LinearMipmapLinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
+
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.04,
+        toneMapped: false,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+      })
+      const furniture = new THREE.Mesh(
+        new THREE.PlaneGeometry(placement.width, placement.height),
+        material,
+      )
+      furniture.name = `suite-${placement.id}`
+      furniture.position.set(footprint.x, placement.height / 2 + 0.02, footprint.z)
+      // Keep the bed's depth angle fixed, then add a small clockwise artwork
+      // tilt that remains visibly locked as the camera moves.
+      if (placement.id === 'bed') {
+        furniture.rotation.y = THREE.MathUtils.degToRad(13)
+        furniture.rotation.z = THREE.MathUtils.degToRad(-8)
+      }
+      furniture.renderOrder = placement.renderOrder
+      g.add(furniture)
+    }
+  }
+
   /** Four matched portrait busts form an exact mirrored 2x2 gallery grid. */
   private buildGalleryBusts(g: THREE.Group) {
     const height = 2.35
@@ -577,10 +977,10 @@ export class MansionScene {
         `${import.meta.env.BASE_URL}assets/decor/sprites/gallery/bust-${bust.id}.png`,
       )
       texture.colorSpace = THREE.SRGBColorSpace
-      texture.generateMipmaps = false
-      texture.minFilter = THREE.LinearFilter
-      texture.magFilter = THREE.NearestFilter
-      texture.anisotropy = 4
+      texture.generateMipmaps = true
+      texture.minFilter = THREE.LinearMipmapLinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
       const material = new THREE.MeshBasicMaterial({
         map: texture,
         transparent: true,
@@ -596,7 +996,196 @@ export class MansionScene {
     }
   }
 
-  private buildCeilingInsects(g: THREE.Group, kind: 'fly' | 'moth', x: number, y: number, z: number, count: number) {
+  /** Six framed works sit directly on the Gallery's wall planes. Side-wall
+   * rotation supplies the correct in-world perspective without baking a
+   * camera-specific skew into the source paintings. */
+  private buildGalleryWallArt(g: THREE.Group) {
+    const wallInset = ROOM_HALF - WALL_T / 2 - 0.018
+    const height = 1.62
+    const placements = [
+      { asset: 'art-north-manor', x: -2.78, z: -wallInset, rotationY: 0 },
+      { asset: 'art-north-coast', x: 2.78, z: -wallInset, rotationY: 0 },
+      { asset: 'art-west-botanical', x: -wallInset, z: -3.38, rotationY: Math.PI / 2 },
+      { asset: 'art-west-hunt', x: -wallInset, z: 3.38, rotationY: Math.PI / 2 },
+      { asset: 'art-east-portrait', x: wallInset, z: -3.38, rotationY: -Math.PI / 2 },
+      { asset: 'art-east-library', x: wallInset, z: 3.38, rotationY: -Math.PI / 2 },
+    ]
+
+    for (const placement of placements) {
+      const plane = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+          transparent: true,
+          alphaTest: 0.04,
+          toneMapped: false,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        }),
+      )
+      const material = plane.material as THREE.MeshBasicMaterial
+      const texture = new THREE.TextureLoader().load(
+        `${import.meta.env.BASE_URL}assets/decor/sprites/gallery/${placement.asset}.png`,
+        loaded => {
+          const image = loaded.image as { width?: number; height?: number } | undefined
+          if (image?.width && image.height) plane.scale.x = height * image.width / image.height
+        },
+      )
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.generateMipmaps = true
+      texture.minFilter = THREE.LinearMipmapLinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
+      material.map = texture
+      material.needsUpdate = true
+
+      plane.name = `gallery-${placement.asset}`
+      plane.position.set(placement.x, 1.62, placement.z)
+      plane.rotation.y = placement.rotationY
+      plane.scale.set(height * 0.72, height, 1)
+      plane.renderOrder = 1
+      g.add(plane)
+    }
+
+    const drapeHeight = 2.27
+    const drapeTexture = new THREE.TextureLoader().load(
+      `${import.meta.env.BASE_URL}assets/decor/sprites/gallery/gallery-maroon-drapes.png`,
+    )
+    drapeTexture.colorSpace = THREE.SRGBColorSpace
+    drapeTexture.generateMipmaps = false
+    drapeTexture.minFilter = THREE.LinearFilter
+    drapeTexture.magFilter = THREE.NearestFilter
+    drapeTexture.anisotropy = 4
+    const drapes = new THREE.Mesh(
+      new THREE.PlaneGeometry(drapeHeight * 1.5, drapeHeight),
+      new THREE.MeshBasicMaterial({
+        map: drapeTexture,
+        transparent: true,
+        alphaTest: 0.04,
+        toneMapped: false,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+      }),
+    )
+    drapes.name = 'gallery-maroon-window-drapes'
+    // The window's three-dimensional frame projects slightly into the room.
+    // Keep the textile plane clearly ahead of it and let opaque curtain pixels
+    // write depth, preventing the bars from bleeding through the fabric.
+    drapes.position.set(0, 1.55, -wallInset + 0.12)
+    drapes.renderOrder = 2
+    g.add(drapes)
+  }
+
+  /** Four two-unit shelf bays flank the Conservatory's exterior windows.
+   * Reused themes are shuffled into different bays and mirrored on their
+   * second appearance so no adjacent silhouettes repeat. */
+  private buildConservatoryGardenShelves(g: THREE.Group) {
+    const wallFace = ROOM_HALF - WALL_T / 2 - 0.14
+    const height = 2.62
+    const width = 1.66
+    const placements = [
+      { asset: 'garden-shelf-north-left', x: -3.94, z: -wallFace, rotationY: 0, mirrored: false },
+      { asset: 'garden-shelf-east-south', x: -2.16, z: -wallFace, rotationY: 0, mirrored: true },
+      { asset: 'garden-shelf-east-north', x: 2.16, z: -wallFace, rotationY: 0, mirrored: true },
+      { asset: 'garden-shelf-north-right', x: wallFace, z: -2.16, rotationY: -Math.PI / 2, mirrored: true },
+      { asset: 'garden-shelf-north-left', x: wallFace, z: 2.16, rotationY: -Math.PI / 2, mirrored: true },
+      { asset: 'garden-shelf-east-south', x: wallFace, z: 3.94, rotationY: -Math.PI / 2, mirrored: false },
+    ]
+
+    for (const placement of placements) {
+      const plane = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+          transparent: true,
+          alphaTest: 0.04,
+          toneMapped: false,
+          side: THREE.DoubleSide,
+          depthWrite: true,
+        }),
+      )
+      const material = plane.material as THREE.MeshBasicMaterial
+      const texture = new THREE.TextureLoader().load(
+        `${import.meta.env.BASE_URL}assets/decor/sprites/conservatory/${placement.asset}.png`,
+      )
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.generateMipmaps = true
+      texture.minFilter = THREE.LinearMipmapLinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
+      material.map = texture
+      material.needsUpdate = true
+
+      plane.name = `conservatory-${placement.asset}${placement.mirrored ? '-mirrored' : ''}`
+      plane.position.set(placement.x, height / 2 + 0.025, placement.z)
+      plane.rotation.y = placement.rotationY
+      plane.scale.set(placement.mirrored ? -width : width, height, 1)
+      plane.renderOrder = 1
+      g.add(plane)
+    }
+  }
+
+  /** A broad monstera softens the Conservatory's otherwise empty southwest
+   * corner. The authored cutout stays front-facing to the primary camera. */
+  private buildConservatoryCornerPlant(g: THREE.Group) {
+    const height = 2.25
+    const width = height * (410 / 581)
+    const texture = new THREE.TextureLoader().load(
+      `${import.meta.env.BASE_URL}assets/decor/sprites/conservatory/potted-monstera.png`,
+    )
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.generateMipmaps = true
+    texture.minFilter = THREE.LinearMipmapLinearFilter
+    texture.magFilter = THREE.LinearFilter
+    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
+
+    const plant = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, height),
+      new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.04,
+        toneMapped: false,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+      }),
+    )
+    plant.name = 'conservatory-southwest-monstera'
+    plant.position.set(-3.7, height / 2 + 0.025, 3.15)
+    plant.renderOrder = 2
+    g.add(plant)
+  }
+
+  /** A tall palm fills the northeast corner after removing the two shelf bays
+   * that formerly converged there. */
+  private buildConservatoryNortheastPalm(g: THREE.Group) {
+    const height = 2.82
+    const width = height * (1024 / 1536)
+    const texture = new THREE.TextureLoader().load(
+      `${import.meta.env.BASE_URL}assets/decor/sprites/conservatory/kentia-palm-urn.png`,
+    )
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.generateMipmaps = true
+    texture.minFilter = THREE.LinearMipmapLinearFilter
+    texture.magFilter = THREE.LinearFilter
+    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
+
+    const palm = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, height),
+      new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.04,
+        toneMapped: false,
+        side: THREE.DoubleSide,
+        depthWrite: true,
+      }),
+    )
+    palm.name = 'conservatory-northeast-kentia-palm'
+    palm.position.set(3.68, height / 2 + 0.025, -3.5)
+    palm.renderOrder = 2
+    g.add(palm)
+  }
+
+  private buildCeilingInsects(g: THREE.Group, room: RoomId, kind: 'fly' | 'moth', x: number, y: number, z: number, count: number) {
     const geometry = kind === 'moth'
       ? new THREE.CircleGeometry(0.055, 3)
       : new THREE.SphereGeometry(0.022, 5, 4)
@@ -615,6 +1204,7 @@ export class MansionScene {
       mesh.renderOrder = 4
       g.add(mesh)
       this.ceilingInsects.push({
+        room,
         mesh,
         center: new THREE.Vector3(x, y, z),
         phase,
@@ -653,7 +1243,7 @@ export class MansionScene {
         exterior.transparent = true
         const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x08070a, transparent: true, opacity: 0.42 })
         wall.add(new THREE.LineSegments(new THREE.EdgesGeometry(wall.geometry), edgeMaterial))
-        this.southernWalls.push({ mesh: wall, materials: [interior, exterior], edgeMaterial, opacity: 1, occluded: false })
+        this.southernWalls.push({ room, mesh: wall, materials: [interior, exterior], edgeMaterial, opacity: 1, occluded: false })
       } else {
         this.addBoxEdges(wall)
       }
@@ -1061,28 +1651,33 @@ export class MansionScene {
     a.label.style.display = 'none'
   }
 
-  /** Dim the lamp in rooms with an undiscovered/found body slightly red. */
-  markBodyRoom(room: RoomId) {
-    const lights = this.roomLights.get(room)
-    if (lights) {
-      for (const l of lights) {
-        l.color.setHex(0xff5a3a)
-        l.intensity = 7
-      }
-    }
-  }
-
   resetRoomLights() {
     for (const r of ROOMS) {
       const lights = this.roomLights.get(r.id) ?? []
       for (const l of lights) {
         l.color.setHex(r.lightColor)
-        l.intensity = Number(l.userData.baseIntensity ?? r.lightIntensity * 7)
+        l.userData.baseIntensity = r.lightIntensity * 21 * Number(l.userData.lightShare ?? 1)
+        l.intensity = Number(l.userData.baseIntensity)
+        l.visible = true
+      }
+      this.roomLightLevels.set(r.id, 1)
+      this.roomLightTargets.set(r.id, r.id === this.focusedRoom ? 1 : INACTIVE_ROOM_LIGHT_LEVEL)
+      const veil = this.roomDarknessVeils.get(r.id)
+      if (veil) {
+        veil.material.opacity = 0
+        veil.visible = false
       }
     }
   }
 
   focusRoom(room: RoomId) {
+    for (const candidate of ROOMS) {
+      this.roomLightTargets.set(
+        candidate.id,
+        candidate.id === room ? 1 : INACTIVE_ROOM_LIGHT_LEVEL,
+      )
+    }
+    this.focusedRoom = room
     const c = roomCenter(room)
     this.camTarget.set(c.x, 0, c.z)
     // keep dust in the focused room
@@ -1090,6 +1685,53 @@ export class MansionScene {
     for (let i = 0; i < pos.count; i++) {
       this.dustBase[i * 3] = c.x + (Math.random() - 0.5) * 8
       this.dustBase[i * 3 + 2] = c.z + (Math.random() - 0.5) * 8
+    }
+  }
+
+  private updateVisibleRooms() {
+    if (!this.focusedRoom) return
+
+    this.cullingProjection.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse)
+    this.cullingFrustum.setFromProjectionMatrix(this.cullingProjection)
+
+    const requiredMask = REQUIRED_ROOM_MASKS.get(this.focusedRoom) ?? 0
+    let nextMask = 0
+    for (let index = 0; index < ROOMS.length; index++) {
+      const room = ROOMS[index].id
+      const bounds = this.roomBounds.get(room)
+      if ((requiredMask & (1 << index)) !== 0 || (bounds && this.cullingFrustum.intersectsBox(bounds))) {
+        nextMask |= 1 << index
+      }
+    }
+    if (nextMask === this.visibleRoomMask) return
+    this.visibleRoomMask = nextMask
+    this.visibleRooms = new Set(
+      ROOMS.filter((_, index) => (nextMask & (1 << index)) !== 0).map(room => room.id),
+    )
+    for (const [roomId, root] of this.roomRoots) root.visible = this.visibleRooms.has(roomId)
+
+    // Explicit raycast lists are not pruned by a hidden ancestor consistently,
+    // so keep a compact active list and restore hidden fade state immediately.
+    this.visibleSouthernWallMeshes = []
+    for (const wall of this.southernWalls) {
+      if (this.visibleRooms.has(wall.room)) {
+        this.visibleSouthernWallMeshes.push(wall.mesh)
+        continue
+      }
+      wall.occluded = false
+      wall.opacity = 1
+      for (const material of wall.materials) {
+        material.opacity = 1
+        material.depthWrite = true
+      }
+      wall.edgeMaterial.opacity = 0.42
+    }
+    for (const fixture of this.hangingFixtures) {
+      if (this.visibleRooms.has(fixture.room)) continue
+      fixture.occluded = false
+      fixture.opacity = 1
+      fixture.material.opacity = 1
+      fixture.material.depthWrite = true
     }
   }
 
@@ -1124,6 +1766,20 @@ export class MansionScene {
       desiredFocus: { x: this.camTarget.x, z: this.camTarget.z },
       lookAt: { x: this.camLook.x, z: this.camLook.z },
       position: { x: this.camPos.x, y: this.camPos.y, z: this.camPos.z },
+      culling: {
+        visibleRooms: [...this.visibleRooms],
+        visibleRoomCount: this.visibleRooms.size,
+        totalRoomCount: this.roomRoots.size,
+      },
+      roomLighting: Object.fromEntries(ROOMS.map(room => [
+        room.id,
+        {
+          level: Number((this.roomLightLevels.get(room.id) ?? 1).toFixed(2)),
+          target: this.roomLightTargets.get(room.id) ?? 1,
+          activeLights: (this.roomLights.get(room.id) ?? []).filter(light => light.visible).length,
+          veilOpacity: Number((this.roomDarknessVeils.get(room.id)?.material.opacity ?? 0).toFixed(2)),
+        },
+      ])),
       fadedSouthernWalls: this.southernWalls.filter(wall => wall.opacity < 0.99).map(wall => ({
         x: Number(wall.mesh.getWorldPosition(new THREE.Vector3()).x.toFixed(2)),
         z: Number(wall.mesh.getWorldPosition(new THREE.Vector3()).z.toFixed(2)),
@@ -1138,11 +1794,12 @@ export class MansionScene {
   }
 
   private updateSouthernWallOpacity(dt: number) {
-    for (const wall of this.southernWalls) wall.occluded = false
+    for (const wall of this.southernWalls) {
+      if (this.visibleRooms.has(wall.room)) wall.occluded = false
+    }
 
-    const wallMeshes = this.southernWalls.map(wall => wall.mesh)
-    const target = new THREE.Vector3()
-    const direction = new THREE.Vector3()
+    const target = this.wallOcclusionTarget
+    const direction = this.wallOcclusionDirection
     for (const actor of this.actors.values()) {
       if (!actor.group.visible) continue
       actor.group.getWorldPosition(target)
@@ -1153,33 +1810,40 @@ export class MansionScene {
       const actorDistance = direction.length()
       this.wallRaycaster.set(this.camera.position, direction.normalize())
       this.wallRaycaster.far = Math.max(0, actorDistance - 0.05)
-      for (const hit of this.wallRaycaster.intersectObjects(wallMeshes, false)) {
-        const wall = this.southernWalls.find(candidate => candidate.mesh === hit.object)
+      for (const hit of this.wallRaycaster.intersectObjects(this.visibleSouthernWallMeshes, false)) {
+        const wall = this.southernWallByMesh.get(hit.object)
         if (wall) wall.occluded = true
       }
     }
 
     const blend = 1 - Math.exp(-dt * WALL_FADE_SPEED)
     for (const wall of this.southernWalls) {
+      if (!this.visibleRooms.has(wall.room)) continue
       const targetOpacity = wall.occluded ? OCCLUDED_WALL_OPACITY : 1
       wall.opacity = THREE.MathUtils.lerp(wall.opacity, targetOpacity, blend)
       if (Math.abs(wall.opacity - targetOpacity) < 0.005) wall.opacity = targetOpacity
       for (const material of wall.materials) {
         material.opacity = wall.opacity
-        material.depthWrite = wall.opacity > 0.98
+        // Once the character clears the sightline, restore the wall's depth
+        // immediately while its color eases back in. Leaving depth writes off
+        // until the fade was nearly complete let wall-mounted sprites behind
+        // the masonry pop through during the entire fade-in transition.
+        material.depthWrite = !wall.occluded
       }
       wall.edgeMaterial.opacity = 0.42 * wall.opacity
     }
   }
 
   private updateHangingFixtureOpacity(dt: number) {
-    for (const fixture of this.hangingFixtures) fixture.occluded = false
+    for (const fixture of this.hangingFixtures) {
+      if (this.visibleRooms.has(fixture.room)) fixture.occluded = false
+    }
 
-    const cameraRight = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0)
-    const cameraUp = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1)
-    const world = new THREE.Vector3()
-    const corner = new THREE.Vector3()
-    const projected = new THREE.Vector3()
+    const cameraRight = this.fixtureCameraRight.setFromMatrixColumn(this.camera.matrixWorld, 0)
+    const cameraUp = this.fixtureCameraUp.setFromMatrixColumn(this.camera.matrixWorld, 1)
+    const world = this.fixtureWorld
+    const corner = this.fixtureCorner
+    const projected = this.fixtureProjected
     for (const actor of this.actors.values()) {
       if (!actor.group.visible || actor.dead) continue
       actor.group.getWorldPosition(world)
@@ -1189,9 +1853,12 @@ export class MansionScene {
       // of treating the whole character body as one sightline.
       let headMinX = Infinity; let headMaxX = -Infinity
       let headMinY = Infinity; let headMaxY = -Infinity
-      for (const xOffset of [-0.22, 0.22]) {
-        for (const yOffset of [1.68, 2.35]) {
-          projected.copy(world).add(new THREE.Vector3(xOffset, yOffset, 0)).project(this.camera)
+      for (const xOffset of ACTOR_HEAD_X_OFFSETS) {
+        for (const yOffset of ACTOR_HEAD_Y_OFFSETS) {
+          projected.copy(world)
+          projected.x += xOffset
+          projected.y += yOffset
+          projected.project(this.camera)
           headMinX = Math.min(headMinX, projected.x); headMaxX = Math.max(headMaxX, projected.x)
           headMinY = Math.min(headMinY, projected.y); headMaxY = Math.max(headMaxY, projected.y)
         }
@@ -1199,12 +1866,13 @@ export class MansionScene {
 
       const actorDistance = this.camera.position.distanceTo(world)
       for (const fixture of this.hangingFixtures) {
+        if (!this.visibleRooms.has(fixture.room)) continue
         fixture.sprite.getWorldPosition(corner)
         if (this.camera.position.distanceTo(corner) >= actorDistance) continue
         let fixtureMinX = Infinity; let fixtureMaxX = -Infinity
         let fixtureMinY = Infinity; let fixtureMaxY = -Infinity
-        for (const u of [0, 1]) {
-          for (const v of [0, 1]) {
+        for (const u of FIXTURE_CORNERS) {
+          for (const v of FIXTURE_CORNERS) {
             projected.copy(corner)
               .addScaledVector(cameraRight, (u - fixture.sprite.center.x) * fixture.sprite.scale.x)
               .addScaledVector(cameraUp, (v - fixture.sprite.center.y) * fixture.sprite.scale.y)
@@ -1220,6 +1888,7 @@ export class MansionScene {
 
     const blend = 1 - Math.exp(-dt * FIXTURE_FADE_SPEED)
     for (const fixture of this.hangingFixtures) {
+      if (!this.visibleRooms.has(fixture.room)) continue
       const targetOpacity = fixture.occluded ? OCCLUDED_FIXTURE_OPACITY : 1
       fixture.opacity = THREE.MathUtils.lerp(fixture.opacity, targetOpacity, blend)
       if (Math.abs(fixture.opacity - targetOpacity) < 0.005) fixture.opacity = targetOpacity
@@ -1232,13 +1901,15 @@ export class MansionScene {
 
   update(dt: number) {
     this.time += dt
+    this.updateRoomLightLevels(dt)
     // The camera follows the player near doorways, then settles on the room.
-    const desired = new THREE.Vector3(this.camTarget.x, CAMERA_HEIGHT, this.camTarget.z + CAMERA_Z_OFFSET)
+    const desired = this.desiredCameraPosition.set(this.camTarget.x, CAMERA_HEIGHT, this.camTarget.z + CAMERA_Z_OFFSET)
     this.camPos.lerp(desired, 1 - Math.exp(-dt * 2.15))
     this.camLook.lerp(this.camTarget, 1 - Math.exp(-dt * 3.4))
     this.camera.position.copy(this.camPos)
     this.camera.lookAt(this.camLook.x, 0.6, this.camLook.z)
     this.camera.updateMatrixWorld()
+    this.updateVisibleRooms()
     this.updateSouthernWallOpacity(dt)
     this.updateHangingFixtureOpacity(dt)
 
@@ -1277,12 +1948,25 @@ export class MansionScene {
     }
     this.moon.intensity = 0.33 + lightningLevel * 1.25
     this.ambient.intensity = 1.08 + lightningLevel * 0.28
-    updateStormWindows(this.stormWindows, this.time, lightningLevel)
-    this.studyFireplace?.update(this.time)
-    this.conservatoryFountain?.update(this.time)
-    this.cellarSconces?.update(this.time)
+    for (const window of this.stormWindows) {
+      const room = this.stormWindowRooms.get(window)
+      if (room && this.visibleRooms.has(room)) window.update(this.time, lightningLevel)
+    }
+    if (this.visibleRooms.has('study')) this.studyFireplace?.update(this.time)
+    if (this.visibleRooms.has('conservatory')) this.conservatoryFountain?.update(this.time)
+    if (this.visibleRooms.has('cellar')) this.cellarSconces?.update(this.time)
+
+    if (this.visibleRooms.has('ballroom')) {
+      for (const bubble of this.champagneBubbles) {
+        const cycle = (this.time * bubble.speed + bubble.phase) % 1
+        bubble.mesh.position.y = bubble.centerY - 0.035 + cycle * 0.075
+        const material = bubble.mesh.material as THREE.MeshBasicMaterial
+        material.opacity = Math.sin(cycle * Math.PI) * 0.78
+      }
+    }
 
     for (const insect of this.ceilingInsects) {
+      if (!this.visibleRooms.has(insect.room)) continue
       const t = this.time * insect.speed + insect.phase
       const jitter = insect.kind === 'fly' ? Math.sin(this.time * insect.flutter + insect.phase * 3) * 0.08 : 0
       const radius = insect.radius + jitter
@@ -1432,17 +2116,38 @@ export class MansionScene {
 
     this.updateLabels()
 
-    // pixel pipeline render
+    // Multisampled offscreen render followed by a 1:1 presentation pass.
     this.renderer.setRenderTarget(this.rt)
     this.renderer.render(this.scene, this.camera)
     this.renderer.setRenderTarget(null)
     this.renderer.render(this.quadScene, this.quadCam)
   }
 
+  private updateRoomLightLevels(dt: number) {
+    const blend = 1 - Math.exp(-dt * ROOM_LIGHT_FADE_SPEED)
+    for (const room of ROOMS) {
+      const target = this.roomLightTargets.get(room.id) ?? 1
+      let level = THREE.MathUtils.lerp(this.roomLightLevels.get(room.id) ?? 1, target, blend)
+      if (Math.abs(level - target) < 0.002) level = target
+      this.roomLightLevels.set(room.id, level)
+      const active = room.id === this.focusedRoom || level > 0.04
+      for (const light of this.roomLights.get(room.id) ?? []) {
+        light.visible = active
+        light.intensity = Number(light.userData.baseIntensity ?? 0) * level
+      }
+      const veil = this.roomDarknessVeils.get(room.id)
+      if (veil) {
+        const opacity = INACTIVE_ROOM_VEIL_OPACITY * (1 - level)
+        veil.material.opacity = opacity
+        veil.visible = opacity > 0.005
+      }
+    }
+  }
+
   private updateLabels() {
     const w = this.container.clientWidth
     const h = this.container.clientHeight
-    const v = new THREE.Vector3()
+    const v = this.labelPosition
     for (const a of this.actors.values()) {
       if (!a.group.visible) continue
       v.copy(a.group.position)

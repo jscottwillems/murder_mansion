@@ -1,10 +1,10 @@
 {
   "study": ["writing-desk", "leather-armchair", "banker-lamp", "globe", "decanter-table"],
-  "gallery": ["ancestral-portrait", "marble-bust", "velvet-stanchions", "relic-display", "candelabrum", "bust-patriarch", "bust-matriarch", "bust-officer", "bust-scholar"],
-  "conservatory": ["potted-monstera", "garden-bench", "orchid-stand", "tea-table", "birdbath", "animated-fountain"],
+  "gallery": ["ancestral-portrait", "marble-bust", "velvet-stanchions", "relic-display", "candelabrum", "bust-patriarch", "bust-matriarch", "bust-officer", "bust-scholar", "art-north-manor", "art-north-coast", "art-west-botanical", "art-west-hunt", "art-east-portrait", "art-east-library", "gallery-maroon-drapes"],
+  "conservatory": ["potted-monstera", "kentia-palm-urn", "garden-bench", "orchid-stand", "tea-table", "birdbath", "animated-fountain", "garden-shelf-north-left", "garden-shelf-north-right", "garden-shelf-east-north", "garden-shelf-east-south"],
   "kitchen": ["butcher-block", "range-stove", "cookware-rack", "pastry-table", "provision-crate"],
   "dining": ["silver-candelabra", "serving-trolley", "dining-chair", "decanter-stand", "grandfather-clock", "grandfather-clock-v2", "banquet-table-chairs"],
-  "ballroom": ["cocktail-table", "lavender-settee", "gramophone", "potted-palm", "music-stand"],
+  "ballroom": ["grand-piano", "cocktail-table", "lavender-settee", "gramophone", "potted-palm", "music-stand"],
   "cellar": ["barrel-rack", "wine-crate", "iron-lantern", "stoneware-jugs", "storage-chest"],
   "library": ["bookcase", "library-ladder", "reading-chair", "reading-table", "book-cart"],
   "suite": ["chaise-longue", "vanity", "four-poster-bed", "dressing-screen", "jewelry-table"]

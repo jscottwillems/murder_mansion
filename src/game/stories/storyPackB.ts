@@ -85,7 +85,7 @@ const magician: CharacterStory = {
     'magician-rehearsal': {
       id: 'magician-rehearsal', topic: 'timeline',
       prompt: 'You rehearsed during dinner. What needed fixing that badly?',
-      responses: [{ text: 'The Mercy Box. It frees the volunteer before the audience decides prayer would be quicker. Tonight, its spring refused to forgive me.', emotion: 'worried' }],
+      responses: [{ text: 'The Mercy Box. The release spring kept sticking, and if that happens with someone inside, the act stops being entertainment.', emotion: 'worried' }],
       choices: [
         { id: 'm-reh-spring', label: 'How did you free the spring?', next: 'magician-mechanism', effects: { setFlags: ['m_asks_method'], trust: 1 } },
         { id: 'm-reh-volunteer', label: 'Who was meant to enter the box?', next: 'magician-assistant', effects: { setFlags: ['m_asks_assistant'] } },
@@ -138,7 +138,7 @@ const magician: CharacterStory = {
     'magician-assistant': {
       id: 'magician-assistant', topic: 'connection',
       prompt: 'What did your former assistant take from the act?',
-      responses: [{ text: 'My applause, my savings, and the only copy of a cue sheet proving the Mercy Box can be opened from outside. Tonight, the host offered to sell it back.', emotion: 'angry' }],
+      responses: [{ text: 'The act, most of my savings, and the only cue sheet showing how the Mercy Box opens from outside. Tonight, our host offered to sell that sheet back to me.', emotion: 'angry' }],
       choices: [
         { id: 'm-asst-believe', label: 'You came for the cue sheet, not revenge.', next: 'magician-contract', effects: { setFlags: ['m_offered_belief'], trust: 2 } },
         { id: 'm-asst-trap', label: 'Whoever has that sheet could frame you neatly.', next: 'magician-contract', effects: { setFlags: ['m_sees_frame'], trust: 1 } },
@@ -150,7 +150,7 @@ const magician: CharacterStory = {
       prompt: 'What is on the torn contract strip?',
       responses: [
         { text: 'The clause that names my former assistant as inventor. You gave me room to say it plainly: my famous escape was never mine.', emotion: 'worried', when: { trustAtLeast: 2 } },
-        { text: 'A name beneath mine in smaller type. The host bought that person’s silence and rented me the credit.', emotion: 'suspicious' },
+        { text: 'My former assistant’s name, printed beneath mine in smaller type. The host paid for their silence, and I took the credit.', emotion: 'suspicious' },
       ],
       choices: [
         { id: 'm-con-public', label: 'Give me the strip and I will put the right name on the trick.', next: 'ending:magician-confession', effects: { setFlags: ['m_restores_credit'], trust: 2 }, when: { trustAtLeast: 1 } },
@@ -161,7 +161,7 @@ const magician: CharacterStory = {
     'magician-defiance': {
       id: 'magician-defiance', topic: 'pressure',
       prompt: 'You keep turning questions into patter.',
-      responses: [{ text: 'Because patter is what stands between a performer and a room full of people delighted to see him fail.', emotion: 'angry' }],
+      responses: [{ text: 'Because talking is how I keep control of a room. Stop talking, and everyone starts looking for the part you got wrong.', emotion: 'angry' }],
       choices: [
         { id: 'm-def-soften', label: 'Then stop performing. Tell me what failure costs you.', next: 'magician-contract', effects: { trust: 2, pressure: -1 } },
         { id: 'm-def-proof', label: 'I care about the mechanism, not your reputation.', next: 'magician-mechanism', effects: { trust: 1 } },
@@ -186,7 +186,7 @@ const correspondent: CharacterStory = {
   nodes: {
     'correspondent-copy': {
       id: 'correspondent-copy', topic: 'timeline', prompt: 'Your draft ends in the middle of a sentence. What stopped you?',
-      responses: [{ text: 'A source knocked twice. Wrong rhythm. Frightened people forget codes. I put the pen through the page when the west door slammed.', emotion: 'suspicious' }],
+      responses: [{ text: 'My source knocked twice, but used the wrong rhythm. They were frightened. Then the west door slammed and my pen went straight through the page.', emotion: 'suspicious' }],
       choices: [
         { id: 'c-copy-page', label: 'What did you do with the spoiled page?', next: 'correspondent-draft', effects: { setFlags: ['c_asks_page'], trust: 1 } },
         { id: 'c-copy-source', label: 'What frightened your source?', next: 'correspondent-source', effects: { setFlags: ['c_asks_source'] } },
@@ -195,7 +195,7 @@ const correspondent: CharacterStory = {
     },
     'correspondent-coat': {
       id: 'correspondent-coat', topic: 'room', prompt: 'Why keep a field coat on in a heated house?',
-      responses: [{ text: 'Pockets stay where I left them. Also, the side passage is cold enough to preserve meat and narrow enough to eat a sleeve.', emotion: 'neutral' }],
+      responses: [{ text: 'I know where everything is in this coat. Besides, the side passage is freezing, and one of its latches already tore the sleeve.', emotion: 'neutral' }],
       choices: [
         { id: 'c-coat-seam', label: 'Show me the damaged sleeve.', next: 'correspondent-passage', effects: { pressure: 1 } },
         { id: 'c-coat-pockets', label: 'Which pocket holds the source notes?', next: 'correspondent-standoff', effects: { setFlags: ['c_guessed_notes'], pressure: 1 } },
@@ -204,7 +204,7 @@ const correspondent: CharacterStory = {
     },
     'correspondent-source': {
       id: 'correspondent-source', topic: 'connection', prompt: 'You keep checking that inside pocket. What are you protecting?',
-      responses: [{ text: 'A source. They feared not being disbelieved, but being believed by the wrong person. They saw an envelope change hands after the argument and wrote the time for me.', emotion: 'worried' }],
+      responses: [{ text: 'A source. They saw an envelope change hands after the argument and wrote down the time. If the wrong person learns they spoke to me, they are in danger.', emotion: 'worried' }],
       choices: [
         { id: 'c-source-protect', label: 'Keep the name. Give me something I can verify.', next: 'correspondent-shorthand', effects: { setFlags: ['c_respects_source'], trust: 2 } },
         { id: 'c-source-envelope', label: 'Describe the envelope instead.', next: 'correspondent-map', effects: { trust: 1 } },
@@ -213,7 +213,7 @@ const correspondent: CharacterStory = {
     },
     'correspondent-draft': {
       id: 'correspondent-draft', topic: 'timeline', prompt: 'The missing corner was saturated with ink, wasn’t it?',
-      responses: [{ text: 'Blue-black. Tore it off, folded it around the nib, forgot it in the wrong pocket. Sloppy. Put that in the obituary for my standards.', emotion: 'thoughtful' }],
+      responses: [{ text: 'Blue-black. I tore off the soaked corner, wrapped it around the nib, and shoved it into the wrong pocket. Sloppy, but not sinister.', emotion: 'thoughtful' }],
       choices: [
         { id: 'c-draft-pocket', label: 'Which pocket was the wrong one?', next: 'correspondent-passage', effects: { unlockEvidence: 'ink-fiber', setFlags: ['c_found_ink'], trust: 1 } },
         { id: 'c-draft-compare', label: 'Let me compare the paper with the scene fragment.', next: 'correspondent-shorthand', effects: { unlockEvidence: 'ink-fiber', setFlags: ['c_found_ink', 'c_shared_copy'], trust: 2 } },
@@ -244,7 +244,7 @@ const correspondent: CharacterStory = {
     'correspondent-map': {
       id: 'correspondent-map', topic: 'intel', prompt: 'Put your sightings on the floor plan.',
       responses: [
-        { text: 'Ink says the meeting began here. Wool says I followed through here. Your map says the limping figure doubled back before anyone reached the stairs.', emotion: 'surprised', when: { all: ['c_found_ink', 'c_found_wool'] } },
+        { text: 'The ink fixes the time of the meeting. The wool marks the passage I used. Put those together and the limping figure doubled back before anyone reached the stairs.', emotion: 'surprised', when: { all: ['c_found_ink', 'c_found_wool'] } },
         { text: 'Source at the gallery. Envelope through the passage. A staged limp between them. That route avoids every occupied room.', emotion: 'thoughtful', when: { all: ['c_fake_limp'] } },
         { text: 'Gallery to passage, then a blind turn by the stairs. Useful route. Bad view. Worse witness.', emotion: 'neutral' },
       ],
@@ -281,7 +281,7 @@ const accountant: CharacterStory = {
   nodes: {
     'accountant-ledger': {
       id: 'accountant-ledger', topic: 'motive', prompt: 'Why does the relief fund have two totals?',
-      responses: [{ text: 'Because one is arithmetic and the other is what the family wished the arithmetic to say. There is a zero between them worth more than this house.', emotion: 'angry' }],
+      responses: [{ text: 'One is the real total. The other is the total the family ordered me to enter. Someone added a zero, and that difference was paid out through a false account.', emotion: 'angry' }],
       choices: [
         { id: 'a-ledger-zero', label: 'Who ordered the extra zero?', next: 'accountant-payoff', effects: { pressure: 1 } },
         { id: 'a-ledger-paper', label: 'Why is the correction torn out?', next: 'accountant-margin', effects: { trust: 1 } },
@@ -299,7 +299,7 @@ const accountant: CharacterStory = {
     },
     'accountant-machine': {
       id: 'accountant-machine', topic: 'timeline', prompt: 'Your adding machine jammed on one particular account. Coincidence?',
-      responses: [{ text: 'No. I struck the same key until the carriage locked. Rage is expensive; replacement parts are not deductible.', emotion: 'angry' }],
+      responses: [{ text: 'No. I kept striking the same key after I found the altered payment, and the carriage locked. I was angry and careless.', emotion: 'angry' }],
       choices: [
         { id: 'a-mach-repair', label: 'How did you repair the carriage?', next: 'accountant-oil', effects: { trust: 1 } },
         { id: 'a-mach-account', label: 'Which account made you lose your temper?', next: 'accountant-payoff', effects: { pressure: 1 } },
@@ -326,7 +326,7 @@ const accountant: CharacterStory = {
     },
     'accountant-oil': {
       id: 'accountant-oil', topic: 'timeline', prompt: 'What did the repair require?',
-      responses: [{ text: 'One drop of machine oil on the carriage rail. It migrated to my fingers, then the ledger clasp. Lubrication has no respect for categories.', emotion: 'thoughtful' }],
+      responses: [{ text: 'One drop of machine oil on the carriage rail. I got some on my fingers, then transferred it to the ledger clasp when I picked the book up.', emotion: 'thoughtful' }],
       choices: [
         { id: 'a-oil-vial', label: 'Show me the vial and the stained clasp.', next: 'accountant-payoff', effects: { unlockEvidence: 'blade-oil', setFlags: ['a_found_oil'], trust: 1 } },
         { id: 'a-oil-timing', label: 'Did the machine jam before or after the altered entry?', next: 'accountant-margin', effects: { unlockEvidence: 'blade-oil', setFlags: ['a_found_oil', 'a_timing_link'], pressure: 1 } },
@@ -337,7 +337,7 @@ const accountant: CharacterStory = {
       id: 'accountant-payoff', topic: 'motive', prompt: 'Where did the false relief money actually go?',
       responses: [
         { text: 'The receipt under the candlestick names a shell company. The same amount appears in my ledger, minus its charitable halo.', emotion: 'surprised', when: { all: ['a_found_receipt'] } },
-        { text: 'A shell company owned by someone at this gathering. I kept the transfer line because figures are less obedient than employers.', emotion: 'worried' },
+        { text: 'A shell company owned by someone at this gathering. I kept a copy of the transfer because I knew the original might disappear.', emotion: 'worried' },
       ],
       choices: [
         { id: 'a-pay-copy', label: 'Make a clean copy before the ledger disappears.', next: 'accountant-audit', effects: { setFlags: ['a_copy_made'], trust: 2 } },
@@ -349,7 +349,7 @@ const accountant: CharacterStory = {
       id: 'accountant-audit', topic: 'pressure', prompt: 'What outcome are you balancing for yourself?',
       responses: [
         { text: 'If the restored margin and copy agree, I can testify without asking anyone to trust my courage. Sensible. Almost affordable.', emotion: 'thoughtful', when: { all: ['a_can_restore', 'a_copy_made'] } },
-        { text: 'Employment against complicity. Reputation against the figures. Every column closes; people are where the remainder hides.', emotion: 'worried' },
+        { text: 'If I testify, I lose my position and may be charged with helping them. If I stay quiet, the false account becomes mine as much as theirs.', emotion: 'worried' },
       ],
       choices: [
         { id: 'a-audit-testify', label: 'Sign the audit and let the numbers accuse whom they accuse.', next: 'ending:accountant-testimony', effects: { trust: 2 }, when: { any: ['a_copy_made', 'a_can_restore', 'a_money_trail'] } },

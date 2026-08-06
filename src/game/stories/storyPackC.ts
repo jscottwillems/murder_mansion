@@ -68,17 +68,17 @@ const antiquarian: CharacterStory = {
       choices: [
         { id: 'respect', label: 'Show me how you know?', response: 'With clean hands. The dust under the false bottom is pumice, not age, and someone packed it in a hurry.', emotion: 'thoughtful', next: 'antiquarian-patron', trust: 1, setFlags: ['handled_with_care'] },
         { id: 'accuse', label: 'You planted the new hinge, didn’t you?', response: 'If I forged relics, detective, they would not squeak. Your accusation has less workmanship than this box.', emotion: 'angry', next: 'antiquarian-workbench', trust: -1, setFlags: ['accused_antiquarian'] },
-        { id: 'bait', label: 'The owner says it is genuine.', response: 'The owner says what solvency requires. Ah. You did not know there was a debt behind the glass.', emotion: 'surprised', next: 'antiquarian-patron', setFlags: ['heard_debt'] },
+        { id: 'bait', label: 'The owner says it is genuine.', response: 'She needs it to be genuine. The collection is security against a very large debt.', emotion: 'surprised', next: 'antiquarian-patron', setFlags: ['heard_debt'] },
       ],
     },
     {
       id: 'antiquarian-patron', topic: 'motive',
       prompt: 'Whose solvency depends on the forgery?',
-      opening: 'You ask for a name as if a name were not the most breakable object in the room.', emotion: 'worried',
+      opening: 'If I give you her name, she loses far more than the reliquary.', emotion: 'worried',
       choices: [
-        { id: 'protect', label: 'Give me the method. Keep the name for now.', response: 'Sensibly catalogued. Warm resin lifted the veneer; wax polish disguised the new brass. Two hands did the work, only one of them mine.', emotion: 'thoughtful', next: 'antiquarian-workbench', trust: 2, setFlags: ['protected_patron', 'resin_admitted'] },
+        { id: 'protect', label: 'Give me the method. Keep the name for now.', response: 'All right. Warm resin lifted the veneer, and wax polish dulled the new brass. Two people worked on it. I was one of them.', emotion: 'thoughtful', next: 'antiquarian-workbench', trust: 2, setFlags: ['protected_patron', 'resin_admitted'] },
         { id: 'press', label: 'A hidden name protects a dangerous person.', response: 'It also protects a frightened one. Lady Vale commissioned the deception. She did not commission what followed.', emotion: 'angry', next: 'antiquarian-ledger', trust: -1, setFlags: ['patron_named'] },
-        { id: 'offer', label: 'Help me separate the forgery from the violence.', response: 'Then we proceed as conservators: remove one lie at a time, and never pull against the grain.', emotion: 'neutral', next: 'antiquarian-workbench', trust: 1, setFlags: ['offered_partnership'] },
+        { id: 'offer', label: 'Help me separate the forgery from the violence.', response: 'I can do that. I’ll tell you exactly what I changed and what was already there.', emotion: 'neutral', next: 'antiquarian-workbench', trust: 1, setFlags: ['offered_partnership'] },
       ],
     },
     {
@@ -86,7 +86,7 @@ const antiquarian: CharacterStory = {
       prompt: 'Walk me through the repair you made tonight.',
       opening: 'The veneer lifted at eleven. I warmed resin, tested the hinge, and found pale packing dust where no dust belonged.', emotion: 'neutral',
       choices: [
-        { id: 'catalog', label: 'Where is your catalog card?', response: 'Missing. It bears the cabinet number and a thumb-shaped streak of brass polish. Someone feared paper more than saints.', emotion: 'worried', next: 'antiquarian-ledger', setFlags: ['catalog_missing', 'polish_handled'] },
+        { id: 'catalog', label: 'Where is your catalog card?', response: 'Missing. It has the cabinet number and a thumb-shaped streak of brass polish. Someone took it after I left the room.', emotion: 'worried', next: 'antiquarian-ledger', setFlags: ['catalog_missing', 'polish_handled'] },
         { id: 'crumbs', label: 'What did the resin leave behind?', response: 'Amber crumbs on my sleeve and under the reliquary lip. Mine will match the cake in my case; the older flecks in the passage will not.', emotion: 'thoughtful', next: 'antiquarian-passage', setFlags: ['resin_admitted'] },
         { id: 'dust', label: 'Who else carried the pale dust?', response: 'Someone knelt at the cabinet, then crossed the west passage. The grit records the journey more faithfully than any guest.', emotion: 'suspicious', next: 'antiquarian-passage', setFlags: ['dust_path'] },
       ],
@@ -98,7 +98,7 @@ const antiquarian: CharacterStory = {
       choices: [
         { id: 'return', label: 'If I recover it, will you authenticate it publicly?', response: 'Yes. I will trade my reputation for the truth, which is how I should have priced it at the start.', emotion: 'thoughtful', next: 'ending-antiquarian-testimony', trust: 1, setFlags: ['public_testimony'] },
         { id: 'deal', label: 'Name who took it and I will keep the forgery quiet.', response: 'A bargain that preserves the case and poisons the record. Very well: watch the guest with fresh scratches on the left cuff.', emotion: 'suspicious', next: 'ending-antiquarian-bargain', setFlags: ['accepted_bargain'] },
-        { id: 'condemn', label: 'You made this possible. I’m putting that in my report.', response: 'Correct. Do spell my name properly; disgrace is unbearable when badly catalogued.', emotion: 'angry', next: 'ending-antiquarian-rupture', trust: -2, setFlags: ['condemned_antiquarian'] },
+        { id: 'condemn', label: 'You made this possible. I’m putting that in my report.', response: 'You should. But if you have already decided I’m responsible for everything that followed, we are finished.', emotion: 'angry', next: 'ending-antiquarian-rupture', trust: -2, setFlags: ['condemned_antiquarian'] },
       ],
     },
     {
@@ -134,7 +134,7 @@ const chauffeur: CharacterStory = {
       { id: 'threat', label: 'You were helping someone flee.', response: 'I was hired to drive. You want the rest, stop making the uniform do the confessing.', emotion: 'angry', next: 'chauffeur-envelope', trust: -1, setFlags: ['treated_as_servant'] },
     ] },
     { id: 'chauffeur-envelope', topic: 'motive', prompt: 'What was inside the envelope besides money?', opening: 'A route in somebody else’s handwriting and one line: “If I am late, take the blue case.” No blue case reached the car.', emotion: 'worried', choices: [
-      { id: 'trust', label: 'You kept the route. May I see it?', response: 'Ask like that, yes. Service stairs to side door. Writer knew the blind turns better than the staff map does.', emotion: 'thoughtful', next: 'chauffeur-cuff', trust: 2, setFlags: ['route_shared'] },
+      { id: 'trust', label: 'You kept the route. May I see it?', response: 'Yes. It runs from the service stairs to the side door. Whoever drew it knew the blind corners better than most of the staff.', emotion: 'thoughtful', next: 'chauffeur-cuff', trust: 2, setFlags: ['route_shared'] },
       { id: 'leverage', label: 'Keeping it makes you an accomplice.', response: 'Burning it would. I kept it because paper remembers who gives orders.', emotion: 'angry', next: 'chauffeur-cuff', trust: -1, setFlags: ['route_shared', 'threatened_driver'] },
       { id: 'perfume', label: 'Did the scent identify your passenger?', response: 'No. It identified who wanted me thinking of a woman. Drivers learn the difference between a trail and bait.', emotion: 'suspicious', next: 'chauffeur-decoy', trust: 1, setFlags: ['saw_decoy'] },
     ] },
@@ -175,9 +175,9 @@ const vocalist: CharacterStory = {
       { id: 'performer', label: 'You forgot the words and covered it well.', response: 'Honey, I have forgotten better rooms than this one, but never a lyric that could get somebody hurt.', emotion: 'angry', next: 'vocalist-dressing', trust: -1 },
       { id: 'requester', label: 'Who made the request?', response: 'A folded card came through three hands. The last hand wore ivory powder and shook on the downbeat.', emotion: 'worried', next: 'vocalist-dressing', setFlags: ['powder_hand'] },
     ] },
-    { id: 'vocalist-code', topic: 'connection', prompt: 'Who taught you that songs could carry instructions?', opening: 'A woman named June Bell, when club owners listened at keyholes. She vanished after crossing one man in this house.', emotion: 'worried', choices: [
+    { id: 'vocalist-code', topic: 'connection', prompt: 'Who taught you that songs could carry instructions?', opening: 'June Bell. We used the code when club owners listened at doors. She disappeared after crossing someone in this house.', emotion: 'worried', choices: [
       { id: 'gentle', label: 'I need the code, not her history.', response: 'Then count rests, not notes. The pauses spell a route: ballroom, west hall, stairs. June always left herself an exit.', emotion: 'thoughtful', next: 'vocalist-dressing', trust: 2, setFlags: ['route_decoded', 'june_protected'] },
-      { id: 'identity', label: 'Is June here under another name?', response: 'You push like a bad accompanist. Yes—and if I name her too soon, you turn a witness into bait.', emotion: 'angry', next: 'vocalist-bargain', trust: -1, setFlags: ['june_present'] },
+      { id: 'identity', label: 'Is June here under another name?', response: 'Yes. And if I name her before you have a plan, you turn a witness into bait.', emotion: 'angry', next: 'vocalist-bargain', trust: -1, setFlags: ['june_present'] },
       { id: 'hum', label: 'Sing the rests back to me.', response: 'Clever. Hear that gap after “blue”? Somebody in the side hall answered it with two knocks.', emotion: 'surprised', next: 'vocalist-bargain', setFlags: ['route_decoded', 'knocks_heard'] },
     ] },
     { id: 'vocalist-dressing', topic: 'room', prompt: 'What happened in the dressing room before the request?', opening: 'My compact broke, my perfume leaked, and somebody searched my music case. A complete little disaster in three scents.', emotion: 'neutral', choices: [
@@ -185,7 +185,7 @@ const vocalist: CharacterStory = {
       { id: 'perfume', label: 'Was the leaking atomizer an accident?', response: 'No. Gardenia was poured onto my scarf to make a trail that sang my name without using it.', emotion: 'angry', next: 'vocalist-bargain', setFlags: ['perfume_frame'] },
       { id: 'case', label: 'What did they take from the music case?', response: 'Nothing. They left something: a chip of my grip wax wrapped around a brass key impression.', emotion: 'surprised', next: 'vocalist-bargain', setFlags: ['wax_key'] },
     ] },
-    { id: 'vocalist-bargain', topic: 'pressure', prompt: 'Give me the final name, and I can protect June.', opening: 'Protection is a tune everyone claims to know until the bill arrives.', emotion: 'worried', choices: [
+    { id: 'vocalist-bargain', topic: 'pressure', prompt: 'Give me the final name, and I can protect June.', opening: 'People promise protection easily. They are less reliable when it costs them something.', emotion: 'worried', choices: [
       { id: 'proof', label: 'Then give me a test, not a name.', response: 'Play the opening chord in the ballroom. The card writer will answer with two knocks, expecting the west door unlocked.', emotion: 'thoughtful', next: 'ending-vocalist-sting', trust: 1, setFlags: ['musical_sting'] },
       { id: 'promise', label: 'June chooses when she speaks. You have my word.', response: 'Then you have mine. I’ll sing the coded verse again and watch who moves before “midnight.”', emotion: 'neutral', next: 'ending-vocalist-duet', trust: 2, setFlags: ['june_protected', 'singer_testifies'] },
       { id: 'force', label: 'Name her now, or I expose the code myself.', response: 'Then you can conduct your own funeral march. This set is over.', emotion: 'angry', next: 'ending-vocalist-walkout', trust: -2, setFlags: ['singer_walks'] },
@@ -207,12 +207,12 @@ const debutante: CharacterStory = {
   archetypeId: 'debutante', title: 'The Girl Who Could Not Count',
   premise: 'The debutante has cultivated an empty-headed reputation to audit a crooked guardian; tonight someone realized she can read every ledger in the house.', startNode: 'debutante-cards',
   nodes: [
-    { id: 'debutante-cards', topic: 'intel', prompt: 'You lost every hand at cards. Why watch the key exchange instead?', opening: 'Because losing six pounds made them stop guarding six thousand. Men become wonderfully legible when they feel superior.', emotion: 'neutral', choices: [
+    { id: 'debutante-cards', topic: 'intel', prompt: 'You lost every hand at cards. Why watch the key exchange instead?', opening: 'After I lost six pounds, they stopped worrying that I might notice six thousand. They say useful things when they think I’m harmless.', emotion: 'neutral', choices: [
       { id: 'admire', label: 'What else did they let you see?', response: 'A brass key changed pockets, and a ledger total was whispered as if I could not add. I can add.', emotion: 'thoughtful', next: 'debutante-ledger', trust: 1, setFlags: ['respected_strategy', 'key_seen'] },
       { id: 'mock', label: 'Or you lost because you cannot play.', response: 'Perfect. Keep believing that, and perhaps I can investigate you too.', emotion: 'angry', next: 'debutante-vanity', trust: -1, setFlags: ['underestimated_again'] },
       { id: 'key', label: 'Describe the person who took the brass key.', response: 'Left coat pocket, careful manicure, dust on one knee. I watched the details while everyone watched me blush.', emotion: 'suspicious', next: 'debutante-conservatory', setFlags: ['key_seen', 'dust_knee'] },
     ] },
-    { id: 'debutante-ledger', topic: 'motive', prompt: 'Whose six thousand pounds were they hiding?', opening: 'Mine. My guardian calls it an allowance account. It is actually a siphon with excellent penmanship.', emotion: 'worried', choices: [
+    { id: 'debutante-ledger', topic: 'motive', prompt: 'Whose six thousand pounds were they hiding?', opening: 'Mine. My guardian calls it an allowance account, but he has been taking money from it for years.', emotion: 'worried', choices: [
       { id: 'copies', label: 'Do you have proof?', response: 'Copies inside my vanity lining. Dates, sums, and the charming little initials that disappear in the real ledger.', emotion: 'thoughtful', next: 'debutante-vanity', trust: 2, setFlags: ['ledger_copies'] },
       { id: 'suspect', label: 'That gives you a strong motive yourself.', response: 'At last, a serious objection. Yes. It also gave someone reason to search my rooms before I could speak.', emotion: 'suspicious', next: 'debutante-vanity', trust: -1, setFlags: ['motive_acknowledged'] },
       { id: 'guardian', label: 'Name your guardian.', response: 'Not until the copies are safe. I will not trade the only leverage I own for your expression of concern.', emotion: 'angry', next: 'debutante-conservatory', setFlags: ['guardian_withheld'] },
@@ -229,7 +229,7 @@ const debutante: CharacterStory = {
     ] },
     { id: 'debutante-choice', topic: 'pressure', prompt: 'What do you want in exchange for the copies?', opening: 'Not rescue. Authority. Let me decide whether my guardian is arrested, exposed, or used to catch the hand above his.', emotion: 'thoughtful', choices: [
       { id: 'partner', label: 'You choose the moment. We build the case together.', response: 'Good. I was beginning to fear competence was another thing I would have to pretend not to possess.', emotion: 'neutral', next: 'ending-debutante-partner', trust: 2, setFlags: ['equal_partner', 'ledger_released'] },
-      { id: 'trap', label: 'Feed him one false total and watch who comes for it?', response: 'Now you are learning cards. I will lose the page carelessly; you watch who thinks they have won.', emotion: 'surprised', next: 'ending-debutante-trap', setFlags: ['ledger_trap'] },
+      { id: 'trap', label: 'Feed him one false total and watch who comes for it?', response: 'That could work. I’ll leave the page where he can find it, and you watch who he tells.', emotion: 'surprised', next: 'ending-debutante-trap', setFlags: ['ledger_trap'] },
       { id: 'seize', label: 'This is evidence. Hand over every page.', response: 'There it is—the same voice, merely wearing a badge. You may keep the page I gave you. Nothing else.', emotion: 'angry', next: 'ending-debutante-ward', trust: -2, setFlags: ['treated_as_ward'] },
     ] },
   ],

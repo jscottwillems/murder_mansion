@@ -185,12 +185,14 @@ export class Simulation {
     // sample location history every 15 game minutes
     if (this.clockMin >= this.histNextMin) {
       this.histNextMin = this.clockMin + 15
-      for (const g of this.aliveGuests()) {
+      for (const g of this.guests) {
+        if (!g.alive) continue
         (this.history[g.id] ??= []).push({ min: this.clockMin, room: g.room })
       }
     }
 
-    for (const g of this.aliveGuests()) {
+    for (const g of this.guests) {
+      if (!g.alive) continue
       // An NPC being interviewed stays exactly where the detective engaged
       // them. The rest of the house—and the night clock—continues normally.
       if (g.id === movementLockedGuestId) continue
@@ -218,20 +220,32 @@ export class Simulation {
           const uz = dz / dist
           // Guests may pass through one another so crowds cannot deadlock in
           // doorways. Walls, room boundaries, and furniture still block them.
-          const clear = (x: number, z: number) => canOccupy(x, z, ACTOR_RADIUS)
-          const attempts: [number, number][] = [
-            [ux * step, uz * step], [ux * step, 0], [0, uz * step],
-            [-uz * step, ux * step], [uz * step, -ux * step],
-          ]
           const recovery = (this.movementRecovery[g.id] ??= {
             blockedFor: 0,
             detourSign: this.rng() < 0.5 ? -1 : 1,
             lastDistance: dist,
           })
-          if (recovery.detourSign < 0) attempts.splice(3, 2, attempts[4], attempts[3])
           let moved = false
-          for (const [sx, sz] of attempts) {
-            if (clear(g.x + sx, g.z + sz)) {
+          // Try the same five candidates as before without allocating and
+          // splicing a tuple array for every walking guest on every frame.
+          for (let attempt = 0; attempt < 5; attempt++) {
+            let sx: number
+            let sz: number
+            if (attempt === 0) {
+              sx = ux * step
+              sz = uz * step
+            } else if (attempt === 1) {
+              sx = ux * step
+              sz = 0
+            } else if (attempt === 2) {
+              sx = 0
+              sz = uz * step
+            } else {
+              const useLeftDetour = (attempt === 3) === (recovery.detourSign >= 0)
+              sx = (useLeftDetour ? -uz : uz) * step
+              sz = (useLeftDetour ? ux : -ux) * step
+            }
+            if (canOccupy(g.x + sx, g.z + sz, ACTOR_RADIUS)) {
               g.x += sx; g.z += sz
               moved = true
               break
@@ -245,12 +259,12 @@ export class Simulation {
             else recovery.blockedFor += dtReal
             recovery.lastDistance = remaining
             if (recovery.blockedFor >= STUCK_RECOVERY_SECONDS) {
-              this.addRecoveryDetour(g, wp, clear, recovery)
+              this.addRecoveryDetour(g, wp, (x, z) => canOccupy(x, z, ACTOR_RADIUS), recovery)
             }
           } else {
             recovery.blockedFor += dtReal
             if (recovery.blockedFor >= STUCK_RECOVERY_SECONDS) {
-              this.addRecoveryDetour(g, wp, clear, recovery)
+              this.addRecoveryDetour(g, wp, (x, z) => canOccupy(x, z, ACTOR_RADIUS), recovery)
             }
           }
         }
@@ -274,8 +288,8 @@ export class Simulation {
     }
 
     // last-seen tracking for journal "recently active"
-    for (const g of this.guestsInRoom(this.playerRoom)) {
-      g.lastSeenMin = this.clockMin
+    for (const g of this.guests) {
+      if (g.alive && g.room === this.playerRoom) g.lastSeenMin = this.clockMin
     }
   }
 

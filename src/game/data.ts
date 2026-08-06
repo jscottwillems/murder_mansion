@@ -55,6 +55,26 @@ export const CONSERVATORY_FOUNTAIN_FOOTPRINT = {
   halfDepth: 0.78,
 } as const
 
+export const BALLROOM_PIANO_FOOTPRINT = {
+  x: 2.95,
+  z: -3.05,
+  halfWidth: 1.62,
+  halfDepth: 1.18,
+} as const
+
+export const BALLROOM_CHAMPAGNE_TOWER_FOOTPRINT = {
+  x: -3.73,
+  z: -3.45,
+  halfWidth: 0.78,
+  halfDepth: 0.55,
+} as const
+
+export const MASTER_SUITE_FURNITURE_FOOTPRINTS = [
+  { id: 'bed', x: -3.15, z: -3.15, halfWidth: 1.38, halfDepth: 1.1 },
+  { id: 'vanity', x: 3.65, z: -3.8, halfWidth: 0.94, halfDepth: 0.67 },
+  { id: 'plant', x: -3.7, z: 2.85, halfWidth: 0.72, halfDepth: 0.58 },
+] as const
+
 export const GALLERY_BUST_FOOTPRINTS = [
   { id: 'patriarch', x: -2.55, z: -2.55 },
   { id: 'matriarch', x: 2.55, z: -2.55 },
@@ -65,6 +85,16 @@ export const GALLERY_BUST_FOOTPRINTS = [
 export function roomCenter(id: RoomId): { x: number; z: number } {
   const r = ROOM_BY_ID[id]
   return { x: (r.col - 1) * ROOM_STEP, z: (r.row - 1) * ROOM_STEP }
+}
+
+/** Shared piano contact test so its visible sprite, solid footprint, and
+ * contact-triggered audio all use the same authored bounds. */
+export function touchesBallroomPiano(x: number, z: number, radius: number): boolean {
+  const ballroomCenter = roomCenter('ballroom')
+  return (
+    Math.abs(x - (ballroomCenter.x + BALLROOM_PIANO_FOOTPRINT.x)) <= BALLROOM_PIANO_FOOTPRINT.halfWidth + radius
+    && Math.abs(z - (ballroomCenter.z + BALLROOM_PIANO_FOOTPRINT.z)) <= BALLROOM_PIANO_FOOTPRINT.halfDepth + radius
+  )
 }
 
 export function roomOfPoint(x: number, z: number): RoomId | null {
@@ -144,11 +174,25 @@ export function canOccupy(x: number, z: number, radius: number): boolean {
     && Math.abs(z - (conservatoryCenter.z + CONSERVATORY_FOUNTAIN_FOOTPRINT.z)) <= CONSERVATORY_FOUNTAIN_FOOTPRINT.halfDepth + radius
   ) return false
 
+  if (touchesBallroomPiano(x, z, radius)) return false
+  const ballroomCenter = roomCenter('ballroom')
+  if (
+    Math.abs(x - (ballroomCenter.x + BALLROOM_CHAMPAGNE_TOWER_FOOTPRINT.x)) <= BALLROOM_CHAMPAGNE_TOWER_FOOTPRINT.halfWidth + radius
+    && Math.abs(z - (ballroomCenter.z + BALLROOM_CHAMPAGNE_TOWER_FOOTPRINT.z)) <= BALLROOM_CHAMPAGNE_TOWER_FOOTPRINT.halfDepth + radius
+  ) return false
   const galleryCenter = roomCenter('gallery')
   for (const bust of GALLERY_BUST_FOOTPRINTS) {
     if (
       Math.abs(x - (galleryCenter.x + bust.x)) <= 0.58 + radius
       && Math.abs(z - (galleryCenter.z + bust.z)) <= 0.48 + radius
+    ) return false
+  }
+
+  const suiteCenter = roomCenter('suite')
+  for (const furniture of MASTER_SUITE_FURNITURE_FOOTPRINTS) {
+    if (
+      Math.abs(x - (suiteCenter.x + furniture.x)) <= furniture.halfWidth + radius
+      && Math.abs(z - (suiteCenter.z + furniture.z)) <= furniture.halfDepth + radius
     ) return false
   }
 
@@ -317,16 +361,16 @@ export interface SceneEvidence {
 // per case (see Simulation.setup), so these descriptions stay neutral about
 // origin — an examination narrows the field without naming a profession.
 export const SCENE_EVIDENCE: SceneEvidence[] = [
-  { id: 'ink-fiber', label: 'Ink-stained paper fiber', description: 'A torn paper fiber is soaked with dense blue-black writing ink.', archetypeIds: ['columnist', 'correspondent', 'accountant'] },
-  { id: 'antiseptic', label: 'Sharp chemical trace', description: 'A clean, sharp, medicinal-smelling chemical residue that lingers on cloth.', archetypeIds: ['surgeon', 'curator', 'chauffeur'] },
-  { id: 'fine-earth', label: 'Fine mineral dust', description: 'Pale mineral grit, dry as chalk and far finer than garden soil.', archetypeIds: ['curator', 'antiquarian', 'debutante'] },
-  { id: 'black-wool', label: 'Black wool thread', description: 'A short length of coarse black wool thread, freshly frayed.', archetypeIds: ['magician', 'correspondent', 'chauffeur'] },
-  { id: 'metal-polish', label: 'Metal-polish residue', description: 'A waxy metallic smear of the kind left by freshly polished metal.', archetypeIds: ['accountant', 'antiquarian', 'chauffeur'] },
-  { id: 'floral-perfume', label: 'Floral perfume trace', description: 'A lingering, expensive floral perfume that outlasts the wearer.', archetypeIds: ['columnist', 'vocalist', 'debutante'] },
-  { id: 'face-powder', label: 'Ivory face powder', description: 'Fine ivory cosmetic face powder that clings to collars and cuffs.', archetypeIds: ['magician', 'vocalist', 'debutante'] },
-  { id: 'blade-oil', label: 'Precision oil', description: 'A drop of light, fine machine oil of the sort used on precision mechanisms.', archetypeIds: ['surgeon', 'magician', 'accountant'] },
-  { id: 'wax-resin', label: 'Amber wax residue', description: 'A brittle amber fleck of sealing wax or hardened resin.', archetypeIds: ['surgeon', 'antiquarian', 'vocalist'] },
-  { id: 'torn-note', label: 'Torn shorthand note', description: 'A torn paper fragment covered in hurried, cramped shorthand marks.', archetypeIds: ['columnist', 'curator', 'correspondent'] },
+  { id: 'ink-fiber', label: 'Ink-stained blotting paper', description: 'A torn piece of monogrammed blotting paper carries a fresh splash of blue-black ink.', archetypeIds: ['columnist', 'correspondent', 'accountant'] },
+  { id: 'antiseptic', label: 'Amber medicine vial', description: 'A stoppered amber vial holds a sharp-smelling antiseptic solution.', archetypeIds: ['surgeon', 'curator', 'chauffeur'] },
+  { id: 'fine-earth', label: 'Dusty conservatory key', description: 'An old brass key is packed with pale, chalk-fine conservatory grit.', archetypeIds: ['curator', 'antiquarian', 'debutante'] },
+  { id: 'black-wool', label: 'Torn black evening glove', description: 'A torn black wool glove has snagged threads along its ragged wrist.', archetypeIds: ['magician', 'correspondent', 'chauffeur'] },
+  { id: 'metal-polish', label: 'Silver-stained polishing cloth', description: 'A folded polishing cloth bears a fresh waxy smear from recently cleaned metal.', archetypeIds: ['accountant', 'antiquarian', 'chauffeur'] },
+  { id: 'floral-perfume', label: 'Gardenia perfume atomizer', description: 'An ornate glass atomizer carries a strong, expensive gardenia perfume.', archetypeIds: ['columnist', 'vocalist', 'debutante'] },
+  { id: 'face-powder', label: 'Ivory powder compact', description: 'An open ivory compact and powder puff shed pale cosmetic dust.', archetypeIds: ['magician', 'vocalist', 'debutante'] },
+  { id: 'blade-oil', label: 'Precision-oil bottle', description: 'A tiny brass bottle contains the fine oil used on delicate mechanisms and instruments.', archetypeIds: ['surgeon', 'magician', 'accountant'] },
+  { id: 'wax-resin', label: 'Broken burgundy wax seal', description: 'A broken burgundy seal is mixed with brittle crumbs of amber restoration resin.', archetypeIds: ['surgeon', 'antiquarian', 'vocalist'] },
+  { id: 'torn-note', label: 'Torn shorthand note', description: 'A torn cream note is covered in hurried, cramped shorthand marks.', archetypeIds: ['columnist', 'curator', 'correspondent'] },
 ]
 
 export const EVIDENCE_BY_ID = Object.fromEntries(SCENE_EVIDENCE.map(e => [e.id, e])) as Record<EvidenceId, SceneEvidence>

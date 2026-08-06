@@ -5,7 +5,7 @@ import { c, r, s, type AuthoredDialogueRoute } from './types'
 
 export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 'accountant'>, AuthoredDialogueRoute[]> = {
   magician: [
-    r('magician-wool', 'room', 'black-wool', 'Where did that black wool thread on your sleeve come from?',
+    r('magician-wool', 'room', 'black-wool', 'Ask if he knows anything about the black wool thread.',
       'My coat — black stage wool, old and much-abused. It caught on something tonight and gave up a thread or two.', 'neutral',
       s(
         c('What did it catch on?', 'A brass tooth in the west passage. The hidden pocket snagged and the weave started to give.', 'worried'),
@@ -23,7 +23,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Tell me what you reached for — I’ll keep the name out of it.', 'Between us: a paper that ought to bear another man’s name. The coat caught as I reached for it.', 'worried'),
         challenge: c('You tore that coat doing something you won’t admit.', 'You have me at a door, not at any crime. I went for a contract, not for a soul.', 'angry'),
       }),
-    r('magician-powder', 'social', 'face-powder', 'Where did that pale powder on your hands come from?',
+    r('magician-powder', 'social', 'face-powder', 'Ask if he knows anything about the ivory face powder.',
       'Stage powder. A pale face floats beautifully once the room goes dark — I dust it on for the effect, and my compact chose tonight to crack.', 'surprised',
       s(
         c('How did you prepare the effect?', 'Ivory stage powder, a puff, and a compact that spilled more than it should have.', 'thoughtful'),
@@ -41,7 +41,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Show me the effect and I leave your method out of it.', 'Watch the lamp, not my hands — that’s exactly where the powder gives the method away.', 'thoughtful'),
         challenge: c('That powder marks more than a stage trick. Where else did it land?', 'A lamp, a switch — stage props, not proof. Ivory dust signs no confession.', 'suspicious'),
       }),
-    r('magician-oil', 'timeline', 'blade-oil', 'Why are your fingers slick with fine oil?',
+    r('magician-oil', 'timeline', 'blade-oil', 'Ask if he knows anything about the fine machine oil.',
       'A prop with a sulky spring — the Mercy Box, if you want its stage name. One drop of oil along the false back and it behaved.', 'suspicious',
       s(
         c('How did you free the spring?', 'A pin, some patience, and one drop of precision oil along the false back.', 'thoughtful'),
@@ -71,7 +71,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         c('Could that just have been glass?', 'Glass doesn’t curl its fingers around a handle.', 'suspicious'),
         c('That’s too thin to chase.', 'Then we’re done.', 'neutral'),
       )),
-    r('magician-ink', 'timeline', 'ink-fiber', 'Why is there blue-black ink on your fingers?',
+    r('magician-ink', 'timeline', 'ink-fiber', 'Ask if he knows anything about the ink-stained paper fiber.',
       'A prediction trick. The volunteer names a word, I write it, and the ink’s meant to vanish. Tonight it sulked.', 'surprised',
       s(
         c('When did you perform the effect?', 'Just as the clock struck. I like to time a reveal to a chime; it steals the applause.', 'thoughtful'),
@@ -89,7 +89,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Give me the time of the trick — I’ll leave the flourish alone.', 'Generous. The card’s inked to the chime I played to; the hour and the stain agree, nothing more.', 'thoughtful'),
         challenge: c('That’s a lot of ink for one card. You timed more than a trick.', 'So my timing’s theatrical. A punctual flourish isn’t a plot.', 'angry'),
       }),
-    r('magician-antiseptic', 'room', 'antiseptic', 'Why do your hands smell so sharply of medicine?',
+    r('magician-antiseptic', 'room', 'antiseptic', 'Ask if he knows anything about the sharp-smelling antiseptic.',
       'Spirit-gum solvent. It lifts a false moustache and reeks like a sickroom, but it’s pure stagecraft.', 'neutral',
       s(
         c('What were you gumming and un-gumming?', 'A quick-change disguise for the second act. The solvent bites worse than the glue.', 'thoughtful'),
@@ -107,7 +107,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Let me test the fluid — I’ll keep the disguise quiet.', 'Fair trade. Test it — spirit gum, not carbolic. The smell’s the only thing they share.', 'thoughtful'),
         challenge: c('That smells like a surgeon’s antiseptic. You’re covering a wound.', 'Analyse it. My solvent lifts glue; it never touched a wound. A shared reek isn’t a shared crime.', 'angry'),
       }),
-    r('magician-earth', 'social', 'fine-earth', 'What’s that pale grit ground into your palms?',
+    r('magician-earth', 'social', 'fine-earth', 'Ask if he knows anything about the pale grit.',
       'Grip chalk, near enough — a fine powder I dust on for a clean palm and a cleaner vanish.', 'neutral',
       s(
         c('What do you use the powder for?', 'To keep a coin from betraying me with sweat. A slick palm ruins the best sleight.', 'thoughtful'),
@@ -125,7 +125,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Show me your tin and I won’t chase the conservatory.', 'Kindly done. Set my palm beside the tin; the grip chalk matches, the garden grit doesn’t.', 'thoughtful'),
         challenge: c('That grit came from the conservatory. Your chalk story won’t hold.', 'Compare it properly. My chalk’s even; soil isn’t. The samples will part ways.', 'angry'),
       }),
-    r('magician-polish', 'room', 'metal-polish', 'Why are your hands filmed with metal polish?',
+    r('magician-polish', 'room', 'metal-polish', 'Ask if he knows anything about the metal polish.',
       'The linking rings have to catch the light or the illusion dies. I buff them till they almost wink at the crowd.', 'thoughtful',
       s(
         c('Which props did you polish?', 'The rings and a steel cup or two. A dull prop shows its seams; a bright one keeps my secrets.', 'suspicious'),
@@ -143,7 +143,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Help me quietly and I leave the method alone.', 'Obliging. I brighten only the inner curve I grip; whoever handled the silver was less tidy than I.', 'thoughtful'),
         challenge: c('That polish matches the silver. You handled more than a prop.', 'I shine props. Follow the film to my rings, not to a plate I never lifted.', 'angry'),
       }),
-    r('magician-perfume', 'social', 'floral-perfume', 'Why does a lady’s perfume cling to your sleeve?',
+    r('magician-perfume', 'social', 'floral-perfume', 'Ask if he knows anything about the floral perfume.',
       'The vanishing bouquet. I produce flowers, a lady takes them, and her scent stays on me after the blooms are gone.', 'neutral',
       s(
         c('Who took the bouquet from you?', 'A guest near the ballroom who played my volunteer. The whole room watched.', 'thoughtful'),
@@ -161,7 +161,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Name the volunteer and I keep it off the record.', 'Fair. The volunteer and the room will confirm it — her scent came to my sleeve in full view.', 'thoughtful'),
         challenge: c('That perfume puts you alone with someone. Who was it really?', 'To a volunteer, in front of an audience. Ask them. A witnessed trick isn’t a secret meeting.', 'angry'),
       }),
-    r('magician-wax', 'timeline', 'wax-resin', 'Why is there an amber fleck of wax on your cuff?',
+    r('magician-wax', 'timeline', 'wax-resin', 'Ask if he knows anything about the amber sealing wax.',
       'A sealed prediction. I write the outcome, seal it in wax before witnesses, and open it at the finish. The stick snapped as I pressed it.', 'thoughtful',
       s(
         c('What did the prediction say?', 'That would spoil the ending. The seal matters more than the words — a broken one ruins the wonder.', 'suspicious'),
@@ -179,7 +179,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Show me how you seal it and I leave the prediction unread.', 'Watch: I press here, the stick cracks there, the fleck lands on my cuff. No mystery, only method.', 'thoughtful'),
         challenge: c('That wax sealed something you won’t show me. What?', 'To a prediction envelope. Have me seal another; the wax breaks the same, and proves nothing worse.', 'angry'),
       }),
-    r('magician-note', 'social', 'torn-note', 'What’s that torn scrap of shorthand you keep palming?',
+    r('magician-note', 'social', 'torn-note', 'Ask if he knows anything about the torn note.',
       'A cue card. My own cramped marks — running order, a gag, the beat to drop a coin. I tore the used corner off between effects.', 'suspicious',
       s(
         c('What was written on the card?', 'The order of the act and a private note or two. Meaningless to anyone who can’t read a conjuror’s hand.', 'thoughtful'),
@@ -232,7 +232,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
   ],
 
   correspondent: [
-    r('correspondent-ink', 'timeline', 'ink-fiber', 'Why is there blue-black ink on your fingers?',
+    r('correspondent-ink', 'timeline', 'ink-fiber', 'Ask if he knows anything about the ink-stained paper fiber.',
       'Drafting a story — storm, stranded guests, short tempers. Blue-black ink, and a page I tore straight through when something startled me mid-line.', 'neutral',
       s(
         c('What startled you?', 'The gallery door slammed and my pen went straight through the page.', 'suspicious'),
@@ -250,7 +250,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Give me the hour — keep your source out of it.', 'Fair trade. The hour on that page is the one thing I’ll stand behind — the name stays mine.', 'thoughtful'),
         challenge: c('You wrote a time you shouldn’t have known yet. How?', 'I wrote what I heard through a door. Hearing a thing isn’t doing it.', 'angry'),
       }),
-    r('correspondent-wool', 'room', 'black-wool', 'Where did that black wool thread on your sleeve come from?',
+    r('correspondent-wool', 'room', 'black-wool', 'Ask if he knows anything about the black wool thread.',
       'Field habit — heavy wool, pockets where I expect them. A seam of it caught on something tonight and opened another inch.', 'neutral',
       s(
         c('What did the seam catch on?', 'A brass latch in the west passage — while I followed a figure whose limp quit the moment it felt unwatched.', 'worried'),
@@ -268,7 +268,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Tell me what you saw in that passage — off the record.', 'Off the record: someone crossed that passage faking a limp. My coat paid the toll following them.', 'worried'),
         challenge: c('You didn’t tear that coat just watching. What did your hands do?', 'The latch marked my sleeve, not my hands. Watching a man isn’t the same as touching him.', 'angry'),
       }),
-    r('correspondent-note', 'social', 'torn-note', 'What’s that torn scrap of shorthand you keep on you?',
+    r('correspondent-note', 'social', 'torn-note', 'Ask if he knows anything about the torn note.',
       'Notes from a source. Nervous type — gave me a time, a room, and an envelope, all in tight shorthand.', 'suspicious',
       s(
         c('What made the source so nervous?', 'They heard the exchange and feared their initials would put them in it.', 'thoughtful'),
@@ -298,7 +298,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         c('Couldn’t that just be bad shoes?', 'Could. So could an act. Check it yourself.', 'suspicious'),
         c('That’s too thin.', 'Then we’re done.', 'neutral'),
       )),
-    r('correspondent-antiseptic', 'room', 'antiseptic', 'Why do your hands reek of something medicinal?',
+    r('correspondent-antiseptic', 'room', 'antiseptic', 'Ask if he knows anything about the sharp-smelling antiseptic.',
       'Field kit. Cleaned a cut the way I learned in worse places than this. Sharp stuff. Not the surgeon’s shelf.', 'neutral',
       s(
         c('What did you cut yourself on?', 'A splintered window frame while I watched the drive. Old habit — check the exits, bleed a little.', 'thoughtful'),
@@ -316,7 +316,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Let me test the bottle — I won’t call it a surgeon’s.', 'Fine. Test it — field kit, not carbolic. Two things can stink alike and share nothing else.', 'thoughtful'),
         challenge: c('That’s the surgeon’s antiseptic on your sleeve. Explain it.', 'Analyse it. Mine came from a kit, not an operating tray. A shared smell isn’t a shared hand.', 'angry'),
       }),
-    r('correspondent-earth', 'timeline', 'fine-earth', 'How did pale grit get onto your knees and cuffs?',
+    r('correspondent-earth', 'timeline', 'fine-earth', 'Ask if he knows anything about the pale grit.',
       'Went low by the conservatory glass to watch the drive without being seen. Old reflex. The floor was gritty.', 'neutral',
       s(
         c('What were you watching for?', 'Whoever came and went in the storm. You learn to read a doorway from the floor up.', 'thoughtful'),
@@ -334,7 +334,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Show me where you knelt and I leave your watch-post alone.', 'Fair. I go low here, brace on the sill there — the grit lands on my knees. A watcher’s mess, nothing worse.', 'thoughtful'),
         challenge: c('That grit puts you in the conservatory for more than watching.', 'To a watch-post. Have me show you the crouch; it explains every grain.', 'angry'),
       }),
-    r('correspondent-polish', 'room', 'metal-polish', 'Why is there metal polish on your fingers?',
+    r('correspondent-polish', 'room', 'metal-polish', 'Ask if he knows anything about the metal polish.',
       'Cleaned my lighter and flask. Bad habit in a storm — a man tends his small machines when the big story stalls.', 'neutral',
       s(
         c('What exactly did you polish?', 'The lighter’s case and the flask’s cap. Both had gone dull in my pocket. Idle hands.', 'thoughtful'),
@@ -352,7 +352,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Show me what’s in your kit and I leave the silver alone.', 'Fine. Cap to thumb to rag — my flask, my lighter, my chain. It doesn’t reach the plate.', 'thoughtful'),
         challenge: c('That polish matches the dining silver. You handled more than a flask.', 'Follow it from my flask, not the dining room. The chain starts in my pocket.', 'angry'),
       }),
-    r('correspondent-perfume', 'social', 'floral-perfume', 'Why does a woman’s perfume cling to your coat?',
+    r('correspondent-perfume', 'social', 'floral-perfume', 'Ask if he knows anything about the floral perfume.',
       'A source got frightened and held on a second too long before she talked. Her scent stayed. Her name won’t.', 'neutral',
       s(
         c('Who was the source?', 'Not a chance. But others saw us in the corridor. Ask them where I stood, not who I stood with.', 'thoughtful'),
@@ -370,7 +370,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Confirm the spot — keep the source unnamed.', 'Deal. The passers-by will place me in that corridor; the scent came off her, and her name stays mine.', 'thoughtful'),
         challenge: c('That perfume puts you alone with someone. Who?', 'Close to a frightened source, in front of witnesses. Proximity isn’t a confession.', 'angry'),
       }),
-    r('correspondent-powder', 'room', 'face-powder', 'How did ivory powder get onto your shoulder?',
+    r('correspondent-powder', 'room', 'face-powder', 'Ask if he knows anything about the ivory face powder.',
       'Someone brushed past me in a doorway, hurrying. Left half her compact on my coat. Doorways are where people collide.', 'neutral',
       s(
         c('Who brushed past you?', 'A woman moving fast toward the hall. I felt the shove more than I saw the face.', 'thoughtful'),
@@ -388,7 +388,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Name whose compact it was — I won’t print it.', 'Fair. Match the shade to her compact, not my face. I’ve never owned the stuff.', 'thoughtful'),
         challenge: c('That powder puts you near someone you won’t name. Who?', 'Near a shoulder in a doorway. Compare the shade; it’s hers, not mine.', 'angry'),
       }),
-    r('correspondent-oil', 'timeline', 'blade-oil', 'Why are your fingers slick with fine machine oil?',
+    r('correspondent-oil', 'timeline', 'blade-oil', 'Ask if he knows anything about the fine machine oil.',
       'Typewriter jammed mid-sentence. One drop on the carriage rail and it ran again. Can’t file with a stuck key.', 'neutral',
       s(
         c('When did the machine jam?', 'On the hour — I heard the clock while I was cursing the carriage. Easy time to remember.', 'thoughtful'),
@@ -406,7 +406,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Give me the time it jammed — I’ll leave the rest.', 'Fair trade. The rail was oiled on the clock’s stroke; oil and hour agree, and neither writes me guilty.', 'thoughtful'),
         challenge: c('You oiled something at a minute you’re hiding. What was it?', 'So I mend machines on the hour. Punctual maintenance isn’t a motive.', 'angry'),
       }),
-    r('correspondent-wax', 'social', 'wax-resin', 'Why is there an amber fleck of wax on your cuff?',
+    r('correspondent-wax', 'social', 'wax-resin', 'Ask if he knows anything about the amber sealing wax.',
       'Sealed a dispatch the old way — hot wax over the flap so I’d know if anyone steamed it open. Habit from censored posts.', 'suspicious',
       s(
         c('What was in the dispatch?', 'Notes I don’t want read before I file them. The seal’s the point; the words are mine.', 'thoughtful'),
@@ -459,7 +459,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
   ],
 
   accountant: [
-    r('accountant-ink', 'timeline', 'ink-fiber', 'Why is there blue-black ink across your fingers?',
+    r('accountant-ink', 'timeline', 'ink-fiber', 'Ask if she knows anything about the ink-stained paper fiber.',
       'An entry that wouldn’t balance. Posting ink makes an error look permanent — and mine flooded the margin when something startled me.', 'angry',
       s(
         c('What startled you into the mess?', 'Someone came in behind me; the nib split and the blue-black went everywhere.', 'suspicious'),
@@ -477,7 +477,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Show me the entry — I’ll note you were under pressure.', 'That I can do. If the record shows the pressure I was under, I’ll sign the true figure.', 'worried'),
         challenge: c('You didn’t just spill that ink — something in that entry changed.', 'I posted a figure I was ordered to post. A forced hand isn’t a free one.', 'angry'),
       }),
-    r('accountant-polish', 'room', 'metal-polish', 'Why is there metal polish filmed on your hands?',
+    r('accountant-polish', 'room', 'metal-polish', 'Ask if she knows anything about the metal polish.',
       'Inventory. One candlestick had been moved and left badly tarnished, so I saw to it.', 'suspicious',
       s(
         c('How did you test the tarnish?', 'A dab of waxy polish on the base — it lifted the oxide at once.', 'thoughtful'),
@@ -495,7 +495,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Help me quietly and your name stays off it.', 'Then note this: I polished only the grip. Whoever moved it left the base untouched.', 'thoughtful'),
         challenge: c('You cleaned that candlestick to wipe a grip, not tarnish.', 'I cleaned where hands go. If that troubles you, it troubles whoever’s hands were there.', 'angry'),
       }),
-    r('accountant-oil', 'social', 'blade-oil', 'Why are your fingers slick with fine machine oil?',
+    r('accountant-oil', 'social', 'blade-oil', 'Ask if she knows anything about the fine machine oil.',
       'The adding machine’s carriage stuck mid-column. I dislike an interrupted total, so a drop of oil put it right.', 'angry',
       s(
         c('What freed the carriage?', 'A tiny drop of machine oil along the precision rail.', 'thoughtful'),
@@ -525,7 +525,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         c('Are you accusing that guest?', 'I’m telling you who had access. Accusation is your job.', 'neutral'),
         c('That’s enough.', 'Fine.', 'neutral'),
       )),
-    r('accountant-antiseptic', 'room', 'antiseptic', 'Why do your hands smell sharply of chemicals?',
+    r('accountant-antiseptic', 'room', 'antiseptic', 'Ask if she knows anything about the sharp-smelling antiseptic.',
       'Ink eradicator. When a figure’s posted wrong, you bleach it out. It reeks like a sickroom and costs a fortune.', 'neutral',
       s(
         c('What figure were you correcting?', 'A transposed sum. The fluid lifts the error so a clean one can replace it. Tedious, necessary.', 'thoughtful'),
@@ -543,7 +543,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Let me test what’s on your cuff — quietly.', 'Reasonable. Test it — eradicator, not carbolic. A shared reek is a poor ledger entry.', 'thoughtful'),
         challenge: c('That’s a surgeon’s antiseptic on your sleeve. Explain it.', 'Analyse it. Mine erases figures; his cleans wounds. You’ve posted the wrong column.', 'angry'),
       }),
-    r('accountant-earth', 'timeline', 'fine-earth', 'What is that pale grit dusted over your ledger and cuffs?',
+    r('accountant-earth', 'timeline', 'fine-earth', 'Ask if she knows anything about the pale grit.',
       'Pounce — fine sand a clerk shakes over wet ink so a figure dries without smearing. Older than blotting paper, and cleaner.', 'neutral',
       s(
         c('When did you pounce the page?', 'After each correction tonight. The grit tells you a fresh entry was just made and dried in a hurry.', 'thoughtful'),
@@ -561,7 +561,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Show me the pot on your desk and I won’t chase the garden.', 'Efficient. Set my cuff beside the pot; the grain matches the pounce, not the flowerbeds.', 'thoughtful'),
         challenge: c('That grit came from the conservatory. Your desk story won’t hold.', 'Compare the grains properly. Pounce is milled; soil is chance. They won’t reconcile.', 'angry'),
       }),
-    r('accountant-wool', 'social', 'black-wool', 'Where did that frayed black wool come from?',
+    r('accountant-wool', 'social', 'black-wool', 'Ask if she knows anything about the black wool thread.',
       'My suit. Dark, serviceable, worn at the elbow from leaning over ledgers. It catches on rough cabinetry.', 'neutral',
       s(
         c('What did the suit catch on?', 'The cellar cabinet where the estate books are kept. A splintered edge took a thread as I reached in.', 'thoughtful'),
@@ -579,7 +579,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Show me where the suit snagged and I keep it quiet.', 'Fair. Cabinet to elbow to ledger — the whole chain, and nothing on it but bookkeeping.', 'thoughtful'),
         challenge: c('That thread puts you in the cellar for more than books.', 'Where the accounts are kept. Reaching for a ledger isn’t a plot.', 'angry'),
       }),
-    r('accountant-perfume', 'social', 'floral-perfume', 'Why does a woman’s perfume cling to your sleeve?',
+    r('accountant-perfume', 'social', 'floral-perfume', 'Ask if she knows anything about the floral perfume.',
       'A guest leaned over my shoulder to argue about a figure and left her scent on my coat. Interruptions have a smell now, apparently.', 'suspicious',
       s(
         c('Who leaned over you?', 'A woman disputing an entry in the study. Two others were there; ask them where I sat.', 'thoughtful'),
@@ -597,7 +597,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Name who leaned over your figures — off the record.', 'Acceptable. The witnesses place me at the desk; her scent came over my shoulder, not from any bottle of mine.', 'thoughtful'),
         challenge: c('That perfume puts you alone with someone. Who?', 'Close enough to be scolded over a figure, in front of witnesses. Standing near someone isn’t guilt.', 'angry'),
       }),
-    r('accountant-powder', 'timeline', 'face-powder', 'How did ivory face powder get onto your ledger and cuff?',
+    r('accountant-powder', 'timeline', 'face-powder', 'Ask if she knows anything about the ivory face powder.',
       'The same woman who quarrelled over the figure set her compact on my desk. When she snatched it back, it burst.', 'surprised',
       s(
         c('What happened to the compact?', 'She slapped it down to make a point, then grabbed it too fast. The lid sprang and dusted the page and my cuff.', 'thoughtful'),
@@ -615,7 +615,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Show me how the powder got on the page — discreetly.', 'Gladly. Set here, snatched there, the lid bursts — the powder writes the whole quarrel across my page.', 'thoughtful'),
         challenge: c('That powder didn’t land by accident. You pressed it into the page.', 'Then have me show you the spill. The sequence posts the blame to her clasp, not my hand.', 'angry'),
       }),
-    r('accountant-wax', 'room', 'wax-resin', 'Why is there an amber fleck of wax on your cuff?',
+    r('accountant-wax', 'room', 'wax-resin', 'Ask if she knows anything about the amber sealing wax.',
       'I sealed an envelope of accounts. Wax over the flap, dated and pressed, so any tampering shows. The stick cracked as I stamped it.', 'thoughtful',
       s(
         c('When did you seal the envelope?', 'On the hour — I stamp the seal and note the time together, so the record and the wax agree.', 'thoughtful'),
@@ -633,7 +633,7 @@ export const PACK_B: Record<Extract<ArchetypeId, 'magician' | 'correspondent' | 
         bargain: c('Give me the time you stamped it — I leave the contents alone.', 'Fair. The seal carries the time I stamped it; wax and clock agree, and neither posts me guilty.', 'thoughtful'),
         challenge: c('That wax sealed something you won’t open for me.', 'So I date my seals precisely. A punctual stamp isn’t a confession.', 'angry'),
       }),
-    r('accountant-note', 'suspicion', 'torn-note', 'What’s that scrap of cramped shorthand about?',
+    r('accountant-note', 'suspicion', 'torn-note', 'Ask if she knows anything about the torn note.',
       'Running figures. A private tally in my own marks — sums, initials, a running balance. I tore the finished strip off out of habit.', 'thoughtful',
       s(
         c('What did the tally record?', 'A discrepancy I was chasing across two books. Numbers, not names — though the numbers point somewhere.', 'suspicious'),
