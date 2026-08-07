@@ -13,6 +13,7 @@ const TEXT_BLIP_URL = audioUrl('text-blip.mp3')
 const FIRE_URL = audioUrl('fire.mp3')
 const FOUNTAIN_URL = audioUrl('fountain.mp3')
 const PIANO_URL = audioUrl('piano.mp3')
+const SCRIBBLE_URL = audioUrl('scribble.m4a')
 const STUDY_FIRE_GAIN = 0.44
 const CONSERVATORY_FOUNTAIN_GAIN = 0.34
 const PIANO_CONTACT_GAIN = 0.5
@@ -43,6 +44,8 @@ export class Soundtrack {
   private fountainGain: GainNode | null = null
   private pianoCue: HTMLAudioElement | null = null
   private pianoCueSource: MediaElementAudioSourceNode | null = null
+  private scribbleCue: HTMLAudioElement | null = null
+  private scribbleCueSource: MediaElementAudioSourceNode | null = null
   private footstepsLoop: HTMLAudioElement | null = null
   private footstepsSource: MediaElementAudioSourceNode | null = null
   private textBlipLoop: HTMLAudioElement | null = null
@@ -110,7 +113,22 @@ export class Soundtrack {
     this.prepareFireLoop(ctx)
     this.prepareFountainLoop(ctx)
     this.preparePianoCue(ctx)
+    this.prepareScribbleCue(ctx)
     this.scheduleThunder()
+  }
+
+  private prepareScribbleCue(ctx: AudioContext) {
+    if (!this.sfxBus) return
+    const scribble = new Audio(SCRIBBLE_URL)
+    scribble.loop = false
+    scribble.preload = 'auto'
+    scribble.dataset.investigationScribble = 'true'
+
+    const gain = ctx.createGain()
+    gain.gain.value = 0.62
+    this.scribbleCue = scribble
+    this.scribbleCueSource = ctx.createMediaElementSource(scribble)
+    this.scribbleCueSource.connect(gain).connect(this.sfxBus)
   }
 
   private preparePianoCue(ctx: AudioContext) {
@@ -447,6 +465,15 @@ export class Soundtrack {
     void this.pianoCue.play().catch(() => undefined)
   }
 
+  /** Start the notebook sound when the detective enters the authored writing
+   * frame. Restarting keeps repeated inspections tightly synced. */
+  investigationStarted() {
+    if (!this.ctx || !this.sfxBus || !this.scribbleCue) return
+    this.scribbleCue.pause()
+    this.scribbleCue.currentTime = 0
+    void this.scribbleCue.play().catch(() => undefined)
+  }
+
   private duckMusic(seconds: number) {
     const ctx = this.ctx
     const bus = this.musicBus
@@ -651,6 +678,11 @@ export class Soundtrack {
       this.pianoCue.removeAttribute('src')
       this.pianoCue.load()
     }
+    if (this.scribbleCue) {
+      this.scribbleCue.pause()
+      this.scribbleCue.removeAttribute('src')
+      this.scribbleCue.load()
+    }
     if (this.footstepsLoop) {
       this.footstepsLoop.pause()
       this.footstepsLoop.removeAttribute('src')
@@ -686,6 +718,8 @@ export class Soundtrack {
     this.fountainGain = null
     this.pianoCue = null
     this.pianoCueSource = null
+    this.scribbleCue = null
+    this.scribbleCueSource = null
     this.footstepsLoop = null
     this.footstepsSource = null
     this.textBlipLoop = null

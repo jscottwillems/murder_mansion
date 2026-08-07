@@ -46,6 +46,8 @@ export class Simulation {
   clockMin = 0
   suspicion: Record<string, number> = {}
   rng: () => number
+  private bodyEvidenceCount = 0
+  private bodyEvidenceMissStreak = 0
   seed: number
   killerId = ''
   playerRoom: RoomId = 'dining'
@@ -345,14 +347,19 @@ export class Simulation {
     // --- purposeful movement. Guests favor spaces that suit their role,
     // seek company when isolated, and avoid immediately undoing a journey.
     const roll = this.rng()
-    if (roll < 0.38) {
+    if (roll < 0.43) {
       const destination = this.choosePurposefulRoom(g)
       if (destination) this.sendTo(g, destination)
       else g.nextDecisionMin = this.clockMin + 14 + this.rng() * 12
-    } else if (roll < 0.62 && others.length === 0) {
+    } else if (roll < 0.67 && others.length === 0) {
       const socialRoom = this.chooseSocialRoom(g)
       if (socialRoom) this.sendTo(g, socialRoom)
       else g.nextDecisionMin = this.clockMin + 14 + this.rng() * 12
+    } else if (roll < (others.length === 0 ? 0.82 : 0.58)) {
+      // Even when they have no reason to leave, guests occasionally cross
+      // their current room instead of holding one spot for another full cycle.
+      // This uses the same clearance-aware navigation as longer journeys.
+      if (!this.wanderWithinRoom(g)) g.nextDecisionMin = this.clockMin + 14 + this.rng() * 12
     } else {
       // Most of the time a guest has a reason to remain: reading, observing,
       // resting, or waiting for a useful conversation.
@@ -436,13 +443,26 @@ export class Simulation {
   }
 
   private commitMurder(killer: Guest, victim: Guest) {
-    const priorVictims = this.guests.filter(g => !g.alive).length
     const evidencePool = killer.evidenceIds
     victim.alive = false
     victim.state = 'dead'
     victim.diedAtMin = this.clockMin
     victim.deathRoom = victim.room
-    victim.evidenceId = evidencePool[priorVictims % evidencePool.length]
+    // Bodies normally make a 40% evidence roll. Three misses in a row force
+    // the next body to carry a trace. Near the end of the roster, preserve
+    // enough evidence-bearing bodies to make all three traces recoverable.
+    const unrecoveredEvidenceCount = Math.max(0, evidencePool.length - this.bodyEvidenceCount)
+    const remainingVictimsIncludingCurrent = this.aliveGuests().filter(g => !g.isKiller).length + 1
+    const mustPreserveAllEvidence = unrecoveredEvidenceCount >= remainingVictimsIncludingCurrent
+    const carriesEvidence = mustPreserveAllEvidence || this.bodyEvidenceMissStreak >= 3 || this.rng() < 0.4
+    if (carriesEvidence) {
+      victim.evidenceId = evidencePool[this.bodyEvidenceCount % evidencePool.length]
+      this.bodyEvidenceCount++
+      this.bodyEvidenceMissStreak = 0
+    } else {
+      victim.evidenceId = null
+      this.bodyEvidenceMissStreak++
+    }
     delete this.paths[victim.id]
     this.murderColocationSeconds = {}
     killer.killCooldownUntilMin = this.clockMin + 30 + this.rng() * 15
@@ -500,6 +520,24 @@ export class Simulation {
     this.paths[g.id] = path
     delete this.movementRecovery[g.id]
     g.state = 'walk'
+  }
+
+  /** Pick a reachable point across the current room for ambient local motion. */
+  private wanderWithinRoom(g: Guest): boolean {
+    const center = roomCenter(g.room)
+    for (let tries = 0; tries < 12; tries++) {
+      const x = center.x + (this.rng() - 0.5) * 7
+      const z = center.z + (this.rng() - 0.5) * 7
+      // A tiny adjustment reads like fidgeting, not wandering.
+      if (Math.hypot(x - g.x, z - g.z) < 1.8 || !canOccupy(x, z, ACTOR_RADIUS)) continue
+      const path = this.navigationPath(g.x, g.z, x, z, g.room)
+      if (!path.length) continue
+      this.paths[g.id] = path
+      delete this.movementRecovery[g.id]
+      g.state = 'walk'
+      return true
+    }
+    return false
   }
 
   /** Steer around room geometry when the direct route stops making progress. */

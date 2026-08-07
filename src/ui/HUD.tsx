@@ -42,6 +42,7 @@ export function HUD({ game, snap }: { game: Game; snap: Snapshot }) {
           <span>{snap.aliveCount} alive</span>
           <span className={snap.bodiesFound > 0 ? 'text-[#e86a5a]' : ''}>{snap.bodiesFound} bodies</span>
           <span>{snap.settings.director === 'llm' ? 'Dialogue: LLM' : 'Dialogue: built-in'}</span>
+          {snap.settings.gameMode === 'professional' && <span className="text-[#c9a227]">Professional</span>}
         </div>
       </div>
 
@@ -128,7 +129,7 @@ export function HUD({ game, snap }: { game: Game; snap: Snapshot }) {
                 <div className="mt-0.5 font-serif text-base leading-tight text-[#e8d8a0]">{snap.evidenceDiscovery.label}</div>
                 <div className="mt-1 text-[11px] text-[#8f9c93]">
                   {snap.evidenceDiscovery.kind === 'physical'
-                    ? `Collected from ${snap.evidenceDiscovery.guestName}'s scene · added to the journal`
+                    ? `Collected from ${snap.evidenceDiscovery.guestName} · added to the journal`
                     : `Associated with ${snap.evidenceDiscovery.guestName} · revealed in the journal`}
                 </div>
               </div>
@@ -138,11 +139,11 @@ export function HUD({ game, snap }: { game: Game; snap: Snapshot }) {
       )}
 
       {/* bottom-center: interaction hint */}
-      {snap.interactHint && (
+      {snap.interactHint && !snap.interactHint.startsWith('E — Inspect ') ? (
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 rounded border border-[#c9a227]/60 bg-black/80 px-4 py-2 font-serif text-sm text-[#e8d8a0]">
           {snap.interactHint}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

@@ -8,10 +8,12 @@ import { GothicFrame } from '@/ui/GothicFrame'
 type Tab = 'leads' | 'evidence' | 'guests' | 'interviews'
 
 export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
+  const professional = snap.settings.gameMode === 'professional'
   const [tab, setTab] = useState<Tab>('leads')
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [openTranscript, setOpenTranscript] = useState<string | null>(null)
 
+  const recorded = snap.professionalJournal
   const tabs: { id: Tab; label: string }[] = [
     { id: 'leads', label: `Leads (${snap.leads.length})` },
     { id: 'evidence', label: `Evidence (${snap.evidence.length})` },
@@ -21,9 +23,9 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
 
   return (
     <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-black/60 backdrop-blur-sm">
-      <div className="gothic-frame gothic-frame--popup relative flex h-[43rem] max-h-[94vh] w-[58rem] max-w-[94vw] flex-col overflow-hidden shadow-2xl">
+      <div className="gothic-frame gothic-frame--popup relative flex h-[50rem] max-h-[96vh] w-[58rem] max-w-[94vw] flex-col overflow-hidden shadow-2xl">
         <GothicFrame />
-        <div className="grid grid-cols-[1fr_auto] items-center gap-y-2 border-b border-[#2a2822] px-20 pb-4 pt-36 sm:px-36">
+        <div className="grid grid-cols-[1fr_auto] items-center gap-y-1 border-b border-[#2a2822] px-20 pb-2 pt-36 sm:px-36">
           <div className="order-1 font-serif text-xl text-[#e8d8a0] sm:order-none">Case Journal</div>
           <div className="order-3 col-span-2 row-start-2 flex justify-center gap-1">
             {tabs.map(t => (
@@ -46,7 +48,7 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
           </button>
         </div>
 
-        <div className="mx-16 mb-24 mt-6 min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain sm:mx-36 sm:mb-36">
+        <div className="mx-16 mb-24 mt-2 min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain sm:mx-36 sm:mb-36">
           {tab === 'leads' && (
             <div className="space-y-2">
               {snap.narrative && (
@@ -130,7 +132,7 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
                 <div
                   key={g.id}
                   data-guest-card={g.archetypeId}
-                  className={`flex h-full flex-col rounded border p-3 ${g.alive ? 'border-[#2a2822] bg-black/30' : 'border-[#4a2a22] bg-[#1a0d0a]/50'}`}
+                  className={`flex h-full flex-col rounded border p-3 ${recorded.eliminatedGuestIds.includes(g.id) ? 'border-[#425044] bg-[#111a14]/40 opacity-65' : g.alive ? 'border-[#2a2822] bg-black/30' : 'border-[#4a2a22] bg-[#1a0d0a]/50'}`}
                 >
                   <div className="flex gap-3">
                     <GuestPortrait archetypeId={g.archetypeId} name={g.name} alive={g.alive} />
@@ -139,6 +141,7 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
                       <div className="text-[10px] uppercase tracking-wider text-[#8a8478]">{g.archetypeName}</div>
                       <div className="mt-2 flex flex-wrap gap-1">
                         <Badge text={g.alive ? 'Alive' : 'Dead'} tone={g.alive ? 'ok' : 'bad'} />
+                        {recorded.eliminatedGuestIds.includes(g.id) && <Badge text="Innocent" tone="ok" />}
                         {g.interviewed && <Badge text="Interviewed" tone="info" />}
                         {g.visible && <Badge text="Visible" tone="gold" />}
                         {g.recentlyActive && !g.visible && <Badge text="Recently Active" tone="dim" />}
@@ -177,37 +180,69 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
                               </button>
                             </div>
                           ) : (
-                            <button
-                              onClick={() => setConfirmId(g.id)}
-                              className="mt-2 w-full rounded border border-[#3a352a] px-2 py-1 font-serif text-xs uppercase tracking-wider text-[#c9b98a] hover:border-[#e86a5a] hover:text-[#e86a5a]"
-                            >
-                              Accuse
-                            </button>
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                              <button
+                                onClick={() => game.setGuestEliminated(g.id, !recorded.eliminatedGuestIds.includes(g.id))}
+                                className="rounded border border-[#40543f] px-2 py-1 font-serif text-xs uppercase tracking-wider text-[#8ab86a] hover:border-[#8ab86a]"
+                              >
+                                {recorded.eliminatedGuestIds.includes(g.id) ? 'Restore suspect' : 'Mark innocent'}
+                              </button>
+                              <button
+                                onClick={() => setConfirmId(g.id)}
+                                className="rounded border border-[#3a352a] px-2 py-1 font-serif text-xs uppercase tracking-wider text-[#c9b98a] hover:border-[#e86a5a] hover:text-[#e86a5a]"
+                              >
+                                Accuse
+                              </button>
+                            </div>
                           )}
                         </>
                       )}
                     </div>
                   </div>
                   <div data-guest-evidence={g.archetypeId} className="mt-auto border-t border-[#2a2822] pt-2">
-                    <div className="mb-1.5 text-[8px] uppercase tracking-[0.16em] text-[#6a6458]">Associated evidence</div>
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <div className="text-[8px] uppercase tracking-[0.16em] text-[#6a6458]">Associated evidence</div>
+                      {professional && <div className="text-[8px] text-[#8a8478]">Click to cycle</div>}
+                    </div>
                     <div className="grid grid-cols-3 gap-1">
-                      {g.evidenceIds.map(evidenceId => {
-                        const evidence = EVIDENCE_BY_ID[evidenceId]
-                        const revealed = g.revealedEvidenceIds.includes(evidenceId)
+                      {([0, 1, 2] as const).map(slot => {
+                        const selectedId = professional ? (recorded.guestEvidenceSelections[g.id]?.[slot] ?? null) : g.evidenceIds[slot]
+                        const evidence = selectedId ? EVIDENCE_BY_ID[selectedId] : null
+                        const revealed = professional ? Boolean(evidence) : Boolean(evidence && g.revealedEvidenceIds.includes(evidence.id))
+                        const content = (
+                          <>
+                            {revealed && evidence ? <img
+                              src={`${import.meta.env.BASE_URL}assets/evidence/${evidence.id}.png`}
+                              alt=""
+                              aria-hidden="true"
+                              className="h-8 w-8 shrink-0 object-contain [image-rendering:pixelated]"
+                            /> : <span className="flex h-8 items-center font-serif text-2xl text-[#5f5a50]">?</span>}
+                            <span className="mt-1 flex h-6 w-full items-center justify-center overflow-hidden text-[8px] leading-[0.65rem] text-[#a9a093] [overflow-wrap:anywhere]">{revealed && evidence ? evidence.label : 'Unknown'}</span>
+                          </>
+                        )
+                        if (professional) {
+                          return (
+                            <button
+                              key={slot}
+                              type="button"
+                              data-evidence-slot={slot}
+                              data-evidence-id={evidence?.id ?? 'unknown'}
+                              title={evidence ? `${evidence.description} Click to choose the next evidence type.` : 'Click to assign an evidence type.'}
+                              onClick={() => game.cycleGuestEvidence(g.id, slot)}
+                              className="flex h-[4.5rem] min-w-0 flex-col items-center justify-center rounded border border-[#65552d] bg-[#17140f]/90 px-1 py-1 text-center transition-colors hover:border-[#c9a227] hover:bg-[#c9a227]/10 focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#c9a227]"
+                            >
+                              {content}
+                            </button>
+                          )
+                        }
                         return (
                         <div
-                          key={evidence.id}
-                          data-evidence-id={evidence.id}
-                          title={revealed ? evidence.description : 'Unknown association — listen carefully during interviews.'}
+                          key={evidence!.id}
+                          data-evidence-id={evidence!.id}
+                          title={revealed ? evidence!.description : 'Unknown association — listen carefully during interviews.'}
                           className="flex h-[4.5rem] min-w-0 flex-col items-center justify-center rounded border border-[#353025] bg-[#111016]/80 px-1 py-1 text-center"
                         >
-                          {revealed ? <img
-                            src={`${import.meta.env.BASE_URL}assets/evidence/${evidence.id}.png`}
-                            alt=""
-                            aria-hidden="true"
-                            className="h-8 w-8 shrink-0 object-contain [image-rendering:pixelated]"
-                          /> : <span className="flex h-8 items-center font-serif text-2xl text-[#5f5a50]">?</span>}
-                          <span className="mt-1 flex h-6 w-full items-center justify-center overflow-hidden text-[8px] leading-[0.65rem] text-[#a9a093] [overflow-wrap:anywhere]">{revealed ? evidence.label : 'Unknown'}</span>
+                          {content}
                         </div>
                         )
                       })}

@@ -55,33 +55,53 @@ export function CaseSetupScreen({ game, snap }: { game: Game; snap: Snapshot }) 
 
   return (
     <Overlay ornate taller>
-      <div className="text-xs uppercase tracking-[0.35em] text-[#8a8478]">Before the case begins</div>
-      <h2 className="mt-2 font-serif text-3xl text-[#e8d8a0]">Choose the guests' minds</h2>
-      <p className="mt-2 max-w-lg text-center font-serif text-sm italic leading-relaxed text-[#8a8478]">
-        Movement and case logic always run locally. This choice controls interview dialogue.
-      </p>
+      <div className="text-xs uppercase tracking-[0.35em] text-[#8a8478]">Before the case begins...</div>
 
-      <div className={`mt-6 grid w-full max-w-lg gap-3 ${LLM_ENABLED ? 'grid-cols-2' : 'grid-cols-1'}`}>
-        <button
-          type="button"
-          aria-pressed={director === 'builtin'}
-          onClick={() => game.updateSettings({ director: 'builtin' })}
-          className={`rounded border p-5 text-left transition-colors ${director === 'builtin' ? 'border-[#c9a227] bg-[#c9a227]/15' : 'border-[#3a352a] bg-black/40 hover:border-[#786a43]'}`}
-        >
-          <div className="font-serif text-lg text-[#e8d8a0]">Built-in Dialogue</div>
-          <div className="mt-2 text-xs leading-relaxed text-[#8a8478]">Fast, reliable, and fully offline. Interviews stay grounded in this case.</div>
-        </button>
-        {LLM_ENABLED && (
+      <div className="mt-4 w-full max-w-lg">
+        <div className="mb-2 text-center text-xs uppercase tracking-[0.25em] text-[#8a8478]">Difficulty</div>
+        <div className="grid grid-cols-2 gap-3">
+          {([
+            ['standard', 'Standard', 'Evidence associations are revealed automatically.'],
+            ['professional', 'Professional', 'You assign evidence to suspects and rule them out yourself.'],
+          ] as const).map(([mode, label, copy]) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={s.gameMode === mode}
+              onClick={() => game.updateSettings({ gameMode: mode })}
+              className={`rounded border p-3 text-left transition-colors ${s.gameMode === mode ? 'border-[#c9a227] bg-[#c9a227]/10' : 'border-[#3a352a] bg-black/40 hover:border-[#6a5a32]'}`}
+            >
+              <div className="font-serif text-sm text-[#e8d8a0]">{label}</div>
+              <div className="mt-1 text-[11px] leading-relaxed text-[#8a8478]">{copy}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 w-full max-w-lg">
+        <div className="mb-2 text-center text-xs uppercase tracking-[0.25em] text-[#8a8478]">NPC Minds</div>
+        <div className={`grid gap-3 ${LLM_ENABLED ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <button
             type="button"
-            aria-pressed={director === 'llm'}
-            onClick={() => game.updateSettings({ director: 'llm' })}
-            className={`rounded border p-5 text-left transition-colors ${director === 'llm' ? 'border-[#c9a227] bg-[#c9a227]/15' : 'border-[#3a352a] bg-black/40 hover:border-[#786a43]'}`}
+            aria-pressed={director === 'builtin'}
+            onClick={() => game.updateSettings({ director: 'builtin' })}
+            className={`rounded border p-4 text-left transition-colors ${director === 'builtin' ? 'border-[#c9a227] bg-[#c9a227]/15' : 'border-[#3a352a] bg-black/40 hover:border-[#786a43]'}`}
           >
-            <div className="font-serif text-lg text-[#e8d8a0]">LLM Dialogue</div>
-            <div className="mt-2 text-xs leading-relaxed text-[#8a8478]">Authored beats appear instantly; the model may only rewrite the visible line and choice labels.</div>
+            <div className="font-serif text-lg text-[#e8d8a0]">Built-in Dialogue</div>
+            <div className="mt-2 text-xs leading-relaxed text-[#8a8478]">Fast, reliable, and fully offline. Interviews stay grounded in this case.</div>
           </button>
-        )}
+          {LLM_ENABLED && (
+            <button
+              type="button"
+              aria-pressed={director === 'llm'}
+              onClick={() => game.updateSettings({ director: 'llm' })}
+              className={`rounded border p-4 text-left transition-colors ${director === 'llm' ? 'border-[#c9a227] bg-[#c9a227]/15' : 'border-[#3a352a] bg-black/40 hover:border-[#786a43]'}`}
+            >
+              <div className="font-serif text-lg text-[#e8d8a0]">LLM Dialogue</div>
+              <div className="mt-2 text-xs leading-relaxed text-[#8a8478]">Authored beats appear instantly; the model may only rewrite the visible line and choice labels.</div>
+            </button>
+          )}
+        </div>
       </div>
 
       {LLM_ENABLED && director === 'llm' && (
@@ -121,7 +141,7 @@ export function CaseSetupScreen({ game, snap }: { game: Game; snap: Snapshot }) 
       )}
 
       <button
-        className={`${serifBtn} mt-6 disabled:cursor-not-allowed disabled:opacity-40`}
+        className={`${serifBtn} mt-4 disabled:cursor-not-allowed disabled:opacity-40`}
         disabled={LLM_ENABLED && director === 'llm' && !llmReady}
         onClick={() => {
           if (!LLM_ENABLED && director === 'llm') game.updateSettings({ director: 'builtin' })
@@ -130,7 +150,7 @@ export function CaseSetupScreen({ game, snap }: { game: Game; snap: Snapshot }) 
       >
         Begin Case
       </button>
-      <button className="mt-3 text-xs uppercase tracking-widest text-[#6a6458] hover:text-[#c9b98a]" onClick={() => game.setPhase('title')}>
+      <button className="mt-2 text-xs uppercase tracking-widest text-[#6a6458] hover:text-[#c9b98a]" onClick={() => game.setPhase('title')}>
         Back to title
       </button>
     </Overlay>
@@ -161,7 +181,7 @@ export function HowToPlay({ game }: { game: Game }) {
           </div>
         </div>
         <p><b className="text-[#c9a227]">Build proof.</b> An association never proves guilt. A sound case needs material evidence, opportunity, and deception or motive. Closed or fatal testimony reroutes to pre-seeded records and confidants in the journal.</p>
-        <p><b className="text-[#c9a227]">Journal.</b> Press <b>J</b> to review leads, recovered routes, trust, pressure, thread outcomes, evidence associations, and cross-thread circuit progress.</p>
+        <p><b className="text-[#c9a227]">Journal.</b> Press <b>J</b> to review leads, recovered routes, trust, pressure, thread outcomes, evidence associations, and cross-thread circuit progress. In either mode you can mark a guest innocent as your case narrows. In Professional mode, click each guest's evidence slots to assign the evidence yourself.</p>
         <p><b className="text-[#c9a227]">Decide the ending.</b> When accusing, also choose whether to publish, seal, or destroy the Blue Case archive. Proof, circuit progress, relationships, and that disposition shape the case and personal epilogues.</p>
       </div>
       <button className={`${serifBtn} mt-6`} onClick={() => game.setPhase('title')}>Back</button>
@@ -344,11 +364,40 @@ export function EndScreen({ game, snap }: { game: Game; snap: Snapshot }) {
         <Stat label="Leads" value={String(e.stats.leads)} />
         <Stat label="Bodies" value={String(e.stats.bodiesFound)} />
       </div>
+      <div data-run-score className="mt-5 w-full max-w-xl rounded border border-[#5a4826] bg-[#090907]/70 p-4">
+        <div className="flex items-end justify-between border-b border-[#3a352a] pb-3">
+          <div>
+            <div className="text-[9px] uppercase tracking-[0.24em] text-[#8a8478]">Run score</div>
+            <div className="font-serif text-3xl text-[#e8d8a0]">{e.score.total.toLocaleString()}</div>
+          </div>
+          <div className="text-right text-[9px] uppercase tracking-wider text-[#6a6458]">Points earned</div>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+          <ScoreLine label={`Innocent NPCs alive · ${e.score.npcAlive.count}`} points={e.score.npcAlive.points} />
+          <ScoreLine label={`Evidence found · ${e.score.evidenceFound.count}`} points={e.score.evidenceFound.points} />
+          <ScoreLine label={`Correct associations · ${e.score.correctAssociations.count}`} points={e.score.correctAssociations.points} />
+          <ScoreLine label={`Correctly marked innocent · ${e.score.correctlyMarkedInnocent.count}`} points={e.score.correctlyMarkedInnocent.points} />
+          <ScoreLine label={`Conversations · ${e.score.conversations.percent}%`} points={e.score.conversations.points} />
+          <ScoreLine label="Correct accusation" points={e.score.correctAccusation.points} />
+          <div className="text-right text-[10px] text-[#6a6458]">
+            {e.score.conversations.completed}/{e.score.conversations.available} threads completed
+          </div>
+        </div>
+      </div>
       <div className="mt-8 flex flex-col gap-3">
         <button className={serifBtn} onClick={() => game.setPhase('setup')}>New Case (new killer)</button>
         <button className={serifBtn} onClick={() => game.quitToTitle()}>Title Screen</button>
       </div>
     </Overlay>
+  )
+}
+
+function ScoreLine({ label, points }: { label: string; points: number }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-[#25231e] pb-1">
+      <span className="text-[#9d927c]">{label}</span>
+      <span className="font-serif text-[#c9a227]">+{points.toLocaleString()}</span>
+    </div>
   )
 }
 
@@ -365,7 +414,7 @@ function Overlay({ children, ornate = false, taller = false }: { children: React
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 p-6 backdrop-blur-sm">
       <div
-        className={`${ornate ? 'gothic-frame gothic-frame--popup overflow-hidden px-28 pb-40 pt-44' : 'w-full max-w-2xl rounded border border-[#3a352a] bg-[#0d0c12]/95 p-8'} relative flex max-h-full flex-col items-center ${ornate ? '' : 'overflow-y-auto'}`}
+        className={`${ornate ? `gothic-frame gothic-frame--popup overflow-hidden px-28 ${taller ? 'pb-32 pt-40' : 'pb-40 pt-44'}` : 'w-full max-w-2xl rounded border border-[#3a352a] bg-[#0d0c12]/95 p-8'} relative flex max-h-full flex-col items-center ${ornate ? '' : 'overflow-y-auto'}`}
         style={ornate ? {
           width: `min(58rem, 94vw, calc((100vh - 3rem) * 736 / ${taller ? 568 : 544}))`,
           aspectRatio: `736 / ${taller ? 568 : 544}`,

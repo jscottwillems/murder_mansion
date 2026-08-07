@@ -5,6 +5,7 @@ import type {
   ChoiceIntent,
   ThreadStatus,
 } from './narrative/types'
+import type { RunScore } from './scoring'
 
 export type RoomId =
   | 'study' | 'gallery' | 'conservatory'
@@ -148,6 +149,7 @@ export type Phase =
   | 'won' | 'lost'
 
 export interface Settings {
+  gameMode: 'standard' | 'professional'
   director: 'builtin' | 'llm'
   llmProvider: 'groq' | 'ollama' | 'custom'
   llmBaseUrl: string
@@ -201,6 +203,7 @@ export interface EndInfo {
   killerArchetype: string
   accusedName?: string
   stats: { interviews: number; leads: number; timeMin: number; bodiesFound: number }
+  score: RunScore
 }
 
 export interface Snapshot {
@@ -221,6 +224,10 @@ export interface Snapshot {
   evidenceDiscovery: EvidenceDiscoveryNotice | null
   interactHint: string | null
   settings: Settings
+  professionalJournal: {
+    eliminatedGuestIds: string[]
+    guestEvidenceSelections: Record<string, Array<EvidenceId | null>>
+  }
   endInfo: EndInfo | null
   llmActive: boolean       // true after configured LLM dialogue succeeds
   caseSeed: number

@@ -4,7 +4,9 @@ import type {
   CollectedEvidence, ConversationEmotion, EndInfo, EvidenceId, Guest, InterviewState, Lead, LogLine, Phase,
   QuestionOption, RoomId, Settings, Snapshot, TranscriptEntry,
 } from './types'
-import { ARCHETYPES, EVIDENCE_BY_ID, ROOMS, ROOM_BY_ID, ROOM_HALF, roomAt, roomCenter, roomOfPoint, canOccupy, touchesBallroomPiano, fmtTime, NIGHT_LENGTH_MIN } from './data'
+import { calculateRunScore } from './scoring'
+import { EVIDENCE_IDS } from './types'
+import { ARCHETYPES, EVIDENCE_BY_ID, ROOMS, ROOM_BY_ID, ROOM_HALF, PASS_HALF, roomAt, roomCenter, roomOfPoint, canOccupy, touchesBallroomPiano, fmtTime, NIGHT_LENGTH_MIN } from './data'
 import { Simulation } from './sim'
 import { MansionScene } from './world'
 import { Soundtrack } from './audio'
@@ -34,11 +36,26 @@ import type {
   ThreadStatus,
 } from './narrative/types'
 import type { RevealMechanism } from './dialogue/types'
+import { FURNISHING_PLACEMENTS } from './decor'
+import type { FurnishingPlacement } from './decor/types'
 
 const SETTINGS_KEY = 'murder-mansion-settings'
 const PLAYER_SPEED = 4.4
 const ACTOR_RADIUS = 0.42
 const PIANO_TOUCH_COOLDOWN_S = 0.75
+const INVESTIGATION_ACTION_DURATION_S = 1.88
+const FURNISHING_INSPECTION_DISTANCE = 0.8
+// Furnishings are a bonus evidence route, not a guaranteed way to sweep all
+// three traces. Each trace independently has roughly a one-in-three chance of
+// being hidden in the mansion; successful placements still use distinct items.
+const FURNISHING_EVIDENCE_CHANCE = 0.35
+
+interface InspectableFurnishing extends FurnishingPlacement {
+  id: string
+  name: string
+  worldX: number
+  worldZ: number
+}
 
 /** Plain third-person phrasing of how an evidence association was established. */
 const MECHANISM_SUMMARY: Record<RevealMechanism, string> = {
@@ -66,6 +83,7 @@ declare global {
 }
 
 const DEFAULT_SETTINGS: Settings = {
+  gameMode: 'standard',
   director: 'builtin',
   llmProvider: 'groq',
   llmBaseUrl: 'https://api.groq.com/openai/v1',
@@ -115,13 +133,18 @@ export class Game {
   private playerRoom: RoomId = 'dining'
   private guestRevealOpacity = 1
   private playerWalking = false
+  private investigationMovementLock = 0
   private pianoContactActive = false
   private pianoTouchCooldown = 0
   private playerEncounteredBodyIds = new Set<string>()
+  private inspectedFurnishingIds = new Set<string>()
+  private hiddenFurnishingEvidence = new Map<string, EvidenceId>()
   private leads: Lead[] = []
   private evidence: CollectedEvidence[] = []
   private logLines: LogLine[] = []
   private transcripts: Record<string, TranscriptEntry[]> = {}
+  private eliminatedGuestIds = new Set<string>()
+  private guestEvidenceSelections: Record<string, Array<EvidenceId | null>> = {}
   private interview: InterviewState | null = null
   private evidenceDiscovery: Snapshot['evidenceDiscovery'] = null
   private evidenceDiscoveryN = 0
@@ -198,6 +221,7 @@ export class Game {
   constructor(container: HTMLElement) {
     this.world = new MansionScene(container)
     this.world.onThunder = (i) => this.audio.thunder(i)
+    this.world.onInvestigationWriting = () => this.audio.investigationStarted()
     this.world.addActor('player', 0x8a7a5a, 'Detective', true)
     this.world.focusRoom(this.playerRoom)
     this.audio.setRoomAmbience(this.playerRoom)
@@ -210,6 +234,8 @@ export class Game {
 
     window.addEventListener('keydown', this.onKeyDown)
     window.addEventListener('keyup', this.onKeyUp)
+    window.addEventListener('blur', this.cancelHeldInput)
+    document.addEventListener('visibilitychange', this.onVisibilityChange)
     this.snap = this.buildSnapshot()
     requestAnimationFrame(this.frame)
   }
@@ -219,6 +245,8 @@ export class Game {
     if (this.evidenceDiscoveryTimer) clearTimeout(this.evidenceDiscoveryTimer)
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
+    window.removeEventListener('blur', this.cancelHeldInput)
+    document.removeEventListener('visibilitychange', this.onVisibilityChange)
     if (window.murderMansionGame === this) {
       delete window.murderMansionGame
     }
@@ -254,6 +282,7 @@ export class Game {
         this.playerWalking = false
       }
       this.syncActors()
+      this.syncInspectionMarker()
       this.world.update(dt)
       this.audio.setPlayerWalking(this.playerWalking)
       this.audio.onGameMinute(this.sim?.clockMin ?? 0, this.settings.speed, this.timeIsRunning())
@@ -329,6 +358,10 @@ export class Game {
       evidenceDiscovery: this.evidenceDiscovery,
       interactHint: this.computeHint(),
       settings: this.settings,
+      professionalJournal: {
+        eliminatedGuestIds: [...this.eliminatedGuestIds],
+        guestEvidenceSelections: this.guestEvidenceSelections,
+      },
       endInfo: this.endInfo,
       llmActive: this.llmLive,
       caseSeed: sim?.seed ?? 0,
@@ -371,6 +404,11 @@ export class Game {
         this.investigateBody(body)
         return
       }
+      const furnishing = this.nearestFurnishing()
+      if (furnishing) {
+        this.inspectFurnishing(furnishing)
+        return
+      }
       const g = this.nearestGuest()
       if (g) this.startInterview(g.id)
       return
@@ -380,6 +418,15 @@ export class Game {
 
   private onKeyUp = (e: KeyboardEvent) => {
     this.keys.delete(e.key.toLowerCase())
+  }
+
+  private cancelHeldInput = () => {
+    this.keys.clear()
+    this.playerWalking = false
+  }
+
+  private onVisibilityChange = () => {
+    if (document.hidden) this.cancelHeldInput()
   }
 
   private handleEscape() {
@@ -427,14 +474,162 @@ export class Game {
   }
 
   private investigateBody(body: Guest) {
-    if (!body.evidenceId || body.evidenceInvestigated) return
-    const evidence = EVIDENCE_BY_ID[body.evidenceId]
-    if (!evidence) return
+    if (body.evidenceInvestigated) return
     body.evidenceInvestigated = true
     this.syncNarrativeBodyDiscovery(body)
     this.world.faceActorAt('player', body.x, body.z)
-    this.world.playActorAction('player', 'investigate')
+    this.world.playActorAction('player', 'investigate', INVESTIGATION_ACTION_DURATION_S)
+    this.investigationMovementLock = INVESTIGATION_ACTION_DURATION_S
+    this.playerWalking = false
     this.world.replaceBodyWithOutline(body.id, body.x, body.z)
+    if (!body.evidenceId) {
+      this.pushLog(`You investigated ${body.name}, but found no usable evidence on the body.`, 'info')
+      return
+    }
+    this.collectPhysicalEvidence(
+      body.evidenceId,
+      `evidence-${body.id}`,
+      `${body.name} — ${ROOM_BY_ID[body.deathRoom!].name}`,
+      `Scene: ${body.name}`,
+      body.name,
+    )
+  }
+
+  private inspectableFurnishings(): InspectableFurnishing[] {
+    return FURNISHING_PLACEMENTS.map(placement => {
+      const center = roomCenter(placement.room)
+      return {
+        ...placement,
+        id: placement.id,
+        name: placement.name,
+        worldX: center.x + placement.x,
+        worldZ: center.z + placement.z,
+      }
+    })
+  }
+
+  private nearestFurnishing(): InspectableFurnishing | null {
+    if (this.playerIsAtDoorway() || this.playerIsAtCurtainOrWindow()) return null
+    let best: InspectableFurnishing | null = null
+    let bestDistance = FURNISHING_INSPECTION_DISTANCE
+    for (const furnishing of this.inspectableFurnishings()) {
+      if (furnishing.room !== this.playerRoom || this.inspectedFurnishingIds.has(furnishing.id)) continue
+      const halfWidth = furnishing.interactionHalfWidth ?? 0
+      const halfDepth = furnishing.interactionHalfDepth ?? 0
+      const dx = Math.max(0, Math.abs(furnishing.worldX - this.px) - halfWidth)
+      const dz = Math.max(0, Math.abs(furnishing.worldZ - this.pz) - halfDepth)
+      const distance = Math.hypot(dx, dz)
+      const contactDistance = halfWidth > 0 || halfDepth > 0
+        ? ACTOR_RADIUS + 0.15
+        : FURNISHING_INSPECTION_DISTANCE
+      if (distance < contactDistance && distance < bestDistance) {
+        best = furnishing
+        bestDistance = distance
+      }
+    }
+    return best
+  }
+
+  /** Door openings and their jambs are architecture, never search targets. */
+  private playerIsAtDoorway(): boolean {
+    const room = ROOM_BY_ID[this.playerRoom]
+    const center = roomCenter(this.playerRoom)
+    const localX = this.px - center.x
+    const localZ = this.pz - center.z
+    const wallBand = 1.15
+    const openingBand = PASS_HALF + 0.65
+    return (
+      (Boolean(roomAt(room.col - 1, room.row))
+        && Math.abs(localX + ROOM_HALF) <= wallBand
+        && Math.abs(localZ) <= openingBand)
+      || (Boolean(roomAt(room.col + 1, room.row))
+        && Math.abs(localX - ROOM_HALF) <= wallBand
+        && Math.abs(localZ) <= openingBand)
+      || (Boolean(roomAt(room.col, room.row - 1))
+        && Math.abs(localZ + ROOM_HALF) <= wallBand
+        && Math.abs(localX) <= openingBand)
+      || (Boolean(roomAt(room.col, room.row + 1))
+        && Math.abs(localZ - ROOM_HALF) <= wallBand
+        && Math.abs(localX) <= openingBand)
+    )
+  }
+
+  /** Window glass and curtain panels are architectural dressing, not evidence spots. */
+  private playerIsAtCurtainOrWindow(): boolean {
+    const room = ROOM_BY_ID[this.playerRoom]
+    const center = roomCenter(this.playerRoom)
+    const localX = this.px - center.x
+    const localZ = this.pz - center.z
+    const atWall = (normal: number) => Math.abs(normal) >= ROOM_HALF - 0.9
+    const atWindowCenter = (lateral: number, halfWidth = 1.4) => Math.abs(lateral) <= halfWidth
+    const atCurtainPanel = (lateral: number, offset: number) => Math.abs(Math.abs(lateral) - offset) <= 0.82
+
+    // Every exterior wall has one centered storm window except the Study's
+    // north wall, where the authored fireplace replaces it.
+    const exteriorWindow = (
+      (room.row === 0 && !(room.id === 'study') && atWall(localZ) && localZ < 0
+        && atWindowCenter(localX, room.id === 'gallery' ? 2 : 1.4))
+      || (room.row === 2 && atWall(localZ) && localZ > 0 && atWindowCenter(localX))
+      || (room.col === 0 && atWall(localX) && localX < 0 && atWindowCenter(localZ))
+      || (room.col === 2 && atWall(localX) && localX > 0 && atWindowCenter(localZ))
+    )
+    if (exteriorWindow) return true
+
+    if (room.id !== 'ballroom') return false
+    const northSouthCurtain = atWall(localZ) && atCurtainPanel(localX, 3.02)
+    const westCurtain = localX < 0 && atWall(localX) && atCurtainPanel(localZ, 3.02)
+    const eastCurtain = localX > 0 && atWall(localX)
+      && (atCurtainPanel(localZ, 3.02) || atCurtainPanel(localZ, 1.82))
+    return northSouthCurtain || westCurtain || eastCurtain
+  }
+
+  private syncInspectionMarker() {
+    if (this.phase !== 'playing' || this.nearestBody()) {
+      this.world.setInspectionMarker(null)
+      return
+    }
+    const furnishing = this.nearestFurnishing()
+    this.world.setInspectionMarker(furnishing ? {
+      x: furnishing.worldX,
+      y: furnishing.markerY ?? (furnishing.baseY ?? 0.025) + furnishing.height + 0.34,
+      z: furnishing.worldZ,
+    } : null)
+  }
+
+  private inspectFurnishing(furnishing: InspectableFurnishing) {
+    if (this.inspectedFurnishingIds.has(furnishing.id)) return
+    this.inspectedFurnishingIds.add(furnishing.id)
+    this.world.faceActorAt('player', furnishing.worldX, furnishing.worldZ)
+    this.world.playActorAction('player', 'investigate', INVESTIGATION_ACTION_DURATION_S)
+    this.investigationMovementLock = INVESTIGATION_ACTION_DURATION_S
+    this.playerWalking = false
+    const evidenceId = this.hiddenFurnishingEvidence.get(furnishing.id)
+    if (!evidenceId) {
+      this.pushLog(`You inspect the ${furnishing.name.toLocaleLowerCase()}, but find nothing useful.`, 'info')
+      return
+    }
+    this.collectPhysicalEvidence(
+      evidenceId,
+      `evidence-${furnishing.id}`,
+      `${furnishing.name} — ${ROOM_BY_ID[furnishing.room].name}`,
+      `Furnishing: ${furnishing.name}`,
+      furnishing.name,
+    )
+  }
+
+  private collectPhysicalEvidence(
+    evidenceId: EvidenceId,
+    journalId: string,
+    source: string,
+    leadSource: string,
+    discoveryName: string,
+  ) {
+    const evidence = EVIDENCE_BY_ID[evidenceId]
+    if (!evidence) return
+    if (this.evidence.some(item => item.evidenceId === evidenceId)) {
+      this.pushLog(`You find another trace of ${evidence.label.toLocaleLowerCase()}, already recorded in your journal.`, 'info')
+      return
+    }
     const owners = this.sim?.guests.filter(g => g.evidenceIds.includes(evidence.id)) ?? []
     const knownNames = owners.filter(g => g.revealedEvidenceIds.includes(evidence.id)).map(g => g.name)
     const candidateNames = [
@@ -444,17 +639,17 @@ export class Game {
     const candidates = candidateNames.join(', ')
     const text = `${evidence.label}: ${evidence.description} Possible sources: ${candidates}.`
     this.evidence = [...this.evidence, {
-      id: `evidence-${body.id}`,
+      id: journalId,
       evidenceId: evidence.id,
       label: evidence.label,
       description: evidence.description,
       candidateNames,
-      source: `${body.name} — ${ROOM_BY_ID[body.deathRoom!].name}`,
+      source,
       atMin: this.sim?.clockMin ?? 0,
     }]
-    this.pushLead('evidence', `Scene: ${body.name}`, text)
+    this.pushLead('evidence', leadSource, text)
     this.audio.evidenceDiscovered()
-    this.showEvidenceDiscovery(evidence.id, evidence.label, body.name, 'physical')
+    this.showEvidenceDiscovery(evidence.id, evidence.label, discoveryName, 'physical')
     this.pushLog(`Evidence collected — ${evidence.label}. Added to your journal.`, 'info')
   }
 
@@ -479,6 +674,8 @@ export class Game {
     if (this.phase !== 'playing') return null
     const body = this.nearestBody()
     if (body) return `E — Investigate ${body.name}'s body`
+    const furnishing = this.nearestFurnishing()
+    if (furnishing) return `E — Inspect ${furnishing.name}`
     const g = this.nearestGuest()
     return g ? `E — Interview ${g.name}` : null
   }
@@ -486,7 +683,9 @@ export class Game {
   // ------------------------------------------------------------- phase control (UI actions)
 
   setPhase(p: Phase) {
+    if (p !== 'playing') this.cancelHeldInput()
     this.phase = p
+    if (p !== 'playing') this.world.setInspectionMarker(null)
     this.emit()
   }
 
@@ -497,8 +696,12 @@ export class Game {
     this.evidence = []
     this.logLines = []
     this.transcripts = {}
+    this.eliminatedGuestIds.clear()
+    this.guestEvidenceSelections = {}
     this.interview = null
     this.playerEncounteredBodyIds.clear()
+    this.inspectedFurnishingIds.clear()
+    this.hiddenFurnishingEvidence.clear()
     this.pianoContactActive = false
     this.pianoTouchCooldown = 0
     this.evidenceDiscovery = null
@@ -534,6 +737,18 @@ export class Game {
       this.world.addActor(g.id, g.colorNum, g.name, false, g.archetypeId)
     }
     const openingVictim = this.sim.createOpeningCrime()
+    const killer = this.sim.byId(this.sim.killerId)!
+    const furnishings = this.inspectableFurnishings()
+    for (let i = furnishings.length - 1; i > 0; i--) {
+      const j = Math.floor(this.sim.rng() * (i + 1))
+      ;[furnishings[i], furnishings[j]] = [furnishings[j], furnishings[i]]
+    }
+    let furnishingIndex = 0
+    for (const evidenceId of killer.evidenceIds) {
+      if (this.sim.rng() >= FURNISHING_EVIDENCE_CHANCE) continue
+      this.hiddenFurnishingEvidence.set(furnishings[furnishingIndex].id, evidenceId)
+      furnishingIndex++
+    }
     this.narrative = initializeNarrativeCase({
       caseSeed: this.sim.seed,
       guests: this.sim.guests,
@@ -581,6 +796,22 @@ export class Game {
     this.audio.setBgmVolume(this.settings.bgmVolume)
     this.audio.setSfxVolume(this.settings.sfxVolume)
     if (!this.llmConfigured()) this.llmLive = false
+    this.emit()
+  }
+
+  cycleGuestEvidence(guestId: string, slot: number) {
+    if (this.settings.gameMode !== 'professional' || slot < 0 || slot > 2) return
+    const selections = [...(this.guestEvidenceSelections[guestId] ?? [null, null, null])]
+    const current = selections[slot]
+    const currentIndex = current ? EVIDENCE_IDS.indexOf(current) : -1
+    selections[slot] = currentIndex >= EVIDENCE_IDS.length - 1 ? null : EVIDENCE_IDS[currentIndex + 1]
+    this.guestEvidenceSelections = { ...this.guestEvidenceSelections, [guestId]: selections }
+    this.emit()
+  }
+
+  setGuestEliminated(guestId: string, eliminated: boolean) {
+    if (eliminated) this.eliminatedGuestIds.add(guestId)
+    else this.eliminatedGuestIds.delete(guestId)
     this.emit()
   }
 
@@ -1132,6 +1363,16 @@ export class Game {
           : `${character.displayName}'s private stakes were never addressed, so the night closes without inventing a personal resolution.`),
       }
     })
+    const score = calculateRunScore({
+      guests: this.sim!.guests,
+      killerId: this.sim!.killerId,
+      collectedEvidenceIds: this.evidence.map(item => item.evidenceId),
+      gameMode: this.settings.gameMode,
+      guestEvidenceSelections: this.guestEvidenceSelections,
+      eliminatedGuestIds: [...this.eliminatedGuestIds],
+      narrative: this.narrative!,
+      correctAccusation: outcome === 'win',
+    })
     return {
       outcome,
       narrativeOutcome: evaluation.outcome,
@@ -1144,6 +1385,7 @@ export class Game {
       killerArchetype: archetypeOf(killer).name,
       accusedName,
       stats,
+      score,
     }
   }
 
@@ -1159,6 +1401,7 @@ export class Game {
       this.playerWalking = false
     }
     this.syncActors()
+    this.syncInspectionMarker()
     this.world.update(dt)
 
     this.audio.setPlayerWalking(this.playerWalking)
@@ -1178,13 +1421,16 @@ export class Game {
     const previousZ = this.pz
     let touchedPianoThisStep = false
     this.pianoTouchCooldown = Math.max(0, this.pianoTouchCooldown - dt)
+    this.investigationMovementLock = Math.max(0, this.investigationMovementLock - dt)
     // player movement
     let mx = 0
     let mz = 0
-    if (this.keys.has('w') || this.keys.has('arrowup')) mz -= 1
-    if (this.keys.has('s') || this.keys.has('arrowdown')) mz += 1
-    if (this.keys.has('a') || this.keys.has('arrowleft')) mx -= 1
-    if (this.keys.has('d') || this.keys.has('arrowright')) mx += 1
+    if (this.investigationMovementLock <= 0) {
+      if (this.keys.has('w') || this.keys.has('arrowup')) mz -= 1
+      if (this.keys.has('s') || this.keys.has('arrowdown')) mz += 1
+      if (this.keys.has('a') || this.keys.has('arrowleft')) mx -= 1
+      if (this.keys.has('d') || this.keys.has('arrowright')) mx += 1
+    }
     if (mx !== 0 || mz !== 0) {
       const len = Math.hypot(mx, mz)
       const step = (PLAYER_SPEED * dt) / len
@@ -1412,5 +1658,10 @@ export class Game {
     })() : null,
     clockText: fmtTime(this.sim?.clockMin ?? 0),
     hint: this.computeHint(),
+    professionalMode: this.settings.gameMode === 'professional' ? {
+      eliminatedSuspects: [...this.eliminatedGuestIds],
+      guestEvidenceSelections: this.guestEvidenceSelections,
+    } : null,
+    runScore: this.endInfo?.score ?? null,
   })
 }

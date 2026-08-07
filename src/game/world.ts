@@ -143,6 +143,7 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
 }
 
 export class MansionScene {
+  onInvestigationWriting: (() => void) | null = null
   private renderer: THREE.WebGLRenderer
   private scene = new THREE.Scene()
   private camera: THREE.PerspectiveCamera
@@ -193,6 +194,8 @@ export class MansionScene {
   private champagneBubbles: ChampagneBubble[] = []
   private materialCache = new Map<string, THREE.MeshStandardMaterial>()
   private floorTextureCache = new Map<string, THREE.Texture>()
+  private inspectionMarker: THREE.Sprite
+  private inspectionMarkerMaterial: THREE.SpriteMaterial
   private rain!: THREE.Points
   private rainVel: Float32Array = new Float32Array(0)
   private dust!: THREE.Points
@@ -237,6 +240,31 @@ export class MansionScene {
     this.moon.position.set(-20, 30, -10)
     this.scene.add(this.moon)
 
+    const inspectionTexture = new THREE.TextureLoader().load(
+      `${import.meta.env.BASE_URL}assets/ui/inspection-magnifier.png`,
+    )
+    inspectionTexture.colorSpace = THREE.SRGBColorSpace
+    inspectionTexture.minFilter = THREE.LinearMipmapLinearFilter
+    inspectionTexture.magFilter = THREE.NearestFilter
+    inspectionTexture.generateMipmaps = true
+    this.inspectionMarkerMaterial = new THREE.SpriteMaterial({
+      map: inspectionTexture,
+      transparent: true,
+      alphaTest: 0.04,
+      // This is an interaction indicator, not scene geometry. Keeping depth
+      // testing enabled let chandeliers and the furnishing itself slice the
+      // icon into misleading low/off-center fragments.
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    })
+    this.inspectionMarker = new THREE.Sprite(this.inspectionMarkerMaterial)
+    this.inspectionMarker.name = 'furnishing-inspection-marker'
+    this.inspectionMarker.scale.setScalar(0.68)
+    this.inspectionMarker.visible = false
+    this.inspectionMarker.renderOrder = 8
+    this.scene.add(this.inspectionMarker)
+
     this.buildMansion()
     this.visibleSouthernWallMeshes = this.southernWalls.map(wall => wall.mesh)
     this.southernWallByMesh = new Map(this.southernWalls.map(wall => [wall.mesh, wall]))
@@ -264,6 +292,8 @@ export class MansionScene {
     this.renderer.dispose()
     this.rt.dispose()
     this.edgeMat.dispose()
+    this.inspectionMarkerMaterial.map?.dispose()
+    this.inspectionMarkerMaterial.dispose()
     for (const wall of this.southernWalls) {
       for (const material of wall.materials) material.dispose()
       wall.edgeMaterial.dispose()
@@ -280,6 +310,11 @@ export class MansionScene {
     for (const hallway of this.hallwayWalls) hallway.dispose()
     this.container.removeChild(this.renderer.domElement)
     this.container.removeChild(this.labelLayer)
+  }
+
+  setInspectionMarker(position: { x: number; y: number; z: number } | null) {
+    this.inspectionMarker.visible = Boolean(position)
+    if (position) this.inspectionMarker.position.set(position.x, position.y, position.z)
   }
 
   private resize = () => {
@@ -1592,7 +1627,7 @@ export class MansionScene {
     }
   }
 
-  playActorAction(id: string, action: 'investigate', duration = 1.15) {
+  playActorAction(id: string, action: 'investigate', duration = 1.88) {
     const a = this.actors.get(id)
     if (!a || a.dead) return
     a.action = action
@@ -1901,6 +1936,9 @@ export class MansionScene {
 
   update(dt: number) {
     this.time += dt
+    if (this.inspectionMarker.visible) {
+      this.inspectionMarker.position.y += Math.sin(this.time * 4.2) * 0.0008
+    }
     this.updateRoomLightLevels(dt)
     // The camera follows the player near doorways, then settles on the room.
     const desired = this.desiredCameraPosition.set(this.camTarget.x, CAMERA_HEIGHT, this.camTarget.z + CAMERA_Z_OFFSET)
@@ -2020,8 +2058,11 @@ export class MansionScene {
             // The rebuilt atlas registers the kneeling pose at a deliberately
             // shorter physical height, so the full investigate sequence no
             // longer produces the old oversized crouch/pop.
-            const progress = (this.time - a.actionStartedAt) / (a.actionUntil - a.actionStartedAt)
-            this.setSpriteFrame(a, progress < 0.68 ? 14 : 15)
+            const actionElapsed = this.time - a.actionStartedAt
+            const nextFrame = actionElapsed < 0.78 ? 14 : 15
+            const writingJustStarted = nextFrame === 15 && a.spriteFrame !== 15
+            this.setSpriteFrame(a, nextFrame)
+            if (writingJustStarted) this.onInvestigationWriting?.()
           } else {
             if (a.action) a.action = null
             const cameraYaw = Math.atan2(

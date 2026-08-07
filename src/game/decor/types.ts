@@ -1,12 +1,18 @@
 import type { RoomId } from '../types'
 
-export interface DecorPlacement {
+/** Gameplay metadata for one visible, physical furnishing in the mansion. */
+export interface FurnishingPlacement {
+  id: string
+  name: string
   room: RoomId
+  /** Sprite asset stem, retained for runtime auditing and debugging. */
   asset: string
   x: number
   z: number
   height: number
   baseY?: number
-  flip?: boolean
-  renderOrder?: number
+  interactionHalfWidth?: number
+  interactionHalfDepth?: number
+  /** Absolute local-room y position when artwork height is not a useful physical top. */
+  markerY?: number
 }

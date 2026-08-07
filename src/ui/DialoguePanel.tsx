@@ -31,6 +31,7 @@ export function DialoguePanel({ game, snap }: { game: Game; snap: Snapshot }) {
   if (!guest) return null
   const mood = iv.thinking ? 'thoughtful' : iv.emotion
   const showBackToTopics = Boolean(iv.activeThreadId && !iv.thinking && !isPrinting && iv.concluded)
+  const showIntentColors = snap.settings.gameMode !== 'professional'
 
   return (
     <div className="pointer-events-none absolute bottom-4 left-4 flex max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] justify-start overflow-hidden xl:max-w-[calc(100vw-23rem)]">
@@ -95,7 +96,8 @@ export function DialoguePanel({ game, snap }: { game: Game; snap: Snapshot }) {
                     key={q.id}
                     disabled={iv.thinking || isPrinting || q.disabled}
                     onClick={() => game.ask(q.id)}
-                    style={{ borderColor: (q.intent && INTENT_COLORS[q.intent]) || INTENT_DEFAULT_COLOR }}
+                    data-response-intent={q.intent ?? 'neutral'}
+                    style={showIntentColors ? { borderColor: (q.intent && INTENT_COLORS[q.intent]) || INTENT_DEFAULT_COLOR } : undefined}
                     className="flex items-center rounded border-l-2 border border-[#3a352a] bg-[#16151d] px-2 py-1 text-left text-xs leading-tight text-[#c9b98a] transition hover:bg-[#1f1d28] hover:text-[#e8d8a0] hover:brightness-110 disabled:opacity-40"
                   >
                     <span className="line-clamp-3">{q.label}</span>
