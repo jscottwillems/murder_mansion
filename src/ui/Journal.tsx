@@ -48,7 +48,7 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
           </button>
         </div>
 
-        <div className="mx-16 mb-24 mt-2 min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain sm:mx-36 sm:mb-36">
+        <div className={`mx-16 mb-24 mt-2 min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain sm:mb-36 ${tab === 'guests' ? 'sm:mx-24' : 'sm:mx-36'}`}>
           {tab === 'leads' && (
             <div className="space-y-2">
               {snap.narrative && (
@@ -91,7 +91,7 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
               {snap.evidence.length === 0 && (
                 <div className="rounded border border-dashed border-[#3a352a] bg-black/20 px-5 py-10 text-center">
                   <div className="font-serif text-base text-[#8a8478]">No physical evidence collected</div>
-                  <div className="mt-1 text-xs italic text-[#5f5a50]">Investigate a discovered body to preserve its scene trace.</div>
+                  <div className="mt-1 text-xs italic text-[#5f5a50]">Investigate bodies and search furnishings to preserve scene traces.</div>
                 </div>
               )}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -113,6 +113,9 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
                     </div>
                     <div className="flex flex-1 flex-col border-t border-[#2a2822] px-3 py-2.5">
                       <p className="text-xs leading-relaxed text-[#c7c0b3]">{item.description}</p>
+                      {item.discoveryDetail && (
+                        <p className="mt-1.5 text-[11px] italic leading-relaxed text-[#8ab8a0]">Recovered {item.discoveryDetail}.</p>
+                      )}
                       <div className="mt-auto pt-2">
                         <div className="text-[10px] uppercase tracking-wider text-[#6a6458]">Possible sources</div>
                         <div className="mt-1 flex flex-wrap gap-1">
@@ -139,12 +142,10 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
                     <div className="min-w-0 flex-1">
                       <div className={`font-serif text-sm ${g.alive ? 'text-[#e8d8a0]' : 'text-[#8a6a62] line-through'}`}>{g.name}</div>
                       <div className="text-[10px] uppercase tracking-wider text-[#8a8478]">{g.archetypeName}</div>
-                      <div className="mt-2 flex flex-wrap gap-1">
+                      <div className="mt-2 flex min-h-[3.875rem] content-start flex-wrap gap-1">
                         <Badge text={g.alive ? 'Alive' : 'Dead'} tone={g.alive ? 'ok' : 'bad'} />
-                        {recorded.eliminatedGuestIds.includes(g.id) && <Badge text="Innocent" tone="ok" />}
                         {g.interviewed && <Badge text="Interviewed" tone="info" />}
                         {g.visible && <Badge text="Visible" tone="gold" />}
-                        {g.recentlyActive && !g.visible && <Badge text="Recently Active" tone="dim" />}
                         {g.roomName && <Badge text={g.roomName} tone="dim" />}
                         {g.narrative && <Badge text={`Trust ${g.narrative.trust}`} tone="info" />}
                         {g.narrative && <Badge text={`Pressure ${g.narrative.pressure}`} tone={g.narrative.pressure >= 5 ? 'bad' : 'dim'} />}
@@ -154,51 +155,49 @@ export function Journal({ game, snap }: { game: Game; snap: Snapshot }) {
                         <div className="mt-1 text-[10px] text-[#c9a227]">Ending earned: {g.narrative.personalEndingTitle}</div>
                       )}
                       {g.alive && (
-                        <>
-                          <div className="mt-2 flex items-center gap-2">
-                            <span className="text-[10px] uppercase tracking-wider text-[#6a6458]">Suspicion</span>
-                            <div className="h-1.5 flex-1 overflow-hidden rounded bg-[#242220]">
-                              <div
-                                className={`h-full ${g.suspicion > 0.66 ? 'bg-[#e86a5a]' : g.suspicion > 0.33 ? 'bg-[#c9862a]' : 'bg-[#6a8a5a]'}`}
-                                style={{ width: `${Math.round(g.suspicion * 100)}%` }}
-                              />
-                            </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className="text-[10px] uppercase tracking-wider text-[#6a6458]">Suspicion</span>
+                          <div className="h-1.5 flex-1 overflow-hidden rounded bg-[#242220]">
+                            <div
+                              className={`h-full ${g.suspicion > 0.66 ? 'bg-[#e86a5a]' : g.suspicion > 0.33 ? 'bg-[#c9862a]' : 'bg-[#6a8a5a]'}`}
+                              style={{ width: `${Math.round(g.suspicion * 100)}%` }}
+                            />
                           </div>
-                          {confirmId === g.id ? (
-                            <div className="mt-2 flex gap-2">
-                              <button
-                                onClick={() => { setConfirmId(null); game.setPhase('accuse') }}
-                                className="flex-1 rounded border border-[#e86a5a] bg-[#e86a5a]/20 px-2 py-1 font-serif text-xs text-[#e86a5a] hover:bg-[#e86a5a]/40"
-                              >
-                                Choose Final Decision
-                              </button>
-                              <button
-                                onClick={() => setConfirmId(null)}
-                                className="rounded border border-[#3a352a] px-2 py-1 text-xs text-[#8a8478] hover:text-[#e8d8a0]"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="mt-2 grid grid-cols-2 gap-2">
-                              <button
-                                onClick={() => game.setGuestEliminated(g.id, !recorded.eliminatedGuestIds.includes(g.id))}
-                                className="rounded border border-[#40543f] px-2 py-1 font-serif text-xs uppercase tracking-wider text-[#8ab86a] hover:border-[#8ab86a]"
-                              >
-                                {recorded.eliminatedGuestIds.includes(g.id) ? 'Restore suspect' : 'Mark innocent'}
-                              </button>
-                              <button
-                                onClick={() => setConfirmId(g.id)}
-                                className="rounded border border-[#3a352a] px-2 py-1 font-serif text-xs uppercase tracking-wider text-[#c9b98a] hover:border-[#e86a5a] hover:text-[#e86a5a]"
-                              >
-                                Accuse
-                              </button>
-                            </div>
-                          )}
-                        </>
+                        </div>
                       )}
                     </div>
                   </div>
+                  {g.alive && (confirmId === g.id ? (
+                    <div className="mt-3 flex w-full gap-2">
+                      <button
+                        onClick={() => { setConfirmId(null); game.setPhase('accuse') }}
+                        className="flex-1 rounded border border-[#e86a5a] bg-[#e86a5a]/20 px-2 py-1 font-serif text-xs text-[#e86a5a] hover:bg-[#e86a5a]/40"
+                      >
+                        Choose Final Decision
+                      </button>
+                      <button
+                        onClick={() => setConfirmId(null)}
+                        className="flex-1 rounded border border-[#3a352a] px-2 py-1 text-xs text-[#8a8478] hover:text-[#e8d8a0]"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-3 grid w-full grid-cols-2 gap-2">
+                      <button
+                        onClick={() => game.setGuestEliminated(g.id, !recorded.eliminatedGuestIds.includes(g.id))}
+                        className="rounded border border-[#40543f] px-2 py-1 font-serif text-xs uppercase tracking-wider text-[#8ab86a] hover:border-[#8ab86a]"
+                      >
+                        {recorded.eliminatedGuestIds.includes(g.id) ? 'Restore suspect' : 'Mark innocent'}
+                      </button>
+                      <button
+                        onClick={() => setConfirmId(g.id)}
+                        className="rounded border border-[#3a352a] px-2 py-1 font-serif text-xs uppercase tracking-wider text-[#c9b98a] hover:border-[#e86a5a] hover:text-[#e86a5a]"
+                      >
+                        Accuse
+                      </button>
+                    </div>
+                  ))}
                   <div data-guest-evidence={g.archetypeId} className="mt-auto border-t border-[#2a2822] pt-2">
                     <div className="mb-1.5 flex items-center justify-between gap-2">
                       <div className="text-[8px] uppercase tracking-[0.16em] text-[#6a6458]">Associated evidence</div>
@@ -303,7 +302,7 @@ function Badge({ text, tone }: { text: string; tone: 'ok' | 'bad' | 'info' | 'go
     gold: 'border-[#8a6a20] text-[#c9a227]',
     dim: 'border-[#3a352a] text-[#8a8478]',
   }[tone]
-  return <span className={`rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wider ${cls}`}>{text}</span>
+  return <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wider ${cls}`}>{text}</span>
 }
 
 function fmtMin(min: number): string {

@@ -614,6 +614,7 @@ export class Game {
       `${furnishing.name} — ${ROOM_BY_ID[furnishing.room].name}`,
       `Furnishing: ${furnishing.name}`,
       furnishing.name,
+      furnishing.evidenceHidingPlace,
     )
   }
 
@@ -623,6 +624,7 @@ export class Game {
     source: string,
     leadSource: string,
     discoveryName: string,
+    discoveryDetail?: string,
   ) {
     const evidence = EVIDENCE_BY_ID[evidenceId]
     if (!evidence) return
@@ -637,7 +639,8 @@ export class Game {
       ...owners.slice(knownNames.length).map((_, index) => `Unknown source ${index + 1}`),
     ]
     const candidates = candidateNames.join(', ')
-    const text = `${evidence.label}: ${evidence.description} Possible sources: ${candidates}.`
+    const locationNote = discoveryDetail ? ` It was found ${discoveryDetail}.` : ''
+    const text = `${evidence.label}: ${evidence.description}${locationNote} Possible sources: ${candidates}.`
     this.evidence = [...this.evidence, {
       id: journalId,
       evidenceId: evidence.id,
@@ -646,10 +649,12 @@ export class Game {
       candidateNames,
       source,
       atMin: this.sim?.clockMin ?? 0,
+      discoveryDetail,
+      discoveryObject: discoveryDetail ? discoveryName : undefined,
     }]
     this.pushLead('evidence', leadSource, text)
     this.audio.evidenceDiscovered()
-    this.showEvidenceDiscovery(evidence.id, evidence.label, discoveryName, 'physical')
+    this.showEvidenceDiscovery(evidence.id, evidence.label, discoveryName, 'physical', discoveryDetail)
     this.pushLog(`Evidence collected — ${evidence.label}. Added to your journal.`, 'info')
   }
 
@@ -859,7 +864,7 @@ export class Game {
   }
 
   /**
-   * Evidence types the detective has physically recovered from a body. Reveal
+   * Evidence types the detective has physically recovered from a body or furnishing. Reveal
    * threads for a type are only worth asking about once such a trace exists,
    * so this set gates which evidence topics an NPC will engage.
    */
@@ -887,15 +892,23 @@ export class Game {
       : dossier.regularThreads
     return threads.map(thread => {
       const status = character.threadStatuses[thread.id]
+      const evidenceId = 'evidenceId' in thread ? thread.evidenceId : undefined
+      let rootLabel = thread.rootLabel
+      if (evidenceId) {
+        const hiddenDiscovery = this.evidence.find(item => item.evidenceId === evidenceId)
+        if (hiddenDiscovery?.discoveryObject) {
+          rootLabel = `Found hidden in the ${hiddenDiscovery.discoveryObject.toLocaleLowerCase()}. Recognize it?`
+        }
+      }
       return {
       id: `root:${thread.id}`,
       topic: thread.topic,
-      label: status === 'resolved' ? `${thread.rootLabel} — association recorded`
-        : status === 'paused' ? `${thread.rootLabel} — resume`
-          : status === 'rerouted' ? `${thread.rootLabel} — recovered route`
-            : status === 'closed-personal' ? `${thread.rootLabel} — externally rerouted`
-              : status === 'spent' ? `${thread.rootLabel} — concluded`
-                : thread.rootLabel,
+      label: status === 'resolved' ? `${rootLabel} ✓`
+        : status === 'paused' ? `${rootLabel} — resume`
+          : status === 'rerouted' ? `${rootLabel} — recovered`
+            : status === 'closed-personal' ? `${rootLabel} — external`
+              : status === 'spent' ? `${rootLabel} — done`
+                : rootLabel,
       kind: 'root',
       disabled: status === 'resolved' || status === 'spent',
       }
@@ -1280,13 +1293,14 @@ export class Game {
     this.emit()
   }
 
-  private showEvidenceDiscovery(evidenceId: EvidenceId, label: string, guestName: string, kind: 'association' | 'physical') {
+  private showEvidenceDiscovery(evidenceId: EvidenceId, label: string, guestName: string, kind: 'association' | 'physical', discoveryDetail?: string) {
     this.evidenceDiscovery = {
       id: ++this.evidenceDiscoveryN,
       guestName,
       evidenceId,
       label,
       kind,
+      discoveryDetail,
     }
     if (this.evidenceDiscoveryTimer) clearTimeout(this.evidenceDiscoveryTimer)
     this.evidenceDiscoveryTimer = setTimeout(() => {

@@ -17,6 +17,7 @@ const SCRIBBLE_URL = audioUrl('scribble.m4a')
 const STUDY_FIRE_GAIN = 0.44
 const CONSERVATORY_FOUNTAIN_GAIN = 0.34
 const PIANO_CONTACT_GAIN = 0.5
+const INVESTIGATION_SCRIBBLE_GAIN = 1.05
 
 export class Soundtrack {
   private ctx: AudioContext | null = null
@@ -125,7 +126,7 @@ export class Soundtrack {
     scribble.dataset.investigationScribble = 'true'
 
     const gain = ctx.createGain()
-    gain.gain.value = 0.62
+    gain.gain.value = INVESTIGATION_SCRIBBLE_GAIN
     this.scribbleCue = scribble
     this.scribbleCueSource = ctx.createMediaElementSource(scribble)
     this.scribbleCueSource.connect(gain).connect(this.sfxBus)

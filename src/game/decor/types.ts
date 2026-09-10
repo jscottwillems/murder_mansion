@@ -15,4 +15,6 @@ export interface FurnishingPlacement {
   interactionHalfDepth?: number
   /** Absolute local-room y position when artwork height is not a useful physical top. */
   markerY?: number
+  /** Natural-language location used when evidence is recovered from this object. */
+  evidenceHidingPlace: string
 }

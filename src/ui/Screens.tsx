@@ -313,7 +313,7 @@ export function SettingsScreen({ game, snap }: { game: Game; snap: Snapshot }) {
 
 export function PauseMenu({ game }: { game: Game }) {
   return (
-    <Overlay>
+    <Overlay ornate>
       <h2 className="font-serif text-3xl text-[#e8d8a0]">Paused</h2>
       <div className="mt-6 flex flex-col gap-3">
         <button className={serifBtn} onClick={() => game.setPhase('playing')}>Resume</button>

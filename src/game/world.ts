@@ -3,7 +3,7 @@
 // rain, lightning, dust motes, lamplight.
 import * as THREE from 'three'
 import type { RoomId } from './types'
-import { BALLROOM_CHAMPAGNE_TOWER_FOOTPRINT, BALLROOM_PIANO_FOOTPRINT, DINING_BANQUET_FOOTPRINT, GALLERY_BUST_FOOTPRINTS, MASTER_SUITE_FURNITURE_FOOTPRINTS, ROOMS, ROOM_HALF, ROOM_STEP, PASS_HALF, adjacentRooms, roomCenter } from './data'
+import { BALLROOM_CHAMPAGNE_TOWER_FOOTPRINT, BALLROOM_PIANO_FOOTPRINT, DINING_BANQUET_FOOTPRINT, DINING_GRANDFATHER_CLOCK_FOOTPRINT, GALLERY_BUST_FOOTPRINTS, MASTER_SUITE_FURNITURE_FOOTPRINTS, ROOMS, ROOM_HALF, ROOM_STEP, PASS_HALF, adjacentRooms, roomCenter } from './data'
 import { atlasFrame, CHARACTER_ATLAS, NPC_ATLAS_V3 } from './characterAtlas'
 import { getExteriorWallTexture, getWallTexture, disposeWallTextures } from './wallSprites'
 import { createStormWindow, type ExteriorWall, type StormWindowHandles } from './stormWindows'
@@ -82,14 +82,12 @@ interface OccludingFixture {
   occluded: boolean
 }
 
-// A full Retina-sized 4x-MSAA target can exceed 22 million color/depth samples
-// per frame at common desktop sizes. This cap retains supersampled edges while
-// keeping the painterly scene within a much steadier GPU fill-rate budget.
+// Cap Retina rendering to keep the painterly scene within a steady GPU
+// fill-rate budget while retaining authored sprite detail.
 const MAX_RENDER_PIXEL_RATIO = 1.5
 const INACTIVE_ROOM_LIGHT_LEVEL = 0.015
 const INACTIVE_ROOM_VEIL_OPACITY = 0.88
 const ROOM_LIGHT_FADE_SPEED = 1.65
-const MSAA_SAMPLES = 0
 // Most floor sources are material swatches, not room-wide compositions. Tiling
 // them twice brings planks and masonry back to a believable scale beside the
 // 2.45-unit actors. Preserve the Ballroom's authored central medallion.
@@ -147,9 +145,6 @@ export class MansionScene {
   private renderer: THREE.WebGLRenderer
   private scene = new THREE.Scene()
   private camera: THREE.PerspectiveCamera
-  private rt: THREE.WebGLRenderTarget
-  private quadScene = new THREE.Scene()
-  private quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private container: HTMLElement
   private labelLayer: HTMLDivElement
   private actors = new Map<string, Actor>()
@@ -271,18 +266,6 @@ export class MansionScene {
     this.buildRain()
     this.buildDust()
 
-    // Fine furniture silhouettes retain a capped native-resolution texture
-    // pass without multiplying every scene sample through hardware MSAA.
-    this.rt = new THREE.WebGLRenderTarget(2, 2, {
-      minFilter: THREE.LinearFilter,
-      magFilter: THREE.LinearFilter,
-      depthBuffer: true,
-      samples: MSAA_SAMPLES,
-    })
-    const quadMat = new THREE.MeshBasicMaterial({ map: this.rt.texture })
-    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), quadMat)
-    this.quadScene.add(quad)
-
     this.resize()
     window.addEventListener('resize', this.resize)
   }
@@ -290,7 +273,6 @@ export class MansionScene {
   dispose() {
     window.removeEventListener('resize', this.resize)
     this.renderer.dispose()
-    this.rt.dispose()
     this.edgeMat.dispose()
     this.inspectionMarkerMaterial.map?.dispose()
     this.inspectionMarkerMaterial.dispose()
@@ -325,7 +307,6 @@ export class MansionScene {
     this.renderer.setSize(w, h)
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
-    this.rt.setSize(Math.max(2, Math.floor(w * pixelRatio)), Math.max(2, Math.floor(h * pixelRatio)))
   }
 
   // ------------------------------------------------------------ mansion build
@@ -739,7 +720,16 @@ export class MansionScene {
       2,
       false,
     )
-    addFixedCutout('grandfather-clock-v2', 'dining-grandfather-clock', 1.22, 2.58, 3.62, -4.05, 2, false)
+    addFixedCutout(
+      'grandfather-clock-v2',
+      'dining-grandfather-clock',
+      DINING_GRANDFATHER_CLOCK_FOOTPRINT.halfWidth * 2,
+      2.58,
+      DINING_GRANDFATHER_CLOCK_FOOTPRINT.x,
+      DINING_GRANDFATHER_CLOCK_FOOTPRINT.z,
+      2,
+      false,
+    )
   }
 
   /** The keyboard faces southwest into the Ballroom while the curved body
@@ -2157,11 +2147,9 @@ export class MansionScene {
 
     this.updateLabels()
 
-    // Multisampled offscreen render followed by a 1:1 presentation pass.
-    this.renderer.setRenderTarget(this.rt)
+    // Render directly to the drawing buffer. The former zero-sample offscreen
+    // target added a full-resolution texture copy without providing MSAA.
     this.renderer.render(this.scene, this.camera)
-    this.renderer.setRenderTarget(null)
-    this.renderer.render(this.quadScene, this.quadCam)
   }
 
   private updateRoomLightLevels(dt: number) {

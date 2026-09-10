@@ -4,6 +4,7 @@ import {
   BALLROOM_PIANO_FOOTPRINT,
   CONSERVATORY_FOUNTAIN_FOOTPRINT,
   DINING_BANQUET_FOOTPRINT,
+  DINING_GRANDFATHER_CLOCK_FOOTPRINT,
   GALLERY_BUST_FOOTPRINTS,
   MASTER_SUITE_FURNITURE_FOOTPRINTS,
 } from '../data'
@@ -18,6 +19,7 @@ export const FURNISHING_PLACEMENTS: FurnishingPlacement[] = [
   {
     id: 'study-partners-desk', name: 'Partners Desk', room: 'study', asset: 'partners-desk',
     x: -2.75, z: -2.35, height: 1.9, interactionHalfWidth: 1.55, interactionHalfDepth: 0.72,
+    evidenceHidingPlace: 'inside a locked drawer of the partners desk',
   },
   ...GALLERY_BUST_FOOTPRINTS.map(bust => ({
     id: `gallery-bust-${bust.id}`,
@@ -27,24 +29,35 @@ export const FURNISHING_PLACEMENTS: FurnishingPlacement[] = [
     x: bust.x,
     z: bust.z,
     height: 2.35,
+    interactionHalfWidth: bust.halfWidth,
+    interactionHalfDepth: bust.halfDepth,
+    evidenceHidingPlace: `beneath the ${bust.id} bust's pedestal`,
   })),
   {
     id: 'conservatory-animated-fountain', name: 'Fountain', room: 'conservatory', asset: 'fountain',
     x: CONSERVATORY_FOUNTAIN_FOOTPRINT.x, z: CONSERVATORY_FOUNTAIN_FOOTPRINT.z, height: 1.65,
     interactionHalfWidth: CONSERVATORY_FOUNTAIN_FOOTPRINT.halfWidth,
     interactionHalfDepth: CONSERVATORY_FOUNTAIN_FOOTPRINT.halfDepth,
+    evidenceHidingPlace: 'behind a loose stone in the fountain basin',
   },
   {
     id: 'conservatory-southwest-monstera', name: 'Monstera', room: 'conservatory', asset: 'potted-monstera',
     x: -3.7, z: 3.15, height: 2.25,
+    evidenceHidingPlace: 'under the soil in the monstera pot',
   },
   {
     id: 'conservatory-northeast-kentia-palm', name: 'Kentia Palm', room: 'conservatory', asset: 'kentia-palm-urn',
     x: 3.68, z: -3.5, height: 2.82,
+    evidenceHidingPlace: 'between the kentia palm\'s urn and its inner pot',
   },
   {
     id: 'dining-grandfather-clock', name: 'Grandfather Clock', room: 'dining', asset: 'grandfather-clock-v2',
-    x: 3.62, z: -4.05, height: 2.58,
+    x: DINING_GRANDFATHER_CLOCK_FOOTPRINT.x,
+    z: DINING_GRANDFATHER_CLOCK_FOOTPRINT.z,
+    height: 2.58,
+    interactionHalfWidth: DINING_GRANDFATHER_CLOCK_FOOTPRINT.halfWidth,
+    interactionHalfDepth: DINING_GRANDFATHER_CLOCK_FOOTPRINT.halfDepth,
+    evidenceHidingPlace: 'behind the pendulum door of the grandfather clock',
   },
   {
     id: 'dining-banquet-table',
@@ -57,6 +70,7 @@ export const FURNISHING_PLACEMENTS: FurnishingPlacement[] = [
     interactionHalfWidth: DINING_BANQUET_FOOTPRINT.halfWidth,
     interactionHalfDepth: DINING_BANQUET_FOOTPRINT.northDepth,
     markerY: 2.75,
+    evidenceHidingPlace: 'under the dining table\'s linen',
   },
   {
     id: 'ballroom-grand-piano',
@@ -68,6 +82,7 @@ export const FURNISHING_PLACEMENTS: FurnishingPlacement[] = [
     height: 2.2,
     interactionHalfWidth: BALLROOM_PIANO_FOOTPRINT.halfWidth,
     interactionHalfDepth: BALLROOM_PIANO_FOOTPRINT.halfDepth,
+    evidenceHidingPlace: 'inside the grand piano\'s music desk',
   },
   {
     id: 'ballroom-champagne-tower',
@@ -80,12 +95,13 @@ export const FURNISHING_PLACEMENTS: FurnishingPlacement[] = [
     baseY: 0.02,
     interactionHalfWidth: BALLROOM_CHAMPAGNE_TOWER_FOOTPRINT.halfWidth,
     interactionHalfDepth: BALLROOM_CHAMPAGNE_TOWER_FOOTPRINT.halfDepth,
+    evidenceHidingPlace: 'under the champagne tower\'s silver tray',
   },
   ...MASTER_SUITE_FURNITURE_FOOTPRINTS.map(furnishing => {
     const details = {
-      bed: { name: 'Victorian Bed', asset: 'large-victorian-bed', height: 2.76 },
-      vanity: { name: 'Vanity', asset: 'vanity-v2', height: 2.82 },
-      plant: { name: 'Rubber Plant', asset: 'rubber-plant', height: 2.4 },
+      bed: { name: 'Victorian Bed', asset: 'large-victorian-bed', height: 2.76, evidenceHidingPlace: 'behind a loose panel in the Victorian bedstead' },
+      vanity: { name: 'Vanity', asset: 'vanity-v2', height: 2.82, evidenceHidingPlace: 'beneath the velvet lining of the vanity drawer' },
+      plant: { name: 'Rubber Plant', asset: 'rubber-plant', height: 2.4, evidenceHidingPlace: 'under the soil in the rubber plant\'s pot' },
     }[furnishing.id]
     return {
       id: `suite-${furnishing.id}`,

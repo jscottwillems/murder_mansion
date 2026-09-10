@@ -48,6 +48,13 @@ export const DINING_BANQUET_FOOTPRINT = {
   southDepth: 0.2,
 } as const
 
+export const DINING_GRANDFATHER_CLOCK_FOOTPRINT = {
+  x: 3.62,
+  z: -4.05,
+  halfWidth: 0.61,
+  halfDepth: 0.38,
+} as const
+
 export const CONSERVATORY_FOUNTAIN_FOOTPRINT = {
   x: 0,
   z: 0,
@@ -76,10 +83,10 @@ export const MASTER_SUITE_FURNITURE_FOOTPRINTS = [
 ] as const
 
 export const GALLERY_BUST_FOOTPRINTS = [
-  { id: 'patriarch', x: -2.55, z: -2.55 },
-  { id: 'matriarch', x: 2.55, z: -2.55 },
-  { id: 'officer', x: -2.55, z: 2.55 },
-  { id: 'scholar', x: 2.55, z: 2.55 },
+  { id: 'patriarch', x: -2.55, z: -2.55, halfWidth: 0.58, halfDepth: 0.48 },
+  { id: 'matriarch', x: 2.55, z: -2.55, halfWidth: 0.58, halfDepth: 0.48 },
+  { id: 'officer', x: -2.55, z: 2.55, halfWidth: 0.58, halfDepth: 0.48 },
+  { id: 'scholar', x: 2.55, z: 2.55, halfWidth: 0.58, halfDepth: 0.48 },
 ] as const
 
 export function roomCenter(id: RoomId): { x: number; z: number } {
@@ -168,6 +175,11 @@ export function canOccupy(x: number, z: number, radius: number): boolean {
     && z <= DINING_BANQUET_FOOTPRINT.z + DINING_BANQUET_FOOTPRINT.southDepth + radius
   ) return false
 
+  if (
+    Math.abs(x - DINING_GRANDFATHER_CLOCK_FOOTPRINT.x) <= DINING_GRANDFATHER_CLOCK_FOOTPRINT.halfWidth + radius
+    && Math.abs(z - DINING_GRANDFATHER_CLOCK_FOOTPRINT.z) <= DINING_GRANDFATHER_CLOCK_FOOTPRINT.halfDepth + radius
+  ) return false
+
   const conservatoryCenter = roomCenter('conservatory')
   if (
     Math.abs(x - (conservatoryCenter.x + CONSERVATORY_FOUNTAIN_FOOTPRINT.x)) <= CONSERVATORY_FOUNTAIN_FOOTPRINT.halfWidth + radius
@@ -183,8 +195,8 @@ export function canOccupy(x: number, z: number, radius: number): boolean {
   const galleryCenter = roomCenter('gallery')
   for (const bust of GALLERY_BUST_FOOTPRINTS) {
     if (
-      Math.abs(x - (galleryCenter.x + bust.x)) <= 0.58 + radius
-      && Math.abs(z - (galleryCenter.z + bust.z)) <= 0.48 + radius
+      Math.abs(x - (galleryCenter.x + bust.x)) <= bust.halfWidth + radius
+      && Math.abs(z - (galleryCenter.z + bust.z)) <= bust.halfDepth + radius
     ) return false
   }
 

@@ -47,44 +47,44 @@ export function HUD({ game, snap }: { game: Game; snap: Snapshot }) {
       </div>
 
       {/* bottom-right: minimap + buttons */}
-      <div className="absolute bottom-4 right-4 flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-1">
+      <div className="absolute bottom-4 right-4 flex w-[26rem] max-w-[calc(100vw-2rem)] flex-col gap-1.5">
         {mapOpen && (
           <div className="designer-frame-surface hud-gothic-map-frame relative">
             <GothicFrame />
             <Minimap snap={snap} />
           </div>
         )}
-        <div className="designer-frame-surface hud-gothic-action-frame pointer-events-auto relative flex gap-1.5">
+        <div className="designer-frame-surface hud-gothic-action-frame pointer-events-auto relative flex gap-2">
           <GothicFrame variant="chat" />
           <button
             type="button"
             onClick={() => setMapOpen(open => !open)}
             aria-expanded={mapOpen}
-            className="min-w-0 flex-1 rounded border border-[#3a352a] bg-black/70 px-2 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
+            className="min-w-0 flex-1 rounded border border-[#3a352a] bg-black/70 px-3 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
           >
             {mapOpen ? 'Hide' : 'Map'} <span className="text-[#8a8478]">[M]</span>
           </button>
           <button
             onClick={() => game.setPhase('journal')}
-            className="min-w-0 flex-1 rounded border border-[#3a352a] bg-black/70 px-2 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
+            className="min-w-0 flex-1 rounded border border-[#3a352a] bg-black/70 px-3 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
           >
             Journal <span className="text-[#8a8478]">[J]</span>
           </button>
           <button
             onClick={() => game.setPhase('accuse')}
-            className="min-w-0 flex-1 rounded border border-[#6a2a22] bg-[#2a0d0a]/80 px-2 py-1.5 font-serif text-xs font-semibold text-[#e86a5a] hover:border-[#e86a5a] hover:bg-[#e86a5a]/20"
+            className="min-w-0 flex-1 rounded border border-[#6a2a22] bg-[#2a0d0a]/80 px-3 py-1.5 font-serif text-xs font-semibold text-[#e86a5a] hover:border-[#e86a5a] hover:bg-[#e86a5a]/20"
           >
             ⚖ Accuse
           </button>
           <button
             onClick={() => game.updateSettings({ muted: !snap.settings.muted })}
-            className="min-w-0 rounded border border-[#3a352a] bg-black/70 px-2 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
+            className="min-w-0 rounded border border-[#3a352a] bg-black/70 px-3 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
           >
             {snap.settings.muted ? '🔇' : '🔊'}
           </button>
           <button
             onClick={() => game.setPhase('paused')}
-            className="min-w-0 flex-1 rounded border border-[#3a352a] bg-black/70 px-2 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
+            className="min-w-0 flex-1 rounded border border-[#3a352a] bg-black/70 px-3 py-1.5 font-serif text-xs text-[#c9b98a] hover:border-[#c9a227] hover:text-[#e8d8a0]"
           >
             Pause <span className="text-[#8a8478]">[Esc]</span>
           </button>
@@ -129,7 +129,9 @@ export function HUD({ game, snap }: { game: Game; snap: Snapshot }) {
                 <div className="mt-0.5 font-serif text-base leading-tight text-[#e8d8a0]">{snap.evidenceDiscovery.label}</div>
                 <div className="mt-1 text-[11px] text-[#8f9c93]">
                   {snap.evidenceDiscovery.kind === 'physical'
-                    ? `Collected from ${snap.evidenceDiscovery.guestName} · added to the journal`
+                    ? snap.evidenceDiscovery.discoveryDetail
+                      ? `Found ${snap.evidenceDiscovery.discoveryDetail} · added to the journal`
+                      : `Collected from ${snap.evidenceDiscovery.guestName} · added to the journal`
                     : `Associated with ${snap.evidenceDiscovery.guestName} · revealed in the journal`}
                 </div>
               </div>

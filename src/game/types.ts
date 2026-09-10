@@ -86,6 +86,9 @@ export interface CollectedEvidence {
   candidateNames: string[]
   source: string
   atMin: number
+  /** Present when the trace was hidden in a searchable furnishing. */
+  discoveryDetail?: string
+  discoveryObject?: string
 }
 
 export interface TranscriptEntry {
@@ -189,6 +192,7 @@ export interface EvidenceDiscoveryNotice {
   evidenceId: EvidenceId
   label: string
   kind: 'association' | 'physical'
+  discoveryDetail?: string
 }
 
 export interface EndInfo {
